@@ -1,0 +1,54 @@
+# Nginx Jail Configuration
+
+[nginx-http-auth]
+enabled = true
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = {{ security_fail2ban_nginx_maxretry }}
+bantime = {{ security_fail2ban_nginx_bantime }}
+
+[nginx-noscript]
+enabled = true
+port = http,https
+filter = nginx-noscript
+logpath = /var/log/nginx/access.log
+maxretry = 6
+
+[nginx-badbots]
+enabled = true
+port = http,https
+filter = nginx-badbots
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+[nginx-noproxy]
+enabled = true
+port = http,https
+filter = nginx-noproxy
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+[nginx-nohome]
+enabled = true
+port = http,https
+filter = nginx-nohome
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+[nginx-botsearch]
+enabled = true
+port = http,https
+filter = nginx-botsearch
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+# DDoS protection
+[nginx-limit-req]
+enabled = true
+port = http,https
+filter = nginx-limit-req
+logpath = /var/log/nginx/error.log
+maxretry = 10
+findtime = 60
+bantime = 600

@@ -1,0 +1,115 @@
+---
+# Fail2ban Configuration
+# Automatically ban IPs that show malicious signs
+
+- name: Install Fail2ban
+  ansible.builtin.apt:
+    name:
+      - fail2ban
+      - python3-systemd  # For systemd backend
+    state: present
+    update_cache: true
+
+- name: Ensure Fail2ban service directory exists
+  ansible.builtin.file:
+    path: /etc/fail2ban
+    state: directory
+    mode: "0755"
+
+# Main Fail2ban configuration
+- name: Copy Fail2ban jail.local configuration
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+
+# SSH Jail (custom configuration)
+- name: Create Fail2ban SSH jail
+  ansible.builtin.template:
+    src: jail.d/sshd.local.j2
+    dest: /etc/fail2ban/jail.d/sshd.local
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+
+# HTTP/HTTPS Jail (Nginx)
+- name: Create Fail2ban Nginx jail
+  ansible.builtin.template:
+    src: jail.d/nginx.local.j2
+    dest: /etc/fail2ban/jail.d/nginx.local
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+  when: security_fail2ban_enable_nginx | default(true)
+
+# Docker Jail (prevent Docker abuse)
+- name: Create Fail2ban Docker jail
+  ansible.builtin.template:
+    src: jail.d/docker.local.j2
+    dest: /etc/fail2ban/jail.d/docker.local
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+  when: security_fail2ban_enable_docker | default(true)
+
+# Custom filters
+- name: Create custom Fail2ban filters
+  ansible.builtin.copy:
+    src: "filters/{{ item }}"
+    dest: "/etc/fail2ban/filter.d/{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop:
+    - nginx-noproxy.conf
+    - nginx-badbots.conf
+  notify: Restart fail2ban
+  when: security_fail2ban_enable_nginx | default(true)
+
+# Action configuration (ban with UFW)
+- name: Configure Fail2ban action for UFW
+  ansible.builtin.template:
+    src: action.d/ufw.local.j2
+    dest: /etc/fail2ban/action.d/ufw.local
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart fail2ban
+
+- name: Enable and start Fail2ban service
+  ansible.builtin.systemd:
+    name: fail2ban
+    enabled: true
+    state: started
+
+- name: Wait for Fail2ban to start
+  ansible.builtin.wait_for:
+    timeout: 5
+
+- name: Check Fail2ban status
+  ansible.builtin.command: fail2ban-client status
+  register: fail2ban_status
+  changed_when: false
+  failed_when: false
+
+- name: Display Fail2ban jails
+  ansible.builtin.debug:
+    msg: "{{ fail2ban_status.stdout_lines }}"
+  when: fail2ban_status.rc == 0
+
+- name: Get detailed status of SSH jail
+  ansible.builtin.command: fail2ban-client status sshd
+  register: fail2ban_sshd_status
+  changed_when: false
+  failed_when: false
+
+- name: Display SSH jail status
+  ansible.builtin.debug:
+    msg: "{{ fail2ban_sshd_status.stdout_lines }}"
+  when: fail2ban_sshd_status.rc == 0

@@ -1,0 +1,63 @@
+---
+- name: Security Hardening - Main Tasks
+  ansible.builtin.debug:
+    msg: "Starting security hardening setup..."
+
+# UFW Firewall Setup
+- name: Include UFW firewall setup
+  ansible.builtin.include_tasks: ufw.yml
+  tags: [security-ufw, firewall]
+
+# Fail2ban Setup
+- name: Include Fail2ban setup
+  ansible.builtin.include_tasks: fail2ban.yml
+  tags: [security-fail2ban, intrusion-prevention]
+
+# SSH Hardening
+- name: Include SSH hardening
+  ansible.builtin.include_tasks: ssh-hardening.yml
+  tags: [security-ssh, ssh-hardening]
+
+# Docker Security
+- name: Include Docker security
+  ansible.builtin.include_tasks: docker-security.yml
+  tags: [security-docker, docker-hardening]
+
+# System Security
+- name: Include system security hardening
+  ansible.builtin.include_tasks: system-security.yml
+  tags: [security-system, system-hardening]
+
+# Deploy security check script
+- name: Copy security check script to server
+  ansible.builtin.copy:
+    src: security-check.sh
+    dest: /usr/local/bin/security-check
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Security Hardening Complete
+  ansible.builtin.debug:
+    msg:
+      - "════════════════════════════════════════════════════════"
+      - "  ✓ Security Hardening Complete"
+      - "════════════════════════════════════════════════════════"
+      - ""
+      - "Security Features Enabled:"
+      - "  • UFW Firewall (ports: 22/2222, 80, 443, 81, 3306, 5432, 6379)"
+      - "  • Fail2ban (SSH, HTTP, Docker)"
+      - "  • SSH Hardening (no root, key-only, rate limit)"
+      - "  • Docker Security (userns-remap, no-new-privileges)"
+      - "  • System Hardening (kernel parameters, file permissions)"
+      - ""
+      - "Security Check Script:"
+      - "  Run on server: sudo security-check"
+      - ""
+      - "Next Steps:"
+      - "  1. Test SSH connection: ssh -p {{ ansible_port }} {{ ansible_user }}@{{ inventory_hostname }}"
+      - "  2. Check firewall: sudo ufw status verbose"
+      - "  3. Check Fail2ban: sudo fail2ban-client status"
+      - "  4. Monitor logs: sudo tail -f /var/log/fail2ban.log"
+      - "  5. Run security check: sudo security-check"
+      - ""

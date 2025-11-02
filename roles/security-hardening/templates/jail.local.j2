@@ -1,0 +1,31 @@
+# Fail2ban Main Configuration
+# /etc/fail2ban/jail.local
+
+[DEFAULT]
+# Ban settings
+bantime  = {{ security_fail2ban_bantime }}
+findtime = {{ security_fail2ban_findtime }}
+maxretry = {{ security_fail2ban_maxretry }}
+
+# Action to take when banning
+banaction = ufw
+banaction_allports = ufw
+
+# Email notifications
+{% if security_fail2ban_destemail %}
+destemail = {{ security_fail2ban_destemail }}
+sender = {{ security_fail2ban_sender }}
+action = %(action_mwl)s
+{% else %}
+action = %(action_)s
+{% endif %}
+
+# Ignore localhost
+ignoreip = 127.0.0.1/8 ::1
+
+# Backend (systemd for journald logs)
+backend = systemd
+
+# Log level
+loglevel = INFO
+logtarget = /var/log/fail2ban.log

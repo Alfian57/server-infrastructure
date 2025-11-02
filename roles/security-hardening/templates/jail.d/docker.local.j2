@@ -1,0 +1,16 @@
+# Docker Jail Configuration
+
+[docker-auth]
+enabled = true
+filter = docker-auth
+logpath = /var/log/docker.log
+maxretry = 3
+bantime = 1h
+
+[docker-rate]
+enabled = true
+filter = docker-rate
+logpath = /var/log/docker.log
+maxretry = 5
+findtime = 60
+bantime = 300

@@ -1,0 +1,24 @@
+{
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "{{ security_docker_log_max_size }}",
+    "max-file": "{{ security_docker_log_max_file }}"
+  },
+  {% if security_docker_userns_remap != 'disabled' %}
+  "userns-remap": "{{ security_docker_userns_remap }}",
+  {% endif %}
+  "no-new-privileges": {{ security_docker_no_new_privileges | lower }},
+  {% if security_docker_use_seccomp %}
+  "seccomp-profile": "/etc/docker/seccomp/default.json",
+  {% endif %}
+  "icc": false,
+  "userland-proxy": false,
+  "live-restore": {{ security_docker_live_restore | lower }},
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": 64000,
+      "Soft": 64000
+    }
+  }
+}

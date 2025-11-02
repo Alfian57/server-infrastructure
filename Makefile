@@ -69,6 +69,10 @@ system: check ## Deploy only system roles (update-apt, users-setup, git-setup)
 	@printf "\033[0;32mDeploying system configuration...\033[0m\n"
 	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags system
 
+security: check ## Deploy security hardening
+	@printf "\033[0;32mApplying security hardening...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security
+
 infrastructure: check ## Deploy only infrastructure roles (docker, autoheal, nginx-proxy)
 	@printf "\033[0;32mDeploying infrastructure...\033[0m\n"
 	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags infrastructure
@@ -94,6 +98,46 @@ users: check ## Run only users-setup role
 git: check ## Run only git-setup role
 	@printf "\033[0;32mSetting up git...\033[0m\n"
 	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags git-setup
+
+##@ Security Hardening
+
+security: check ## Run complete security hardening
+	@printf "\033[0;32mApplying security hardening...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-hardening
+
+security-ufw: check ## Setup UFW firewall only
+	@printf "\033[0;32mConfiguring UFW firewall...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-ufw
+
+security-fail2ban: check ## Setup Fail2ban only
+	@printf "\033[0;32mConfiguring Fail2ban...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-fail2ban
+
+security-ssh: check ## Apply SSH hardening only
+	@printf "\033[0;32mApplying SSH hardening...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-ssh
+
+security-docker: check ## Apply Docker security only
+	@printf "\033[0;32mApplying Docker security...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-docker
+
+security-system: check ## Apply system security only
+	@printf "\033[0;32mApplying system security...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-system
+
+security-check: ## Check security status (UFW, Fail2ban, SSH)
+	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
+	@printf "\033[0;32m  Security Status Check\033[0m\n"
+	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
+	@printf "\n\033[0;33mUFW Firewall Status:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "ufw status verbose" -b
+	@printf "\n\033[0;33mFail2ban Status:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "fail2ban-client status" -b
+	@printf "\n\033[0;33mActive Jails:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "fail2ban-client status sshd" -b
+	@printf "\n"
+
+##@ Infrastructure Deployment
 
 docker: check ## Run only docker-setup role
 	@printf "\033[0;32mSetting up Docker...\033[0m\n"

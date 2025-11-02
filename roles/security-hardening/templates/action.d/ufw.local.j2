@@ -1,0 +1,12 @@
+# UFW Action for Fail2ban
+# Ban using UFW firewall
+
+[Definition]
+actionstart =
+actionstop =
+actioncheck =
+actionban = ufw insert 1 deny from <ip> to any comment "fail2ban ban"
+actionunban = ufw delete deny from <ip> to any
+
+[Init]
+name = default

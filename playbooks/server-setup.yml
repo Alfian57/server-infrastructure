@@ -28,6 +28,10 @@
     - role: cloudflare-dns-setup
       tags: [system, cloudflare-dns-setup]
 
+    # Security
+    - role: security-hardening
+      tags: [security, security-hardening]
+
     # Infrastructure
     - role: docker-setup
       tags: [infrastructure, docker-setup]

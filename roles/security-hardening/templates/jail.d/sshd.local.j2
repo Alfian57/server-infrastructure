@@ -1,0 +1,17 @@
+# SSH Jail Configuration
+# More strict settings for SSH
+
+[sshd]
+enabled = true
+port = {{ security_ssh_port }}
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = {{ security_fail2ban_ssh_maxretry }}
+bantime = {{ security_fail2ban_ssh_bantime }}
+findtime = {{ security_fail2ban_findtime }}
+
+# More aggressive mode
+mode = aggressive
+
+# Action
+action = %(action_mwl)s

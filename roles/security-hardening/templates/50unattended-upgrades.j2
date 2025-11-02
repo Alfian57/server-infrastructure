@@ -1,0 +1,27 @@
+// Unattended Upgrades Configuration
+// Automatic security updates
+
+Unattended-Upgrade::Allowed-Origins {
+    "${distro_id}:${distro_codename}";
+    "${distro_id}:${distro_codename}-security";
+    "${distro_id}ESMApps:${distro_codename}-apps-security";
+    "${distro_id}ESM:${distro_codename}-infra-security";
+};
+
+// Auto-remove unused dependencies
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+
+// Auto-reboot if required
+Unattended-Upgrade::Automatic-Reboot "false";
+Unattended-Upgrade::Automatic-Reboot-Time "03:00";
+
+// Email notifications
+{% if security_notification_email %}
+Unattended-Upgrade::Mail "{{ security_notification_email }}";
+Unattended-Upgrade::MailReport "on-change";
+{% endif %}
+
+// Logging
+Unattended-Upgrade::SyslogEnable "true";
+Unattended-Upgrade::SyslogFacility "daemon";
