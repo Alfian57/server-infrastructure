@@ -1,0 +1,35 @@
+---
+users:
+  - name: ansible
+    comment: "Ansible Management User"
+    groups:
+      - sudo
+      - adm
+    shell: /bin/bash
+    ssh_key: "{{ lookup('file', 'keys/ansible.pub') }}"
+    state: present
+    system: true
+    sudo_access: true
+    password: "{{ vault_user_ansible_password }}"
+
+  - name: deployer
+    comment: "Application Deployment User"
+    groups:
+      - deployers
+      - docker
+    shell: /bin/bash
+    ssh_key: "{{ lookup('file', 'keys/deployer.pub') }}"
+    state: present
+    sudo_access: true
+    password: "{{ vault_user_deployer_password }}"
+
+  - name: alfiang
+    comment: "Alfian Gading Saputra"
+    groups:
+      - sudo
+      - developers
+    shell: /bin/bash
+    ssh_key: "{{ lookup('file', 'keys/alfiang.pub') }}"
+    state: present
+    sudo_access: true
+    password: "{{ vault_user_alfiang_password }}"

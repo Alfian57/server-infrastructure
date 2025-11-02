@@ -1,0 +1,8 @@
+---
+# Docker and Docker Compose configuration
+docker_install: true # Set to false to skip Docker installation
+docker_edition: "ce"
+docker_package_state: present
+docker_users: ["alfiang"]
+docker_compose_version: "v2"
+docker_compose_package_state: present

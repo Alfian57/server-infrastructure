@@ -1,0 +1,37 @@
+---
+# ============================================================================
+# Non-Sensitive Variables (Plain Text)
+# ============================================================================
+# File ini berisi variabel yang tidak sensitive dan tidak perlu dienkripsi
+# Untuk credential dan secret, lihat vault.yml
+
+# GitHub Container Registry
+github_registry: "ghcr.io"
+github_username: "alfian57"
+
+# Docker Configuration
+docker_registry: "ghcr.io"
+docker_compose_version: "2.x"
+
+# Network Names
+nginx_proxy_network: "nginx_proxy_manager_network"
+mysql_network: "mysql_network"
+postgres_network: "postgres_network"
+redis_network: "redis_network"
+
+# Application Defaults
+app_environment: "production"
+app_log_level: "info"
+
+# Paths
+docker_stack_base: "/opt/docker-stack"
+docker_stack_infrastructure: "{{ docker_stack_base }}/infrastructure"
+docker_stack_databases: "{{ docker_stack_base }}/databases"
+docker_stack_applications: "{{ docker_stack_base }}/applications"
+
+# Docker Images (non-sensitive)
+mysql_image: "mysql:8.0"
+postgres_image: "postgres:14-alpine"
+redis_image: "redis:7-alpine"
+nginx_proxy_image: "jc21/nginx-proxy-manager:latest"
+autoheal_image: "willfarrell/autoheal:latest"

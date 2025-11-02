@@ -1,0 +1,11 @@
+---
+- name: Restart nginx-proxy-manager
+  community.docker.docker_compose_v2:
+    project_src: "{{ npm_install_dir }}"
+    state: restarted
+
+- name: Reload nginx-proxy-manager
+  community.docker.docker_compose_v2:
+    project_src: "{{ npm_install_dir }}"
+    state: present
+    pull: always

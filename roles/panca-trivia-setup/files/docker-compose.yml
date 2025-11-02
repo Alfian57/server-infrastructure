@@ -1,0 +1,30 @@
+services:
+  panca-trivia:
+    image: ghcr.io/alfian57/panca-trivia:latest
+    container_name: panca-trivia
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - panca_trivia_storage:/var/www/html/storage
+      - panca_trivia_bootstrap_cache:/var/www/html/bootstrap/cache
+    networks:
+      - nginx_proxy_manager
+      - mysql_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    command: sh -c "php artisan config:cache && php artisan optimize && php-fpm & nginx -g 'daemon off;'"
+
+networks:
+  nginx_proxy_manager:
+    external: true
+  mysql_network:
+    external: true
+
+volumes:
+  panca_trivia_storage:
+  panca_trivia_bootstrap_cache:

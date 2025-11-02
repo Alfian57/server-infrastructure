@@ -1,0 +1,5 @@
+---
+- name: Deploy Ruang-Istirahat application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-laravel-app.yml
+  vars:
+    app_name: "ruang-istirahat"

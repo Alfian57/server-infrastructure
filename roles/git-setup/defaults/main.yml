@@ -1,0 +1,9 @@
+---
+# Default Git configuration settings
+git_user_name: "Alfian57"
+git_user_email: "alfiangadingsaputra@gmail.com"
+git_config_global: true
+git_install_extras: true
+git_extra_packages:
+  - git-extras
+  - git-flow

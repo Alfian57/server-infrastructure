@@ -1,0 +1,33 @@
+services:
+    app:
+        container_name: nginx-proxy-manager
+        image: "jc21/nginx-proxy-manager:{{ npm_image_version }}"
+        restart: unless-stopped
+        ports:
+            - "80:80"
+            - "443:443"
+            - "81:81"
+        volumes:
+            - npm_data:/data
+            - npm_letsencrypt:/etc/letsencrypt
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+        healthcheck:
+            test: ["CMD", "/usr/bin/check-health"]
+            interval: 10s
+            timeout: 3s
+            start_period: 90s
+        environment:
+            - DISABLE_IPV6=true
+        networks:
+            - nginx_proxy_manager
+
+volumes:
+    npm_data:
+        driver: local
+    npm_letsencrypt:
+        driver: local
+
+networks:
+    nginx_proxy_manager:
+        driver: bridge
+        name: nginx_proxy_manager

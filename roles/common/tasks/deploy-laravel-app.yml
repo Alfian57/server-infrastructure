@@ -1,0 +1,105 @@
+---
+# Shared tasks for deploying Laravel applications from GitHub Container Registry
+#
+# Required variables:
+#   - app_name: Name of the application
+#   - github_username: GitHub username for GHCR authentication
+#   - github_token: GitHub personal access token
+#   - docker_networks: List of Docker networks to connect to (default: ['nginx_proxy_manager_network', 'mysql_network'])
+
+- name: Set application variables
+  ansible.builtin.set_fact:
+    app_install_dir: "/opt/docker-stack/applications/{{ app_name }}"
+    app_image: "ghcr.io/alfian57/{{ app_name }}:latest"
+    app_networks: "{{ docker_networks | default(['nginx_proxy_manager_network', 'mysql_network']) }}"
+
+- name: Create directory for {{ app_name }} application
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Create log directory for update scripts
+  ansible.builtin.file:
+    path: "/var/log/docker-updates"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Log in to GitHub Container Registry
+  community.docker.docker_login:
+    registry_url: ghcr.io
+    username: "{{ github_username }}"
+    password: "{{ github_token }}"
+    reauthorize: true
+  no_log: true
+
+- name: Copy update.sh file to server
+  ansible.builtin.copy:
+    src: ../../common/files/update.sh
+    dest: "{{ app_install_dir }}/update.sh"
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Copy docker-compose file to server
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: "{{ app_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Generate .env from vault credentials
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ app_install_dir }}/.env"
+    mode: "0600"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Pull latest Docker image
+  community.docker.docker_image:
+    name: "{{ app_image }}"
+    source: pull
+    force_source: true
+    state: present
+
+- name: Ensure external networks exist
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ app_networks }}"
+
+- name: Ensure Docker Compose is installed
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+
+- name: Deploy {{ app_name }} container with docker-compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_install_dir }}"
+    pull: always
+    remove_orphans: true
+    recreate: always
+    state: present
+  register: app_deployment
+
+- name: Wait for container to be healthy
+  community.docker.docker_container_info:
+    name: "{{ app_name }}"
+  register: container_info
+  until: 
+    - container_info.container is defined
+    - container_info.container.State.Health.Status is defined
+    - container_info.container.State.Health.Status in ['healthy', 'starting']
+  retries: 10
+  delay: 10
+  failed_when: false
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: "{{ app_name }} deployment {{ 'successful' if container_info.container.State.Health.Status == 'healthy' else 'completed but may need verification' }}"

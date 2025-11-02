@@ -1,0 +1,178 @@
+---
+# Shared tasks for deploying Golang applications from GitHub Container Registry
+#
+# Required variables:
+#   - app_name: Name of the application
+#   - github_username: GitHub username for GHCR authentication
+#   - github_token: GitHub personal access token
+#
+# Optional variables:
+#   - docker_networks: List of Docker networks to connect to (default: ['nginx_proxy_manager_network'])
+#   - app_port: Internal port the app runs on (default: 8080)
+#   - go_env: Environment (default: 'production')
+#   - requires_database: Whether app needs database (default: false)
+#   - requires_redis: Whether app needs Redis (default: false)
+
+- name: Set application variables
+  ansible.builtin.set_fact:
+    app_install_dir: "/opt/docker-stack/applications/{{ app_name }}"
+    app_image: "ghcr.io/{{ github_username }}/{{ app_name }}:latest"
+    app_port: "{{ app_port | default(8080) }}"
+    go_env: "{{ go_env | default('production') }}"
+    requires_database: "{{ requires_database | default(false) }}"
+    requires_redis: "{{ requires_redis | default(false) }}"
+
+- name: Build network list
+  ansible.builtin.set_fact:
+    default_networks:
+      - nginx_proxy_manager_network
+
+- name: Add database network if required
+  ansible.builtin.set_fact:
+    default_networks: "{{ default_networks + ['mysql_network'] }}"
+  when: requires_database | bool
+
+- name: Add Redis network if required
+  ansible.builtin.set_fact:
+    default_networks: "{{ default_networks + ['redis_network'] }}"
+  when: requires_redis | bool
+
+- name: Set final network list
+  ansible.builtin.set_fact:
+    app_networks: "{{ docker_networks | default(default_networks) }}"
+
+- name: Create directory for {{ app_name }} application
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Create log directory for update scripts
+  ansible.builtin.file:
+    path: "/var/log/docker-updates"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Create config directory
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}/config"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  when: create_config_dir | default(false)
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}/data"
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  when: create_data_dir | default(false)
+
+- name: Log in to GitHub Container Registry
+  community.docker.docker_login:
+    registry_url: ghcr.io
+    username: "{{ github_username }}"
+    password: "{{ github_token }}"
+    reauthorize: true
+  no_log: true
+
+- name: Copy update.sh file to server
+  ansible.builtin.copy:
+    src: ../../common/files/update.sh
+    dest: "{{ app_install_dir }}/update.sh"
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Copy docker-compose file to server
+  ansible.builtin.copy:
+    src: docker-compose.yml
+    dest: "{{ app_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Copy .env file to server
+  ansible.builtin.copy:
+    src: .env
+    dest: "{{ app_install_dir }}/.env"
+    mode: "0600"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  when: lookup('first_found', dict(files=['.env'], paths=['files'], errors='ignore'))
+
+- name: Copy config files to server
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ app_install_dir }}/config/"
+    mode: "0644"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  with_fileglob:
+    - "files/config/*"
+  when: create_config_dir | default(false)
+
+- name: Pull latest Docker image
+  community.docker.docker_image:
+    name: "{{ app_image }}"
+    source: pull
+    force_source: true
+    state: present
+
+- name: Ensure external networks exist
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ app_networks }}"
+
+- name: Ensure Docker Compose is installed
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+
+- name: Deploy {{ app_name }} container with docker-compose
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_install_dir }}"
+    pull: always
+    remove_orphans: true
+    recreate: always
+    state: present
+  register: app_deployment
+
+- name: Wait for Go application to start
+  ansible.builtin.pause:
+    seconds: 8
+
+- name: Check if container is running
+  community.docker.docker_container_info:
+    name: "{{ app_name }}"
+  register: container_info
+  retries: 5
+  delay: 5
+  until: 
+    - container_info.container is defined
+    - container_info.container.State is defined
+    - container_info.container.State.Running | bool
+
+- name: Verify API health endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:{{ app_port }}{{ health_endpoint | default('/health') }}"
+    method: GET
+    status_code: [200, 204]
+    timeout: 10
+  register: app_health
+  retries: 10
+  delay: 5
+  failed_when: false
+  when: verify_health | default(true)
+
+- name: Display deployment status
+  ansible.builtin.debug:
+    msg: "{{ app_name }} Go application deployment {{ 'successful and responding' if app_health.status is defined and app_health.status in [200, 204] else 'completed (container running)' }}"

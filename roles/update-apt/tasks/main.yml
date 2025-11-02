@@ -1,0 +1,20 @@
+---
+- name: Update apt repositories
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  register: apt_update_result
+  changed_when: apt_update_result.changed
+
+- name: Upgrade apt packages
+  ansible.builtin.apt:
+    upgrade: safe  # Changed from 'dist' to 'safe' for more conservative upgrades
+    cache_valid_time: 3600
+    autoremove: true
+    autoclean: true
+  register: apt_upgrade_result
+
+- name: Display upgrade results
+  ansible.builtin.debug:
+    msg: "{{ apt_upgrade_result.stdout_lines | default(['No packages upgraded']) }}"
+  when: apt_upgrade_result.changed

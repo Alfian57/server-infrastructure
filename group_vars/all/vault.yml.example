@@ -1,0 +1,44 @@
+---
+# ============================================================================
+# Sensitive Variables Template (Copy to vault.yml and customize)
+# ============================================================================
+# This is an EXAMPLE file. DO NOT encrypt this file.
+# 
+# To use:
+#   1. Copy this file: cp vault.yml.example vault.yml
+#   2. Edit vault.yml and replace all values
+#   3. Encrypt: make vault-encrypt FILE=group_vars/all/vault.yml
+#
+# ============================================================================
+
+# GitHub Container Registry Credentials
+vault_github_token: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+vault_docker_password: "your-github-personal-access-token"
+
+# User Management Secrets
+vault_users:
+  - username: "deploy"
+    password: "$6$rounds=656000$... (use mkpasswd --method=sha-512)"
+    ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
+
+# Database Credentials - MySQL
+vault_mysql_root_password: "change-this-strong-password-min-20-chars"
+vault_mysql_databases:
+  materi_ku:
+    name: "materi_ku_production"
+    user: "materi_ku_user"
+    password: "change-this-db-password"
+
+# Database Credentials - Redis
+vault_redis_password: "change-this-redis-password"
+
+# Application Secrets - Example
+vault_materi_ku:
+  app_name: "Materi Ku"
+  app_key: "base64:generate-with-php-artisan-key:generate"
+  app_url: "https://materi-ku.example.com"
+  db_password: "change-this-db-password"
+  redis_password: "change-this-redis-password"
+  mail_password: "your-smtp-password"
+
+# Add more as needed...

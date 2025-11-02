@@ -1,0 +1,202 @@
+---
+- name: Create nginx-proxy-manager directory
+  ansible.builtin.file:
+    path: "{{ npm_install_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ npm_install_dir }}/docker-compose.yml"
+    mode: "0644"
+  register: docker_compose_file
+
+- name: Start nginx-proxy-manager container
+  community.docker.docker_compose_v2:
+    project_src: "{{ npm_install_dir }}"
+    state: present
+    pull: always
+  register: npm_container
+
+- name: Wait for nginx-proxy-manager web interface to be ready
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81"
+    method: GET
+    status_code: [200, 302]
+    timeout: 5
+  register: npm_health_check
+  until: npm_health_check.status in [200, 302]
+  retries: 60
+  delay: 10
+  failed_when: false
+
+- name: Fail if nginx-proxy-manager is not ready
+  ansible.builtin.fail:
+    msg: "Nginx Proxy Manager failed to start after 10 minutes"
+  when: npm_health_check.status not in [200, 302]
+
+- name: Wait for API to be fully ready
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/schema"
+    method: GET
+    status_code: 200
+    timeout: 5
+  register: npm_api_check
+  until: npm_api_check.status == 200
+  retries: 12
+  delay: 5
+  failed_when: false
+
+- name: Check if admin credentials are already updated
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+    method: POST
+    body_format: json
+    body:
+      identity: "{{ npm_admin_email }}"
+      secret: "{{ npm_admin_password }}"
+    status_code: [200, 401]
+    timeout: 10
+  register: current_auth_check
+  failed_when: false
+  no_log: true
+
+- name: Handle initial setup if admin credentials not updated
+  when: current_auth_check.status != 200
+  block:
+    - name: Get initial auth token with default credentials
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+        method: POST
+        body_format: json
+        body:
+          identity: "admin@example.com"
+          secret: "changeme"
+        status_code: 200
+        timeout: 10
+      register: initial_auth_response
+      retries: 5
+      delay: 10
+      until: initial_auth_response.status == 200
+      no_log: true
+
+    - name: Update admin user credentials
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ initial_auth_response.json.token }}"
+        body_format: json
+        body:
+          email: "{{ npm_admin_email }}"
+          nickname: "{{ npm_admin_nickname | default('Admin') }}"
+          is_disabled: false
+        status_code: 200
+        timeout: 10
+      no_log: true
+
+    - name: Update admin password
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1/auth"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ initial_auth_response.json.token }}"
+        body_format: json
+        body:
+          type: "password"
+          current: "changeme"
+          secret: "{{ npm_admin_password }}"
+        status_code: [200, 201]
+        timeout: 10
+      no_log: true
+
+    - name: Verify credential update by getting new token
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+        method: POST
+        body_format: json
+        body:
+          identity: "{{ npm_admin_email }}"
+          secret: "{{ npm_admin_password }}"
+        status_code: 200
+        timeout: 10
+      register: current_auth_check
+      no_log: true
+
+- name: Get authentication token
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+    method: POST
+    body_format: json
+    body:
+      identity: "{{ npm_admin_email }}"
+      secret: "{{ npm_admin_password }}"
+    status_code: 200
+    timeout: 10
+  register: auth_response
+  no_log: true
+  when: current_auth_check.status == 200 or current_auth_check.changed
+
+- name: Set authentication token fact
+  ansible.builtin.set_fact:
+    npm_auth_token: "{{ auth_response.json.token }}"
+  when: auth_response is defined and auth_response.json is defined
+  no_log: true
+
+- name: Get existing proxy hosts
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    status_code: 200
+  register: existing_proxy_hosts
+  when: proxy_hosts is defined
+
+- name: Process proxy hosts (create or update)
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts{% if existing_host_id %}/{{ existing_host_id }}{% endif %}"
+    method: "{% if existing_host_id %}PUT{% else %}POST{% endif %}"
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    body_format: json
+    body:
+      domain_names:
+        - "{{ item.subdomain }}.{{ npm_domain_name }}"
+      forward_scheme: "{{ item.scheme }}"
+      forward_host: "{{ item.forward_host }}"
+      forward_port: "{{ item.forward_port }}"
+      certificate_id: 0
+      ssl_forced: 0
+      caching_enabled: 0
+      block_exploits: 0
+      advanced_config: ""
+      meta: {}
+      access_list_id: 0
+      allow_websocket_upgrade: 0
+      http2_support: 0
+      hsts_enabled: 0
+      hsts_subdomains: 0
+    status_code: [200, 201]
+  vars:
+    target_domain: "{{ item.subdomain }}.{{ npm_domain_name }}"
+    existing_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+    existing_host_id: "{{ existing_host.id | default('') }}"
+  register: proxy_host_operation
+  loop: "{{ proxy_hosts }}"
+  when: proxy_hosts is defined
+
+- name: Display proxy host operation results
+  ansible.builtin.debug:
+    msg: >
+      Proxy host for {{ item.item.subdomain }}.{{ npm_domain_name }}:
+      {% if item.url is search('/[0-9]+$') %}
+      🔄 Updated successfully (ID: {{ item.url.split('/')[-1] }})
+      {% elif item.status in [200, 201] %}
+      ✅ Created successfully
+      {% else %}
+      ❌ Failed with status {{ item.status }}
+      {% endif %}
+  loop: "{{ proxy_host_operation.results }}"
+  when: proxy_host_operation.results is defined

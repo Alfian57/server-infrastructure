@@ -1,0 +1,37 @@
+---
+- name: Create mysql directory
+  ansible.builtin.file:
+    path: /opt/docker-stack/infrastructure/mysql
+    state: directory
+    mode: "0755"
+
+- name: Copy mysql docker-compose.yml
+  ansible.builtin.copy:
+    src: "{{ role_path }}/files/docker-compose.yml"
+    dest: /opt/docker-stack/infrastructure/mysql/docker-compose.yml
+    mode: "0644"
+
+- name: Generate .env from vault credentials
+  ansible.builtin.template:
+    src: "{{ role_path }}/templates/.env.j2"
+    dest: /opt/docker-stack/infrastructure/mysql/.env
+    mode: "0600"
+
+- name: Ensure Docker Compose is installed
+  ansible.builtin.apt:
+    name: docker-compose-plugin
+    state: present
+
+- name: Run docker-compose up in mysql directory
+  community.docker.docker_compose_v2:
+    project_src: /opt/docker-stack/infrastructure/mysql
+    env_files: /opt/docker-stack/infrastructure/mysql/.env
+    state: present
+
+- name: Verify MySQL container is running
+  community.docker.docker_container_info:
+    name: mysql-db
+  register: container_info
+  until: container_info.container.State.Health.Status == "healthy" or container_info.container.State.Health.Status == "starting"
+  retries: 10
+  delay: 10

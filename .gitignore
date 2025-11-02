@@ -1,0 +1,62 @@
+# Ansible
+*.retry
+.ansible/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
+
+# Secrets (in case someone forgets to use vault)
+*_unencrypted*
+*.pem
+*.key
+*password*.txt
+.vault_pass
+
+# Vault files (only commit encrypted versions)
+# DO NOT commit decrypted vault.yml
+group_vars/all/vault.yml.decrypted
+group_vars/**/vault_unencrypted.yml
+*_vault_backup*.yml
+
+# Backup directories
+backup/
+
+# Local testing
+.vagrant/
+*.box

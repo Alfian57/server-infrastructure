@@ -1,0 +1,30 @@
+services:
+  ruang-istirahat:
+    image: ghcr.io/alfian57/ruang-istirahat:latest
+    container_name: ruang-istirahat
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - ruang_istirahat_storage:/var/www/html/storage
+      - ruang_istirahat_bootstrap_cache:/var/www/html/bootstrap/cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - nginx_proxy_manager
+      - mysql_network
+    command: sh -c "php artisan config:cache && php artisan optimize && php-fpm & nginx -g 'daemon off;'"
+
+networks:
+  nginx_proxy_manager:
+    external: true
+  mysql_network:
+    external: true
+
+volumes:
+  ruang_istirahat_storage:
+  ruang_istirahat_bootstrap_cache:

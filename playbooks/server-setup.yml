@@ -1,0 +1,51 @@
+---
+- name: Setup Server Playbook
+  hosts: all
+  gather_facts: true
+  become: true
+
+  pre_tasks:
+    - name: Ensure server is reachable
+      ansible.builtin.ping:
+
+    - name: Display server information
+      ansible.builtin.debug:
+        msg:
+          - "Target Host: {{ inventory_hostname }}"
+          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "Kernel: {{ ansible_kernel }}"
+
+  roles:
+    # System setup
+    - role: update-apt
+      tags: [system, update-apt]
+    - role: users-setup
+      tags: [system, users-setup]
+    - role: git-setup
+      tags: [system, git-setup]
+
+    # Infrastructure
+    - role: docker-setup
+      tags: [infrastructure, docker-setup]
+    - role: autoheal-setup
+      tags: [infrastructure, autoheal-setup]
+    - role: nginx-proxy-setup
+      tags: [infrastructure, nginx-proxy-setup]
+
+    # Databases
+    - role: mysql-setup
+      tags: [database, mysql-setup]
+    - role: postgres-setup
+      tags: [database, postgres-setup]
+    - role: redis-setup
+      tags: [database, redis-setup]
+
+    # Applications
+    - role: materi-ku-setup
+      tags: [application, materi-ku-setup]
+    - role: panca-trivia-setup
+      tags: [application, panca-trivia-setup]
+    - role: ruang-istirahat-setup
+      tags: [application, ruang-istirahat-setup]
+    - role: tech-talk-setup
+      tags: [application, tech-talk-setup]

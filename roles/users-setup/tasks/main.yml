@@ -1,0 +1,71 @@
+---
+- name: Validate users variable is defined
+  ansible.builtin.assert:
+    that:
+      - users is defined
+      - users is iterable
+      - users | length > 0
+    fail_msg: "Variable 'users' must be defined and contain at least one user"
+    quiet: true
+
+- name: Ensure required groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ users | selectattr('groups', 'defined') | map(attribute='groups') | flatten | unique }}"
+  when: users | selectattr('groups', 'defined') | list | length > 0
+
+- name: Create users with advanced configuration
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    password: "{{ item.password | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+    groups: "{{ item.groups | default([]) }}"
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    createhome: true
+    state: "{{ item.state | default('present') }}"
+    system: "{{ item.system | default(false) }}"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: users_created
+
+- name: Configure SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ item.name }}/.ssh"
+    state: directory
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0700"
+  loop: "{{ users }}"
+  when: 
+    - item.ssh_key is defined
+    - item.state | default('present') == 'present'
+    - not item.system | default(false)
+
+- name: Add SSH authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_key }}"
+    state: present
+    exclusive: false
+  loop: "{{ users }}"
+  when: 
+    - item.ssh_key is defined
+    - item.state | default('present') == 'present'
+
+- name: Check if reboot is required
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required_file
+
+- name: Reboot if required and users were changed
+  ansible.builtin.reboot:
+    msg: "Rebooting to apply user changes"
+    connect_timeout: 5
+    reboot_timeout: 600
+    pre_reboot_delay: 10
+    post_reboot_delay: 30
+  when:
+    - reboot_required_file.stat.exists or users_created.changed
+    - ansible_connection != 'local'

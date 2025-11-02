@@ -1,0 +1,110 @@
+---
+- name: Ensure Git is installed
+  ansible.builtin.package:
+    name: git
+    state: present
+    update_cache: true
+
+- name: Install Git extras if available
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ git_extra_packages }}"
+  register: git_extras_install
+  failed_when:
+    - git_extras_install.failed
+    - "'not found' not in git_extras_install.msg | lower"
+    - "'no package' not in git_extras_install.msg | lower"
+
+- name: Get target user home directory
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ ansible_user }}"
+  register: user_info
+
+- name: Set home directory fact
+  ansible.builtin.set_fact:
+    target_user_home: "{{ user_info.ansible_facts.getent_passwd[ansible_user][4] }}"
+
+- name: Configure Git global user email
+  community.general.git_config:
+    name: user.email
+    scope: global
+    value: "{{ git_user_email }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: git_config_global | default(true)
+
+- name: Configure Git global user name
+  community.general.git_config:
+    name: user.name
+    scope: global
+    value: "{{ git_user_name }}"
+  become: true
+  become_user: "{{ ansible_user }}"
+  when: git_config_global | default(true)
+
+- name: Set Git default branch name
+  community.general.git_config:
+    name: init.defaultBranch
+    scope: global
+    value: main
+  become: true
+  become_user: "{{ ansible_user }}"
+
+- name: Configure Git core settings
+  community.general.git_config:
+    name: "{{ item.name }}"
+    scope: global
+    value: "{{ item.value }}"
+  loop:
+    - { name: "pull.rebase", value: "true" }
+    - { name: "core.editor", value: "nano" }
+  become: true
+  become_user: "{{ ansible_user }}"
+
+- name: Create global Git ignore file
+  ansible.builtin.copy:
+    dest: "{{ target_user_home }}/.gitignore_global"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0644"
+    content: |
+      # Compiled source #
+      *.pyc
+      *.class
+      *.dll
+      *.exe
+      *.o
+      *.so
+
+      # Packages #
+      *.7z
+      *.dmg
+      *.gz
+      *.iso
+      *.jar
+      *.rar
+      *.tar
+      *.zip
+
+      # Logs and databases #
+      *.log
+      *.sqlite
+
+      # OS generated files #
+      .DS_Store
+      .DS_Store?
+      ._*
+      .Spotlight-V100
+      .Trashes
+      ehthumbs.db
+      Thumbs.db
+
+- name: Configure global Git ignore
+  community.general.git_config:
+    name: core.excludesfile
+    scope: global
+    value: "{{ target_user_home }}/.gitignore_global"
+  become: true
+  become_user: "{{ ansible_user }}"
