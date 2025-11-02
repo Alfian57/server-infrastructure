@@ -1,0 +1,25 @@
+---
+# Handlers for Cost Optimization
+
+- name: Restart journald
+  ansible.builtin.systemd:
+    name: systemd-journald
+    state: restarted
+
+- name: Merge Docker daemon config
+  ansible.builtin.shell: |
+    # Merge optimization config with existing daemon.json
+    if [ -f /etc/docker/daemon.json ]; then
+      jq -s '.[0] * .[1]' /etc/docker/daemon.json /etc/docker/daemon-optimization.json > /etc/docker/daemon-merged.json
+      mv /etc/docker/daemon-merged.json /etc/docker/daemon.json
+    else
+      cp /etc/docker/daemon-optimization.json /etc/docker/daemon.json
+    fi
+  notify: Restart docker service
+  changed_when: true
+
+- name: Restart docker service
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+  when: ansible_facts.services['docker'] is defined

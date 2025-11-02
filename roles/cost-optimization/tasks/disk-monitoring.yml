@@ -1,0 +1,99 @@
+---
+# Disk Space Monitoring
+# Alert when disk usage is high
+
+- name: Create disk monitoring script
+  ansible.builtin.template:
+    src: disk-check.sh.j2
+    dest: /usr/local/bin/disk-check
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create resource report script
+  ansible.builtin.template:
+    src: resource-report.sh.j2
+    dest: /usr/local/bin/resource-report
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create disk monitoring cron job
+  ansible.builtin.cron:
+    name: "Disk space monitoring"
+    minute: "0"
+    hour: "*/{{ cost_disk_check_interval }}"
+    job: "/usr/local/bin/disk-check >> /var/log/disk-monitor.log 2>&1"
+    user: root
+    state: present
+  when: cost_enable_disk_monitoring | default(true)
+
+# Create log file
+- name: Ensure disk monitor log exists
+  ansible.builtin.file:
+    path: /var/log/disk-monitor.log
+    state: touch
+    mode: "0644"
+    owner: root
+    group: root
+    modification_time: preserve
+    access_time: preserve
+
+# Run initial disk check
+- name: Run initial disk check
+  ansible.builtin.command: /usr/local/bin/disk-check
+  register: initial_disk_check
+  changed_when: false
+  failed_when: false
+
+- name: Display initial disk check
+  ansible.builtin.debug:
+    msg: "{{ initial_disk_check.stdout_lines }}"
+  when: initial_disk_check.stdout_lines is defined
+
+# Check current disk usage
+- name: Get detailed disk usage
+  ansible.builtin.shell: |
+    echo "=== Disk Usage by Filesystem ==="
+    df -h
+    echo ""
+    echo "=== Top 10 Largest Directories ==="
+    du -h / 2>/dev/null | sort -rh | head -10
+    echo ""
+    echo "=== Docker Disk Usage ==="
+    docker system df 2>/dev/null || echo "Docker not available"
+  register: detailed_disk_usage
+  changed_when: false
+  failed_when: false
+
+- name: Display detailed disk usage
+  ansible.builtin.debug:
+    msg: "{{ detailed_disk_usage.stdout_lines }}"
+
+# Create notification webhook script (optional)
+- name: Create disk alert webhook script
+  ansible.builtin.template:
+    src: disk-alert-webhook.sh.j2
+    dest: /usr/local/bin/disk-alert-webhook
+    mode: "0755"
+    owner: root
+    group: root
+  when: 
+    - cost_enable_webhook_alerts | default(false)
+    - cost_webhook_url is defined
+    - cost_webhook_url | length > 0
+
+- name: Display disk monitoring configuration
+  ansible.builtin.debug:
+    msg:
+      - "Disk Monitoring Configuration:"
+      - "  • Monitoring enabled: {{ cost_enable_disk_monitoring | default(true) }}"
+      - "  • Warning threshold: {{ cost_disk_warning_threshold }}%"
+      - "  • Critical threshold: {{ cost_disk_critical_threshold }}%"
+      - "  • Check interval: every {{ cost_disk_check_interval }} hours"
+      - "  • Webhook alerts: {{ 'enabled' if cost_enable_webhook_alerts | default(false) else 'disabled' }}"
+      - ""
+      - "Commands:"
+      - "  • Check disk: disk-check"
+      - "  • Full report: resource-report"
+      - "  • View log: tail -f /var/log/disk-monitor.log"

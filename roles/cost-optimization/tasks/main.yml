@@ -1,0 +1,65 @@
+---
+- name: Cost Optimization - Main Tasks
+  ansible.builtin.debug:
+    msg: "Starting cost optimization setup..."
+
+# Docker Cleanup
+- name: Include Docker cleanup tasks
+  ansible.builtin.include_tasks: docker-cleanup.yml
+  tags: [cost-docker, docker-cleanup]
+
+# Log Rotation & Cleanup
+- name: Include log cleanup tasks
+  ansible.builtin.include_tasks: log-cleanup.yml
+  tags: [cost-logs, log-cleanup]
+
+# Package Cleanup
+- name: Include package cleanup tasks
+  ansible.builtin.include_tasks: package-cleanup.yml
+  tags: [cost-packages, package-cleanup]
+
+# Resource Limits
+- name: Include resource limits configuration
+  ansible.builtin.include_tasks: resource-limits.yml
+  tags: [cost-resources, resource-limits]
+
+# Disk Space Monitoring
+- name: Include disk monitoring tasks
+  ansible.builtin.include_tasks: disk-monitoring.yml
+  tags: [cost-monitoring, disk-monitoring]
+
+# Scheduled Cleanup
+- name: Include scheduled cleanup tasks
+  ansible.builtin.include_tasks: scheduled-cleanup.yml
+  tags: [cost-scheduled, scheduled-cleanup]
+
+- name: Cost Optimization Complete
+  ansible.builtin.debug:
+    msg:
+      - "════════════════════════════════════════════════════════"
+      - "  ✓ Cost Optimization Complete"
+      - "════════════════════════════════════════════════════════"
+      - ""
+      - "Optimization Features Enabled:"
+      - "  • Docker cleanup (unused images, containers, volumes)"
+      - "  • Log rotation (compress & cleanup old logs)"
+      - "  • Package cleanup (remove unused packages)"
+      - "  • Resource limits (container CPU/RAM limits)"
+      - "  • Disk monitoring (alert at {{ cost_disk_warning_threshold }}% usage)"
+      - "  • Scheduled cleanup (daily at {{ cost_cleanup_schedule }})"
+      - ""
+      - "Management Scripts:"
+      - "  • docker-cleanup        - Clean Docker resources"
+      - "  • disk-check           - Check disk usage"
+      - "  • resource-report      - Generate resource usage report"
+      - ""
+      - "Cron Jobs:"
+      - "  • Daily Docker cleanup at {{ cost_cleanup_schedule }}"
+      - "  • Weekly full cleanup on {{ cost_weekly_cleanup_day }}"
+      - ""
+      - "Next Steps:"
+      - "  1. Check disk usage: disk-check"
+      - "  2. View resource usage: resource-report"
+      - "  3. Manual cleanup: docker-cleanup"
+      - "  4. Check cleanup logs: tail -f /var/log/cleanup.log"
+      - ""

@@ -1,0 +1,130 @@
+#!/bin/bash
+# Disk Alert Webhook
+# Sends disk space alerts to webhook (Discord, Slack, etc)
+
+LEVEL="$1"
+DISK_USAGE="$2"
+WEBHOOK_URL="{{ cost_webhook_url }}"
+WEBHOOK_TYPE="{{ cost_webhook_type }}"
+HOSTNAME=$(hostname)
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+if [ -z "$WEBHOOK_URL" ]; then
+    echo "No webhook URL configured"
+    exit 0
+fi
+
+# Prepare message based on level
+if [ "$LEVEL" == "CRITICAL" ]; then
+    COLOR="15158332"  # Red
+    TITLE="🚨 CRITICAL: Disk Space Alert"
+    EMOJI="🔴"
+elif [ "$LEVEL" == "WARNING" ]; then
+    COLOR="16776960"  # Yellow
+    TITLE="⚠️ WARNING: Disk Space Alert"
+    EMOJI="🟡"
+else
+    COLOR="3066993"   # Blue
+    TITLE="ℹ️ INFO: Disk Space"
+    EMOJI="🔵"
+fi
+
+# Get disk info
+DISK_INFO=$(df -h / | tail -1)
+DISK_TOTAL=$(echo "$DISK_INFO" | awk '{print $2}')
+DISK_USED=$(echo "$DISK_INFO" | awk '{print $3}')
+DISK_AVAIL=$(echo "$DISK_INFO" | awk '{print $4}')
+
+{% if cost_webhook_type == 'discord' %}
+# Discord webhook
+curl -X POST "$WEBHOOK_URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "embeds": [{
+            "title": "'"$TITLE"'",
+            "color": '"$COLOR"',
+            "fields": [
+                {
+                    "name": "Server",
+                    "value": "'"$HOSTNAME"'",
+                    "inline": true
+                },
+                {
+                    "name": "Disk Usage",
+                    "value": "'"$DISK_USAGE"'%",
+                    "inline": true
+                },
+                {
+                    "name": "Total",
+                    "value": "'"$DISK_TOTAL"'",
+                    "inline": true
+                },
+                {
+                    "name": "Used",
+                    "value": "'"$DISK_USED"'",
+                    "inline": true
+                },
+                {
+                    "name": "Available",
+                    "value": "'"$DISK_AVAIL"'",
+                    "inline": true
+                },
+                {
+                    "name": "Actions",
+                    "value": "Consider running cleanup:\n• `docker-cleanup`\n• `apt-get autoremove`\n• `journalctl --vacuum-time=7days`",
+                    "inline": false
+                }
+            ],
+            "footer": {
+                "text": "Cost Optimization Monitor"
+            },
+            "timestamp": "'"$(date -u +%Y-%m-%dT%H:%M:%S)"'"
+        }]
+    }' >/dev/null 2>&1
+
+{% elif cost_webhook_type == 'slack' %}
+# Slack webhook
+curl -X POST "$WEBHOOK_URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "text": "'"$EMOJI $TITLE"'",
+        "attachments": [{
+            "color": "#'"$COLOR"'",
+            "fields": [
+                {
+                    "title": "Server",
+                    "value": "'"$HOSTNAME"'",
+                    "short": true
+                },
+                {
+                    "title": "Disk Usage",
+                    "value": "'"$DISK_USAGE"'%",
+                    "short": true
+                },
+                {
+                    "title": "Details",
+                    "value": "Total: '"$DISK_TOTAL"'\nUsed: '"$DISK_USED"'\nAvailable: '"$DISK_AVAIL"'",
+                    "short": false
+                }
+            ],
+            "footer": "Cost Optimization Monitor",
+            "ts": '"$(date +%s)"'
+        }]
+    }' >/dev/null 2>&1
+
+{% else %}
+# Generic webhook (simple JSON)
+curl -X POST "$WEBHOOK_URL" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "level": "'"$LEVEL"'",
+        "hostname": "'"$HOSTNAME"'",
+        "disk_usage": "'"$DISK_USAGE"'",
+        "disk_total": "'"$DISK_TOTAL"'",
+        "disk_used": "'"$DISK_USED"'",
+        "disk_available": "'"$DISK_AVAIL"'",
+        "timestamp": "'"$TIMESTAMP"'"
+    }' >/dev/null 2>&1
+{% endif %}
+
+exit 0

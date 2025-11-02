@@ -1,0 +1,107 @@
+---
+# Resource Limits Configuration
+# Set CPU and memory limits for containers
+
+- name: Check if Docker is installed
+  ansible.builtin.command: docker --version
+  register: docker_check
+  changed_when: false
+  failed_when: false
+
+- name: Resource limits configuration
+  when: docker_check.rc == 0
+  block:
+    # Create compose override files for resource limits
+    - name: Find docker-compose.yml files
+      ansible.builtin.find:
+        paths:
+          - /opt/docker-stack/infrastructure
+          - /opt/docker-stack/applications
+        patterns: "docker-compose.yml"
+        recurse: true
+      register: compose_files
+
+    - name: Display found compose files
+      ansible.builtin.debug:
+        msg: "Found {{ compose_files.files | length }} docker-compose files"
+
+    # Create resource limits template
+    - name: Create resource limits configuration file
+      ansible.builtin.copy:
+        content: |
+          # Docker Container Resource Limits
+          # Apply these limits to prevent resource exhaustion
+          
+          # Application Containers
+          application_limits:
+            cpu: {{ cost_app_container_cpu_limit }}
+            memory: {{ cost_app_container_memory_limit }}
+            memory_reservation: {{ cost_app_container_memory_reservation }}
+          
+          # Database Containers
+          database_limits:
+            cpu: {{ cost_db_container_cpu_limit }}
+            memory: {{ cost_db_container_memory_limit }}
+            memory_reservation: {{ cost_db_container_memory_reservation }}
+          
+          # Infrastructure Containers (NPM, etc)
+          infrastructure_limits:
+            cpu: {{ cost_infra_container_cpu_limit }}
+            memory: {{ cost_infra_container_memory_limit }}
+            memory_reservation: {{ cost_infra_container_memory_reservation }}
+          
+          # Apply limits using:
+          # docker update --cpus="0.5" --memory="512m" --memory-reservation="256m" container_name
+        dest: /etc/docker/resource-limits.conf
+        mode: "0644"
+        owner: root
+        group: root
+
+    # Create script to apply resource limits
+    - name: Create resource limits apply script
+      ansible.builtin.template:
+        src: apply-resource-limits.sh.j2
+        dest: /usr/local/bin/apply-resource-limits
+        mode: "0755"
+        owner: root
+        group: root
+
+    # Apply resource limits to running containers (if enabled)
+    - name: Apply resource limits to running containers
+      ansible.builtin.command: /usr/local/bin/apply-resource-limits
+      register: limits_apply
+      changed_when: limits_apply.rc == 0
+      when: cost_apply_limits_immediately | default(false)
+
+    # Get current container resource usage
+    - name: Get container resource usage
+      ansible.builtin.shell: |
+        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | head -20
+      register: container_stats
+      changed_when: false
+
+    - name: Display container resource usage
+      ansible.builtin.debug:
+        msg: "{{ container_stats.stdout_lines }}"
+
+    - name: Display resource limits configuration
+      ansible.builtin.debug:
+        msg:
+          - "Resource Limits Configuration:"
+          - ""
+          - "Application Containers:"
+          - "  • CPU limit: {{ cost_app_container_cpu_limit }} cores"
+          - "  • Memory limit: {{ cost_app_container_memory_limit }}"
+          - "  • Memory reservation: {{ cost_app_container_memory_reservation }}"
+          - ""
+          - "Database Containers:"
+          - "  • CPU limit: {{ cost_db_container_cpu_limit }} cores"
+          - "  • Memory limit: {{ cost_db_container_memory_limit }}"
+          - "  • Memory reservation: {{ cost_db_container_memory_reservation }}"
+          - ""
+          - "Infrastructure Containers:"
+          - "  • CPU limit: {{ cost_infra_container_cpu_limit }} cores"
+          - "  • Memory limit: {{ cost_infra_container_memory_limit }}"
+          - "  • Memory reservation: {{ cost_infra_container_memory_reservation }}"
+          - ""
+          - "To apply limits: sudo apply-resource-limits"

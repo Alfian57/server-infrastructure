@@ -1,0 +1,93 @@
+#!/bin/bash
+# Docker Cleanup Script
+# Automated cleanup of unused Docker resources
+
+set -e
+
+LOG_FILE="/var/log/cleanup.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+log() {
+    echo "[$TIMESTAMP] $1" | tee -a "$LOG_FILE"
+}
+
+log_color() {
+    echo -e "${2}$1${NC}" | tee -a "$LOG_FILE"
+}
+
+log_color "=== Docker Cleanup Started ===" "$GREEN"
+log "Configuration:"
+log "  - Aggressive cleanup: {{ cost_docker_aggressive_cleanup }}"
+log "  - Cleanup volumes: {{ cost_docker_cleanup_volumes }}"
+log "  - Image retention: {{ cost_docker_image_retention }}"
+log ""
+
+# Get disk usage before cleanup
+DISK_BEFORE=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
+log "Disk usage before: ${DISK_BEFORE}%"
+
+# Docker disk usage before
+log ""
+log "Docker disk usage before cleanup:"
+docker system df | tee -a "$LOG_FILE"
+log ""
+
+# Cleanup stopped containers
+log_color "Removing stopped containers..." "$YELLOW"
+CONTAINERS_REMOVED=$(docker container prune -f 2>&1 | tee -a "$LOG_FILE")
+
+# Cleanup dangling images
+log_color "Removing dangling images..." "$YELLOW"
+DANGLING_REMOVED=$(docker image prune -f 2>&1 | tee -a "$LOG_FILE")
+
+{% if cost_docker_aggressive_cleanup %}
+# Aggressive cleanup - remove ALL unused images
+log_color "Removing unused images (aggressive)..." "$YELLOW"
+IMAGES_REMOVED=$(docker image prune -a -f --filter "until={{ cost_docker_image_retention }}" 2>&1 | tee -a "$LOG_FILE")
+{% endif %}
+
+{% if cost_docker_cleanup_volumes %}
+# Cleanup unused volumes
+log_color "Removing unused volumes..." "$YELLOW"
+VOLUMES_REMOVED=$(docker volume prune -f 2>&1 | tee -a "$LOG_FILE")
+{% endif %}
+
+# Cleanup unused networks
+log_color "Removing unused networks..." "$YELLOW"
+NETWORKS_REMOVED=$(docker network prune -f 2>&1 | tee -a "$LOG_FILE")
+
+{% if cost_docker_cleanup_build_cache %}
+# Cleanup build cache
+log_color "Removing build cache..." "$YELLOW"
+BUILD_CACHE_REMOVED=$(docker builder prune -f --filter "until={{ cost_docker_build_cache_retention }}" 2>&1 | tee -a "$LOG_FILE")
+{% endif %}
+
+# Docker disk usage after
+log ""
+log "Docker disk usage after cleanup:"
+docker system df | tee -a "$LOG_FILE"
+log ""
+
+# Get disk usage after cleanup
+DISK_AFTER=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
+DISK_FREED=$((DISK_BEFORE - DISK_AFTER))
+
+log_color "=== Docker Cleanup Complete ===" "$GREEN"
+log "Disk usage after: ${DISK_AFTER}%"
+log "Space freed: ${DISK_FREED}%"
+log ""
+
+# Summary
+if [ $DISK_FREED -gt 0 ]; then
+    log_color "✓ Cleanup successful! Freed ${DISK_FREED}% disk space" "$GREEN"
+else
+    log_color "✓ Cleanup complete (no space freed)" "$YELLOW"
+fi
+
+exit 0

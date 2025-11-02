@@ -1,0 +1,150 @@
+---
+# Scheduled Cleanup Tasks
+# Automated cleanup via cron
+
+- name: Ensure cleanup log directory exists
+  ansible.builtin.file:
+    path: /var/log/cleanup
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create cleanup log file
+  ansible.builtin.file:
+    path: /var/log/cleanup.log
+    state: touch
+    mode: "0644"
+    owner: root
+    group: root
+    modification_time: preserve
+    access_time: preserve
+
+# Daily Docker cleanup cron
+- name: Schedule daily Docker cleanup
+  ansible.builtin.cron:
+    name: "Daily Docker cleanup"
+    hour: "{{ cost_cleanup_schedule.split(':')[0] }}"
+    minute: "{{ cost_cleanup_schedule.split(':')[1] }}"
+    job: "/usr/local/bin/docker-cleanup >> /var/log/cleanup.log 2>&1"
+    user: root
+    state: "{{ 'present' if cost_enable_daily_cleanup else 'absent' }}"
+
+# Weekly full cleanup
+- name: Schedule weekly full cleanup
+  ansible.builtin.cron:
+    name: "Weekly full system cleanup"
+    weekday: "{{ cost_weekly_cleanup_day }}"
+    hour: "{{ cost_weekly_cleanup_time.split(':')[0] }}"
+    minute: "{{ cost_weekly_cleanup_time.split(':')[1] }}"
+    job: |
+      /usr/local/bin/docker-cleanup && \
+      apt-get autoremove -y && \
+      apt-get autoclean -y && \
+      journalctl --vacuum-time={{ cost_journal_retention }} >> /var/log/cleanup.log 2>&1
+    user: root
+    state: "{{ 'present' if cost_enable_weekly_cleanup else 'absent' }}"
+
+# Monthly log rotation
+- name: Schedule monthly aggressive cleanup
+  ansible.builtin.cron:
+    name: "Monthly aggressive cleanup"
+    day: "1"
+    hour: "{{ cost_monthly_cleanup_time.split(':')[0] }}"
+    minute: "{{ cost_monthly_cleanup_time.split(':')[1] }}"
+    job: |
+      docker system prune -a -f --volumes && \
+      find /var/log -type f -name "*.gz" -mtime +30 -delete && \
+      find /tmp -type f -mtime +7 -delete >> /var/log/cleanup.log 2>&1
+    user: root
+    state: "{{ 'present' if cost_enable_monthly_cleanup else 'absent' }}"
+  when: cost_enable_monthly_cleanup | default(false)
+
+# Create cleanup summary script
+- name: Create cleanup summary script
+  ansible.builtin.copy:
+    content: |
+      #!/bin/bash
+      # Cleanup Summary Report
+      
+      echo "=== Cleanup Log Summary (Last 30 Days) ==="
+      echo ""
+      
+      if [ -f /var/log/cleanup.log ]; then
+          echo "Total cleanup runs:"
+          grep -c "Cleanup started" /var/log/cleanup.log 2>/dev/null || echo "0"
+          echo ""
+          
+          echo "Last 5 cleanups:"
+          grep "Cleanup started" /var/log/cleanup.log | tail -5
+          echo ""
+          
+          echo "Space reclaimed (estimated):"
+          grep -i "reclaimed" /var/log/cleanup.log | tail -5
+          echo ""
+      else
+          echo "No cleanup log found"
+      fi
+      
+      echo "=== Current Disk Usage ==="
+      df -h /
+      echo ""
+      
+      echo "=== Docker Disk Usage ==="
+      docker system df 2>/dev/null || echo "Docker not available"
+    dest: /usr/local/bin/cleanup-summary
+    mode: "0755"
+    owner: root
+    group: root
+
+# Logrotate for cleanup logs
+- name: Configure cleanup log rotation
+  ansible.builtin.copy:
+    content: |
+      /var/log/cleanup.log {
+        weekly
+        rotate 4
+        compress
+        delaycompress
+        missingok
+        notifempty
+        create 0644 root root
+      }
+      
+      /var/log/disk-monitor.log {
+        weekly
+        rotate 4
+        compress
+        delaycompress
+        missingok
+        notifempty
+        create 0644 root root
+      }
+    dest: /etc/logrotate.d/cost-optimization
+    mode: "0644"
+    owner: root
+    group: root
+
+- name: Display scheduled cleanup configuration
+  ansible.builtin.debug:
+    msg:
+      - "Scheduled Cleanup Configuration:"
+      - ""
+      - "Daily Cleanup:"
+      - "  • Enabled: {{ cost_enable_daily_cleanup }}"
+      - "  • Schedule: {{ cost_cleanup_schedule }}"
+      - "  • Actions: Docker cleanup"
+      - ""
+      - "Weekly Cleanup:"
+      - "  • Enabled: {{ cost_enable_weekly_cleanup }}"
+      - "  • Day: {{ cost_weekly_cleanup_day }}"
+      - "  • Time: {{ cost_weekly_cleanup_time }}"
+      - "  • Actions: Docker, APT, Journal cleanup"
+      - ""
+      - "Monthly Cleanup:"
+      - "  • Enabled: {{ cost_enable_monthly_cleanup | default(false) }}"
+      - "  • Time: 1st of month at {{ cost_monthly_cleanup_time }}"
+      - "  • Actions: Aggressive cleanup (all unused resources)"
+      - ""
+      - "View cleanup history: cleanup-summary"
+      - "View cleanup logs: tail -f /var/log/cleanup.log"

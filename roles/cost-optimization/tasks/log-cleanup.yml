@@ -1,0 +1,138 @@
+---
+# Log Cleanup Tasks
+# Rotate, compress, and cleanup old logs
+
+- name: Install logrotate
+  ansible.builtin.apt:
+    name: logrotate
+    state: present
+    update_cache: true
+
+# System logs rotation
+- name: Configure system log rotation
+  ansible.builtin.template:
+    src: logrotate-system.conf.j2
+    dest: /etc/logrotate.d/system-optimization
+    mode: "0644"
+    owner: root
+    group: root
+
+# Application logs rotation
+- name: Configure application log rotation
+  ansible.builtin.template:
+    src: logrotate-applications.conf.j2
+    dest: /etc/logrotate.d/applications
+    mode: "0644"
+    owner: root
+    group: root
+
+# Docker logs rotation (if not already configured)
+- name: Configure Docker container logs rotation
+  ansible.builtin.copy:
+    content: |
+      /var/lib/docker/containers/*/*.log {
+        rotate {{ cost_log_rotate_count }}
+        {{ cost_log_rotate_frequency }}
+        compress
+        delaycompress
+        maxsize {{ cost_log_max_size }}
+        missingok
+        notifempty
+        copytruncate
+      }
+    dest: /etc/logrotate.d/docker-containers-optimization
+    mode: "0644"
+    owner: root
+    group: root
+
+# Nginx logs rotation
+- name: Configure Nginx log rotation
+  ansible.builtin.copy:
+    content: |
+      /var/log/nginx/*.log {
+        rotate {{ cost_log_rotate_count }}
+        {{ cost_log_rotate_frequency }}
+        compress
+        delaycompress
+        maxsize {{ cost_log_max_size }}
+        missingok
+        notifempty
+        sharedscripts
+        postrotate
+          if [ -f /var/run/nginx.pid ]; then
+            kill -USR1 `cat /var/run/nginx.pid`
+          fi
+        endscript
+      }
+    dest: /etc/logrotate.d/nginx-optimization
+    mode: "0644"
+    owner: root
+    group: root
+
+# Clean old logs immediately
+- name: Find old compressed logs
+  ansible.builtin.find:
+    paths:
+      - /var/log
+      - /var/log/nginx
+      - /var/log/apt
+    patterns: "*.gz"
+    age: "{{ cost_log_cleanup_age }}"
+    recurse: true
+  register: old_logs
+
+- name: Display old logs to be removed
+  ansible.builtin.debug:
+    msg: "Found {{ old_logs.files | length }} old compressed logs to remove"
+
+- name: Remove old compressed logs
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_logs.files }}"
+  when: old_logs.files | length > 0
+
+# Clean journal logs
+- name: Configure systemd journal size limit
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?SystemMaxUse="
+    line: "SystemMaxUse={{ cost_journal_max_size }}"
+    state: present
+  notify: Restart journald
+
+- name: Configure systemd journal retention
+  ansible.builtin.lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?MaxRetentionSec="
+    line: "MaxRetentionSec={{ cost_journal_retention }}"
+    state: present
+  notify: Restart journald
+
+- name: Vacuum old journal logs
+  ansible.builtin.command: journalctl --vacuum-time={{ cost_journal_retention }} --vacuum-size={{ cost_journal_max_size }}
+  register: journal_vacuum
+  changed_when: journal_vacuum.stdout is search('Vacuuming done')
+
+# APT cache cleanup
+- name: Clean APT cache
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+
+- name: Get log disk usage
+  ansible.builtin.shell: du -sh /var/log | awk '{print $1}'
+  register: log_disk_usage
+  changed_when: false
+
+- name: Display log cleanup summary
+  ansible.builtin.debug:
+    msg:
+      - "Log Cleanup Configuration:"
+      - "  • Log rotation: {{ cost_log_rotate_frequency }}"
+      - "  • Retention: {{ cost_log_rotate_count }} rotations"
+      - "  • Max size: {{ cost_log_max_size }}"
+      - "  • Old logs cleaned: {{ old_logs.files | length }} files"
+      - "  • Current /var/log size: {{ log_disk_usage.stdout }}"
+      - "  • Journal max size: {{ cost_journal_max_size }}"
+      - "  • Journal retention: {{ cost_journal_retention }}"

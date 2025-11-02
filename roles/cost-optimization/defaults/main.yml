@@ -1,0 +1,145 @@
+---
+# Cost Optimization Default Variables
+
+# ==========================================
+# Docker Cleanup Configuration
+# ==========================================
+# Aggressive cleanup (removes ALL unused images, not just dangling)
+cost_docker_aggressive_cleanup: false
+
+# Cleanup unused volumes
+cost_docker_cleanup_volumes: true
+
+# Cleanup build cache
+cost_docker_cleanup_build_cache: true
+
+# Image retention (how old before removal)
+cost_docker_image_retention: "720h"  # 30 days
+
+# Build cache retention
+cost_docker_build_cache_retention: "168h"  # 7 days
+
+# Docker log configuration
+cost_docker_log_max_size: "10m"
+cost_docker_log_max_files: "3"
+
+# ==========================================
+# Log Cleanup Configuration
+# ==========================================
+# Log rotation frequency (daily, weekly, monthly)
+cost_log_rotate_frequency: "daily"
+
+# Number of rotations to keep
+cost_log_rotate_count: 7
+
+# Maximum log size before rotation
+cost_log_max_size: "50M"
+
+# Age of logs to cleanup (in days with 'd' suffix)
+cost_log_cleanup_age: "30d"
+
+# Journal settings
+cost_journal_max_size: "500M"
+cost_journal_retention: "7days"
+
+# ==========================================
+# Package Cleanup Configuration
+# ==========================================
+# Remove old kernel versions (keep only current + 1)
+cost_remove_old_kernels: false
+
+# Cleanup /tmp directory
+cost_cleanup_tmp: true
+
+# ==========================================
+# Resource Limits Configuration
+# ==========================================
+# Apply limits immediately (otherwise just create script)
+cost_apply_limits_immediately: false
+
+# Application containers (Laravel apps, etc)
+cost_app_container_cpu_limit: "1.0"        # 1 CPU core
+cost_app_container_memory_limit: "512m"    # 512 MB
+cost_app_container_memory_reservation: "256m"  # Minimum guaranteed
+
+# Database containers (MySQL, PostgreSQL, Redis)
+cost_db_container_cpu_limit: "2.0"         # 2 CPU cores
+cost_db_container_memory_limit: "1g"       # 1 GB
+cost_db_container_memory_reservation: "512m"   # Minimum guaranteed
+
+# Infrastructure containers (NPM, Autoheal, etc)
+cost_infra_container_cpu_limit: "0.5"      # 0.5 CPU core
+cost_infra_container_memory_limit: "256m"  # 256 MB
+cost_infra_container_memory_reservation: "128m"  # Minimum guaranteed
+
+# ==========================================
+# Disk Monitoring Configuration
+# ==========================================
+# Enable disk monitoring
+cost_enable_disk_monitoring: true
+
+# Disk usage warning threshold (percentage)
+cost_disk_warning_threshold: 75
+
+# Disk usage critical threshold (percentage)
+cost_disk_critical_threshold: 90
+
+# Check interval (hours)
+cost_disk_check_interval: 6
+
+# Enable webhook alerts (Discord, Slack, etc)
+cost_enable_webhook_alerts: false
+
+# Webhook URL for alerts (leave empty to disable)
+cost_webhook_url: ""
+
+# Webhook type (discord, slack, generic)
+cost_webhook_type: "discord"
+
+# ==========================================
+# Scheduled Cleanup Configuration
+# ==========================================
+# Enable daily cleanup
+cost_enable_daily_cleanup: true
+
+# Daily cleanup schedule (HH:MM format)
+cost_cleanup_schedule: "02:00"
+
+# Enable weekly cleanup
+cost_enable_weekly_cleanup: true
+
+# Weekly cleanup day (0=Sunday, 1=Monday, ..., 6=Saturday)
+cost_weekly_cleanup_day: "0"
+
+# Weekly cleanup time (HH:MM format)
+cost_weekly_cleanup_time: "03:00"
+
+# Enable monthly aggressive cleanup
+cost_enable_monthly_cleanup: false
+
+# Monthly cleanup time (HH:MM format)
+cost_monthly_cleanup_time: "04:00"
+
+# ==========================================
+# Notification Configuration
+# ==========================================
+# Email notifications (requires mail server)
+cost_notification_email: ""
+
+# Notification level (info, warning, critical)
+cost_notification_level: "warning"
+
+# ==========================================
+# Advanced Settings
+# ==========================================
+# Dry run mode (test without actually removing anything)
+cost_dry_run: false
+
+# Verbose logging
+cost_verbose_logging: true
+
+# Keep statistics
+cost_keep_statistics: true
+
+# Statistics retention (days)
+cost_statistics_retention: 30

@@ -1,0 +1,93 @@
+---
+# Package Cleanup Tasks
+# Remove unused packages and clean package cache
+
+- name: Get list of packages before cleanup
+  ansible.builtin.shell: dpkg -l | grep ^ii | wc -l
+  register: packages_before
+  changed_when: false
+
+- name: Remove unused packages (autoremove)
+  ansible.builtin.apt:
+    autoremove: true
+    purge: true
+  register: autoremove_result
+
+- name: Clean APT cache (autoclean)
+  ansible.builtin.apt:
+    autoclean: true
+  register: autoclean_result
+
+- name: Remove old kernel versions (keep current + 1)
+  ansible.builtin.shell: |
+    current_kernel=$(uname -r)
+    dpkg -l | grep -E 'linux-image|linux-headers' | \
+    grep -v "$current_kernel" | \
+    awk '{print $2}' | \
+    head -n -1 | \
+    xargs -r apt-get -y purge
+  register: kernel_cleanup
+  changed_when: kernel_cleanup.rc == 0
+  failed_when: false
+  when: cost_remove_old_kernels | default(false)
+
+- name: Get list of packages after cleanup
+  ansible.builtin.shell: dpkg -l | grep ^ii | wc -l
+  register: packages_after
+  changed_when: false
+
+- name: Calculate packages removed
+  ansible.builtin.set_fact:
+    packages_removed: "{{ packages_before.stdout | int - packages_after.stdout | int }}"
+
+# Clean thumbnail cache
+- name: Find thumbnail cache directories
+  ansible.builtin.find:
+    paths:
+      - /root/.cache/thumbnails
+      - /home/*/.cache/thumbnails
+    file_type: directory
+    recurse: false
+  register: thumbnail_dirs
+
+- name: Clean thumbnail cache
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ thumbnail_dirs.files }}"
+  when: thumbnail_dirs.files | length > 0
+
+# Clean temp files older than 7 days
+- name: Find old temp files
+  ansible.builtin.find:
+    paths: /tmp
+    age: "7d"
+    recurse: true
+  register: old_temp_files
+
+- name: Remove old temp files
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ old_temp_files.files }}"
+  when: 
+    - old_temp_files.files | length > 0
+    - cost_cleanup_tmp | default(true)
+
+# Check /var/cache size
+- name: Get cache disk usage
+  ansible.builtin.shell: du -sh /var/cache/apt/archives | awk '{print $1}'
+  register: cache_disk_usage
+  changed_when: false
+
+- name: Display package cleanup summary
+  ansible.builtin.debug:
+    msg:
+      - "Package Cleanup Summary:"
+      - "  • Packages before: {{ packages_before.stdout }}"
+      - "  • Packages after: {{ packages_after.stdout }}"
+      - "  • Packages removed: {{ packages_removed }}"
+      - "  • Old kernels removed: {{ 'Yes' if kernel_cleanup.changed else 'Skipped' }}"
+      - "  • APT cache size: {{ cache_disk_usage.stdout }}"
+      - "  • Thumbnail cache cleaned: {{ 'Yes' if thumbnail_dirs.files | length > 0 else 'No' }}"
+      - "  • Temp files cleaned: {{ old_temp_files.files | length }} files"

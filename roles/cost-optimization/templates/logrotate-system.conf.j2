@@ -1,0 +1,19 @@
+# System Log Rotation Configuration
+# /etc/logrotate.d/system-optimization
+
+/var/log/syslog
+/var/log/auth.log
+/var/log/kern.log
+{
+    rotate {{ cost_log_rotate_count }}
+    {{ cost_log_rotate_frequency }}
+    maxsize {{ cost_log_max_size }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+        /usr/lib/rsyslog/rsyslog-rotate
+    endscript
+}

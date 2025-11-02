@@ -57,3 +57,7 @@
       tags: [application, ruang-istirahat-setup]
     - role: tech-talk-setup
       tags: [application, tech-talk-setup]
+
+    # Optimization
+    - role: cost-optimization
+      tags: [optimization, cost-optimization]

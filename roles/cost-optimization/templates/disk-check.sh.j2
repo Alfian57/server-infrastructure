@@ -1,0 +1,75 @@
+#!/bin/bash
+# Disk Space Check Script
+# Monitors disk usage and alerts when thresholds are exceeded
+
+WARNING_THRESHOLD={{ cost_disk_warning_threshold }}
+CRITICAL_THRESHOLD={{ cost_disk_critical_threshold }}
+LOG_FILE="/var/log/disk-monitor.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m'
+
+log() {
+    echo "[$TIMESTAMP] $1" | tee -a "$LOG_FILE"
+}
+
+# Get disk usage percentage (without %)
+DISK_USAGE=$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')
+
+echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  Disk Space Check${NC}"
+echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
+echo ""
+
+# Display disk usage
+echo "Disk Usage Summary:"
+df -h / | tee -a "$LOG_FILE"
+echo ""
+
+# Check threshold
+if [ "$DISK_USAGE" -ge "$CRITICAL_THRESHOLD" ]; then
+    echo -e "${RED}✗ CRITICAL: Disk usage is at ${DISK_USAGE}%${NC}" | tee -a "$LOG_FILE"
+    log "CRITICAL: Disk usage at ${DISK_USAGE}% (threshold: ${CRITICAL_THRESHOLD}%)"
+    
+    echo ""
+    echo "Top 10 largest directories:"
+    du -h / 2>/dev/null | sort -rh | head -10
+    echo ""
+    echo "Recommended actions:"
+    echo "  1. Run: docker-cleanup"
+    echo "  2. Check logs: du -sh /var/log/*"
+    echo "  3. Clear old packages: apt-get autoremove && apt-get autoclean"
+    
+{% if cost_enable_webhook_alerts %}
+    # Send webhook alert
+    /usr/local/bin/disk-alert-webhook "CRITICAL" "$DISK_USAGE"
+{% endif %}
+    
+    exit 2
+    
+elif [ "$DISK_USAGE" -ge "$WARNING_THRESHOLD" ]; then
+    echo -e "${YELLOW}⚠ WARNING: Disk usage is at ${DISK_USAGE}%${NC}" | tee -a "$LOG_FILE"
+    log "WARNING: Disk usage at ${DISK_USAGE}% (threshold: ${WARNING_THRESHOLD}%)"
+    
+    echo ""
+    echo "Consider running cleanup:"
+    echo "  • docker-cleanup       - Clean Docker resources"
+    echo "  • apt-get autoremove  - Remove unused packages"
+    echo "  • journalctl --vacuum-time=7days  - Clean old logs"
+    
+{% if cost_enable_webhook_alerts %}
+    # Send webhook alert
+    /usr/local/bin/disk-alert-webhook "WARNING" "$DISK_USAGE"
+{% endif %}
+    
+    exit 1
+    
+else
+    echo -e "${GREEN}✓ OK: Disk usage is at ${DISK_USAGE}%${NC}" | tee -a "$LOG_FILE"
+    log "OK: Disk usage at ${DISK_USAGE}%"
+    exit 0
+fi

@@ -1,0 +1,69 @@
+#!/bin/bash
+# Apply Resource Limits to Docker Containers
+# Sets CPU and memory limits for all running containers
+
+LOG_FILE="/var/log/resource-limits.log"
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+log() {
+    echo "[$TIMESTAMP] $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Applying Resource Limits ==="
+log ""
+
+# Application containers (Laravel apps)
+APP_CONTAINERS=(materi-ku panca-trivia ruang-istirahat tech-talk)
+for container in "${APP_CONTAINERS[@]}"; do
+    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+        log "Setting limits for application container: $container"
+        docker update \
+            --cpus="{{ cost_app_container_cpu_limit }}" \
+            --memory="{{ cost_app_container_memory_limit }}" \
+            --memory-reservation="{{ cost_app_container_memory_reservation }}" \
+            "$container" >> "$LOG_FILE" 2>&1
+        log "✓ Limits applied to $container"
+    else
+        log "⚠ Container $container not found (skipped)"
+    fi
+done
+
+# Database containers
+DB_CONTAINERS=(mysql postgres redis)
+for container in "${DB_CONTAINERS[@]}"; do
+    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+        log "Setting limits for database container: $container"
+        docker update \
+            --cpus="{{ cost_db_container_cpu_limit }}" \
+            --memory="{{ cost_db_container_memory_limit }}" \
+            --memory-reservation="{{ cost_db_container_memory_reservation }}" \
+            "$container" >> "$LOG_FILE" 2>&1
+        log "✓ Limits applied to $container"
+    else
+        log "⚠ Container $container not found (skipped)"
+    fi
+done
+
+# Infrastructure containers
+INFRA_CONTAINERS=(npm autoheal)
+for container in "${INFRA_CONTAINERS[@]}"; do
+    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+        log "Setting limits for infrastructure container: $container"
+        docker update \
+            --cpus="{{ cost_infra_container_cpu_limit }}" \
+            --memory="{{ cost_infra_container_memory_limit }}" \
+            --memory-reservation="{{ cost_infra_container_memory_reservation }}" \
+            "$container" >> "$LOG_FILE" 2>&1
+        log "✓ Limits applied to $container"
+    else
+        log "⚠ Container $container not found (skipped)"
+    fi
+done
+
+log ""
+log "=== Resource Limits Applied ==="
+log ""
+log "Current container stats:"
+docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | tee -a "$LOG_FILE"
+
+exit 0

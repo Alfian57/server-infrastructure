@@ -1,0 +1,29 @@
+# Application Log Rotation Configuration
+# /etc/logrotate.d/applications
+
+# Laravel application logs
+/opt/docker-stack/applications/*/storage/logs/*.log {
+    rotate {{ cost_log_rotate_count }}
+    {{ cost_log_rotate_frequency }}
+    maxsize {{ cost_log_max_size }}
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+
+# Cleanup and monitoring logs
+/var/log/cleanup.log
+/var/log/disk-monitor.log
+/var/log/resource-limits.log
+{
+    rotate 4
+    weekly
+    maxsize 10M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}

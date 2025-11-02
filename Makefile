@@ -99,6 +99,50 @@ git: check ## Run only git-setup role
 	@printf "\033[0;32mSetting up git...\033[0m\n"
 	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags git-setup
 
+##@ Cost Optimization
+
+cost-optimization: check ## Run complete cost optimization
+	@printf "\033[0;32mApplying cost optimization...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-optimization
+
+cost-docker: check ## Docker cleanup only
+	@printf "\033[0;32mRunning Docker cleanup...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-docker
+
+cost-logs: check ## Log cleanup only
+	@printf "\033[0;32mRunning log cleanup...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-logs
+
+cost-packages: check ## Package cleanup only
+	@printf "\033[0;32mRunning package cleanup...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-packages
+
+cost-resources: check ## Apply resource limits only
+	@printf "\033[0;32mApplying resource limits...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-resources
+
+cost-monitoring: check ## Setup disk monitoring only
+	@printf "\033[0;32mSetting up disk monitoring...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-monitoring
+
+cost-scheduled: check ## Setup scheduled cleanup only
+	@printf "\033[0;32mSetting up scheduled cleanup...\033[0m\n"
+	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-scheduled
+
+cost-report: ## Run resource report on server
+	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
+	@printf "\033[0;32m  Cost Optimization Report\033[0m\n"
+	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
+	@printf "\n\033[0;33mDisk Usage:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "disk-check 2>/dev/null || df -h /" -b
+	@printf "\n\033[0;33mDocker Disk Usage:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker system df 2>/dev/null || echo 'Docker not available'" -b
+	@printf "\n\033[0;33mContainer Resource Usage:\033[0m\n"
+	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null || echo 'No containers running'" -b
+	@printf "\n"
+
+cost-check: cost-report ## Alias for cost-report
+
 ##@ Security Hardening
 
 security: check ## Run complete security hardening

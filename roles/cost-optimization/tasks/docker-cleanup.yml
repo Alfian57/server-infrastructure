@@ -1,0 +1,132 @@
+---
+# Docker Cleanup Tasks
+# Remove unused images, containers, volumes, and networks
+
+- name: Check Docker installation
+  ansible.builtin.command: docker --version
+  register: docker_check
+  changed_when: false
+  failed_when: false
+
+- name: Docker cleanup tasks
+  when: docker_check.rc == 0
+  block:
+    - name: Get current disk usage
+      ansible.builtin.shell: df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage_before
+      changed_when: false
+
+    - name: Get Docker disk usage before cleanup
+      ansible.builtin.command: docker system df
+      register: docker_disk_before
+      changed_when: false
+
+    - name: Display Docker disk usage before cleanup
+      ansible.builtin.debug:
+        msg: "{{ docker_disk_before.stdout_lines }}"
+
+    # Stop and remove exited containers
+    - name: Remove stopped containers
+      ansible.builtin.shell: |
+        docker container prune -f
+      register: container_prune
+      changed_when: container_prune.stdout is search('Total reclaimed space')
+
+    # Remove dangling images (not tagged and not used)
+    - name: Remove dangling images
+      ansible.builtin.shell: |
+        docker image prune -f
+      register: dangling_prune
+      changed_when: dangling_prune.stdout is search('Total reclaimed space')
+
+    # Remove unused images (if enabled)
+    - name: Remove unused images (aggressive cleanup)
+      ansible.builtin.shell: |
+        docker image prune -a -f --filter "until={{ cost_docker_image_retention }}"
+      register: image_prune
+      changed_when: image_prune.stdout is search('Total reclaimed space')
+      when: cost_docker_aggressive_cleanup | default(false)
+
+    # Remove unused volumes
+    - name: Remove unused volumes
+      ansible.builtin.shell: |
+        docker volume prune -f
+      register: volume_prune
+      changed_when: volume_prune.stdout is search('Total reclaimed space')
+      when: cost_docker_cleanup_volumes | default(true)
+
+    # Remove unused networks
+    - name: Remove unused networks
+      ansible.builtin.shell: |
+        docker network prune -f
+      register: network_prune
+      changed_when: network_prune.stdout is search('Total reclaimed space')
+
+    # Build cache cleanup
+    - name: Remove build cache
+      ansible.builtin.shell: |
+        docker builder prune -f --filter "until={{ cost_docker_build_cache_retention }}"
+      register: builder_prune
+      changed_when: builder_prune.stdout is search('Total reclaimed space')
+      when: cost_docker_cleanup_build_cache | default(true)
+
+    # Get Docker disk usage after cleanup
+    - name: Get Docker disk usage after cleanup
+      ansible.builtin.command: docker system df
+      register: docker_disk_after
+      changed_when: false
+
+    - name: Display Docker disk usage after cleanup
+      ansible.builtin.debug:
+        msg: "{{ docker_disk_after.stdout_lines }}"
+
+    - name: Get current disk usage after cleanup
+      ansible.builtin.shell: df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage_after
+      changed_when: false
+
+    - name: Calculate space reclaimed
+      ansible.builtin.set_fact:
+        space_reclaimed: "{{ disk_usage_before.stdout | int - disk_usage_after.stdout | int }}"
+
+    - name: Display cleanup summary
+      ansible.builtin.debug:
+        msg:
+          - "Docker Cleanup Summary:"
+          - "  • Disk usage before: {{ disk_usage_before.stdout }}%"
+          - "  • Disk usage after: {{ disk_usage_after.stdout }}%"
+          - "  • Space reclaimed: {{ space_reclaimed }}%"
+          - "  • Containers pruned: {{ 'Yes' if container_prune.changed else 'No' }}"
+          - "  • Images pruned: {{ 'Yes' if dangling_prune.changed else 'No' }}"
+          - "  • Volumes pruned: {{ 'Yes' if volume_prune.changed else 'No' }}"
+          - "  • Networks pruned: {{ 'Yes' if network_prune.changed else 'No' }}"
+
+# Create docker cleanup script
+- name: Create docker cleanup script
+  ansible.builtin.template:
+    src: docker-cleanup.sh.j2
+    dest: /usr/local/bin/docker-cleanup
+    mode: "0755"
+    owner: root
+    group: root
+
+# Configure Docker daemon for automatic cleanup
+- name: Configure Docker log rotation in daemon.json
+  ansible.builtin.template:
+    src: docker-daemon-optimization.json.j2
+    dest: /etc/docker/daemon-optimization.json
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Merge Docker daemon config
+
+- name: Display Docker cleanup configuration
+  ansible.builtin.debug:
+    msg:
+      - "Docker Cleanup Configuration:"
+      - "  • Aggressive cleanup: {{ cost_docker_aggressive_cleanup | default(false) }}"
+      - "  • Cleanup volumes: {{ cost_docker_cleanup_volumes | default(true) }}"
+      - "  • Image retention: {{ cost_docker_image_retention }}"
+      - "  • Build cache retention: {{ cost_docker_build_cache_retention }}"
+      - "  • Log max size: {{ cost_docker_log_max_size }}"
+      - "  • Log max files: {{ cost_docker_log_max_files }}"
