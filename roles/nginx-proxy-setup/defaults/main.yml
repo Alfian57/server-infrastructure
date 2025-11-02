@@ -18,6 +18,12 @@ cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
 npm_image_version: "2.12.3"
 
 # Example proxy hosts configuration
+# Each proxy host will automatically get:
+# - Let's Encrypt SSL certificate
+# - Force SSL (HTTP → HTTPS redirect)
+# - HTTP/2 support
+# - HSTS security header
+# - Block exploits protection
 proxy_hosts:
   - subdomain: "materi-ku"
     scheme: "http"
@@ -25,24 +31,21 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+  
   - subdomain: "panca-trivia"
     scheme: "http"
     forward_host: "panca-trivia"
     forward_port: 80
     caching_enabled: true
     websocket_support: false
-  - subdomain: "qr-sia"
-    scheme: "http"
-    forward_host: "qr-sia"
-    forward_port: 3000
-    caching_enabled: true
-    websocket_support: false
+  
   - subdomain: "ruang-istirahat"
     scheme: "http"
     forward_host: "ruang-istirahat"
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+  
   - subdomain: "tech-talk"
     scheme: "http"
     forward_host: "tech-talk"

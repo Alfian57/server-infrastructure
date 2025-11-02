@@ -154,7 +154,17 @@
   register: existing_proxy_hosts
   when: proxy_hosts is defined
 
-- name: Process proxy hosts (create or update)
+- name: Get existing SSL certificates
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    status_code: 200
+  register: existing_certificates
+  when: proxy_hosts is defined
+
+- name: Create or update proxy hosts (without SSL first)
   ansible.builtin.uri:
     url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts{% if existing_host_id %}/{{ existing_host_id }}{% endif %}"
     method: "{% if existing_host_id %}PUT{% else %}POST{% endif %}"
@@ -169,12 +179,14 @@
       forward_port: "{{ item.forward_port }}"
       certificate_id: 0
       ssl_forced: 0
-      caching_enabled: 0
-      block_exploits: 0
+      caching_enabled: "{{ item.caching_enabled | default(false) | int }}"
+      block_exploits: 1
       advanced_config: ""
-      meta: {}
+      meta:
+        letsencrypt_agree: false
+        dns_challenge: false
       access_list_id: 0
-      allow_websocket_upgrade: 0
+      allow_websocket_upgrade: "{{ item.websocket_support | default(false) | int }}"
       http2_support: 0
       hsts_enabled: 0
       hsts_subdomains: 0
@@ -183,20 +195,189 @@
     target_domain: "{{ item.subdomain }}.{{ npm_domain_name }}"
     existing_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
     existing_host_id: "{{ existing_host.id | default('') }}"
-  register: proxy_host_operation
+  register: proxy_host_created
   loop: "{{ proxy_hosts }}"
   when: proxy_hosts is defined
 
-- name: Display proxy host operation results
+- name: Wait for proxy hosts to be accessible (for Let's Encrypt validation)
+  ansible.builtin.wait_for:
+    host: "{{ ansible_default_ipv4.address }}"
+    port: 80
+    delay: 5
+    timeout: 30
+  when: proxy_host_created.changed
+
+- name: Check DNS propagation for each subdomain
+  ansible.builtin.command:
+    cmd: "dig +short {{ item.subdomain }}.{{ npm_domain_name }} @8.8.8.8"
+  register: dns_check
+  loop: "{{ proxy_hosts }}"
+  changed_when: false
+  failed_when: false
+  when: proxy_hosts is defined
+
+- name: Display DNS propagation status
   ansible.builtin.debug:
-    msg: >
-      Proxy host for {{ item.item.subdomain }}.{{ npm_domain_name }}:
-      {% if item.url is search('/[0-9]+$') %}
-      🔄 Updated successfully (ID: {{ item.url.split('/')[-1] }})
-      {% elif item.status in [200, 201] %}
-      ✅ Created successfully
+    msg: |
+      DNS Check for {{ item.item.subdomain }}.{{ npm_domain_name }}:
+      {% if item.stdout %}
+      ✅ Resolved to: {{ item.stdout_lines | join(', ') }}
       {% else %}
-      ❌ Failed with status {{ item.status }}
+      ⚠️  Not resolved yet - will retry
       {% endif %}
-  loop: "{{ proxy_host_operation.results }}"
-  when: proxy_host_operation.results is defined
+  loop: "{{ dns_check.results }}"
+  when: dns_check.results is defined
+
+- name: Wait for DNS propagation (retry until all domains resolve)
+  ansible.builtin.command:
+    cmd: "dig +short {{ item.subdomain }}.{{ npm_domain_name }} @8.8.8.8"
+  register: dns_propagation_check
+  until: dns_propagation_check.stdout != ""
+  retries: 30
+  delay: 10
+  loop: "{{ proxy_hosts }}"
+  changed_when: false
+  when: proxy_hosts is defined
+  ignore_errors: true
+
+- name: Display DNS propagation wait results
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║ DNS Propagation Check Complete
+      ╠════════════════════════════════════════════════════════════════╣
+      {% for result in dns_propagation_check.results %}
+      ║ {{ result.item.subdomain }}.{{ npm_domain_name }}:
+      ║   {% if result.stdout %}✅ Resolved: {{ result.stdout }}{% else %}⚠️  Not resolved (may affect SSL){% endif %}
+      {% endfor %}
+      ╚════════════════════════════════════════════════════════════════╝
+  when: dns_propagation_check.results is defined
+
+- name: Request Let's Encrypt SSL certificate for each proxy host
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    body_format: json
+    body:
+      domain_names:
+        - "{{ item.subdomain }}.{{ npm_domain_name }}"
+      meta:
+        letsencrypt_email: "{{ npm_admin_email }}"
+        letsencrypt_agree: true
+        dns_challenge: false
+    status_code: [200, 201]
+  vars:
+    target_domain: "{{ item.subdomain }}.{{ npm_domain_name }}"
+    # Check if certificate already exists for this domain
+    existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+  register: ssl_cert_request
+  loop: "{{ proxy_hosts }}"
+  when: 
+    - proxy_hosts is defined
+    - existing_cert.id is not defined
+  failed_when: false
+  retries: 3
+  delay: 10
+  until: ssl_cert_request.status in [200, 201] or ssl_cert_request.status == 400
+
+- name: Wait for SSL certificates to be issued
+  ansible.builtin.pause:
+    seconds: 30
+  when: ssl_cert_request.changed
+
+- name: Get updated SSL certificates list
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    status_code: 200
+  register: updated_certificates
+  when: proxy_hosts is defined
+
+- name: Update proxy hosts with SSL enabled
+  ansible.builtin.uri:
+    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts/{{ proxy_host_id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ npm_auth_token }}"
+    body_format: json
+    body:
+      domain_names:
+        - "{{ item.subdomain }}.{{ npm_domain_name }}"
+      forward_scheme: "{{ item.scheme }}"
+      forward_host: "{{ item.forward_host }}"
+      forward_port: "{{ item.forward_port }}"
+      certificate_id: "{{ certificate_id }}"
+      ssl_forced: 1
+      caching_enabled: "{{ item.caching_enabled | default(false) | int }}"
+      block_exploits: 1
+      advanced_config: ""
+      meta:
+        letsencrypt_agree: false
+        dns_challenge: false
+      access_list_id: 0
+      allow_websocket_upgrade: "{{ item.websocket_support | default(false) | int }}"
+      http2_support: 1
+      hsts_enabled: 1
+      hsts_subdomains: 0
+    status_code: [200, 201]
+  vars:
+    target_domain: "{{ item.subdomain }}.{{ npm_domain_name }}"
+    # Get the proxy host ID
+    current_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+    proxy_host_id: "{{ current_host.id | default('') }}"
+    # Get the certificate ID for this domain
+    cert_for_domain: "{{ updated_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+    certificate_id: "{{ cert_for_domain.id | default(0) }}"
+  register: proxy_host_ssl_update
+  loop: "{{ proxy_hosts }}"
+  when:
+    - proxy_hosts is defined
+    - certificate_id | int > 0
+    - proxy_host_id != ''
+  failed_when: false
+
+- name: Display proxy host configuration results
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║ Proxy Host: {{ item.item.subdomain }}.{{ npm_domain_name }}
+      ╠════════════════════════════════════════════════════════════════╣
+      {% if item.status in [200, 201] %}
+      ║ Status: ✅ SSL Enabled & Configured
+      ║ Certificate: Let's Encrypt
+      ║ SSL Forced: Yes (HTTP → HTTPS redirect)
+      ║ HTTP/2: Enabled
+      ║ HSTS: Enabled
+      ║ Block Exploits: Enabled
+      ║ Websocket: {{ item.item.websocket_support | default(false) }}
+      ║ Caching: {{ item.item.caching_enabled | default(false) }}
+      {% else %}
+      ║ Status: ⚠️  Created without SSL (manual SSL setup needed)
+      {% endif %}
+      ╚════════════════════════════════════════════════════════════════╝
+  loop: "{{ proxy_host_ssl_update.results }}"
+  when: 
+    - proxy_host_ssl_update.results is defined
+    - not ansible_check_mode
+
+- name: Display summary
+  ansible.builtin.debug:
+    msg: |
+      
+      ╔════════════════════════════════════════════════════════════════╗
+      ║           Nginx Proxy Manager Setup Complete                  ║
+      ╠════════════════════════════════════════════════════════════════╣
+      ║ Admin Panel: http://{{ ansible_default_ipv4.address }}:81
+      ║ Username: {{ npm_admin_email }}
+      ║ 
+      ║ Proxy Hosts Configured: {{ proxy_hosts | length }}
+      ║ 
+      ║ Next Steps:
+      ║ 1. Access admin panel and verify SSL certificates
+      ║ 2. Check that all proxy hosts are accessible via HTTPS
+      ║ 3. Verify HTTP → HTTPS redirect is working
+      ╚════════════════════════════════════════════════════════════════╝
