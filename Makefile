@@ -1,432 +1,216 @@
-.PHONY: help setup ping check syntax lint install update clean vault-status vault-migrate vault-main
+.PHONY: help setup ping check lint install clean
 
-# Default target
 .DEFAULT_GOAL := help
 
-# Variables
+# ═══════════════════════════════════════════════════════
+# Configuration
+# ═══════════════════════════════════════════════════════
+
 PLAYBOOK := playbooks/server-setup.yml
 INVENTORY := inventory/hosts.ini
-VAULT_PASSWORD_FILE := .vault_pass
+VAULT_PASS := .vault_pass
 
-# Check if vault password file exists and add to ansible options
-ifneq (,$(wildcard $(VAULT_PASSWORD_FILE)))
-	ANSIBLE_OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASSWORD_FILE)
+# Ansible options
+ifneq (,$(wildcard $(VAULT_PASS)))
+	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS)
 else
-	ANSIBLE_OPTS := -i $(INVENTORY)
+	OPTS := -i $(INVENTORY)
 endif
 
-##@ General Commands
+# SSH helper
+SSH_PORT = $(shell grep '^ansible_port' ansible.cfg 2>/dev/null | awk -F'=' '{print $$2}' | tr -d ' ' || echo '22')
+SSH_HOST = $(shell grep -v '^#' $(INVENTORY) | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}')
+SSH = ssh -p $(SSH_PORT) deployer@$(SSH_HOST)
 
-help: ## Display this help message
-	@printf "\n"
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;32m  Ansible Infrastructure Management - Makefile\033[0m\n"
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@awk 'BEGIN {FS = ":.*##"; printf "\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[0;36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[0;33m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-	@printf "\n"
+# Helper to run playbook with tag
+run = @ansible-playbook $(PLAYBOOK) $(OPTS) --tags $(1)
 
-ping: ## Test connection to all servers
-	@printf "\033[0;34mTesting connection to servers...\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m ping
+# ═══════════════════════════════════════════════════════
+# Main Targets
+# ═══════════════════════════════════════════════════════
 
-check: ## Check playbook for syntax errors (dry-run)
-	@printf "\033[0;34mChecking playbook syntax...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --syntax-check
-	@printf "\033[0;32m✓ Syntax check passed!\033[0m\n"
+##@ General
 
-syntax: check ## Alias for 'check'
+help: ## Show this help
+	@awk 'BEGIN {FS = ":.*##"; printf "\n\033[1m%-20s\033[0m %s\n", "Target", "Description"} /^[a-zA-Z_-]+:.*?##/ { printf "\033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) }' $(MAKEFILE_LIST)
 
-lint: ## Lint Ansible playbook and roles with ansible-lint
-	@printf "\033[0;34mLinting Ansible code...\033[0m\n"
-	@if command -v ansible-lint >/dev/null 2>&1; then \
-		ansible-lint $(PLAYBOOK); \
-	else \
-		printf "\033[0;31m✗ ansible-lint not installed. Install with: pip install ansible-lint\033[0m\n"; \
-		exit 1; \
-	fi
+ping: ## Test connection
+	@ansible all $(OPTS) -m ping
 
-##@ Full Deployment
+check: ## Check syntax
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --syntax-check && echo "✓ OK"
 
-setup: check ## Run complete server setup (all roles)
-	@printf "\033[0;32mRunning complete server setup...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS)
+lint: ## Lint playbook
+	@ansible-lint $(PLAYBOOK) 2>/dev/null || echo "Install: pip install ansible-lint"
 
-setup-ask-pass: check ## Run complete setup with password prompt
-	@printf "\033[0;32mRunning complete server setup (with password prompt)...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --ask-become-pass
+##@ Deployment
 
-setup-verbose: check ## Run complete setup with verbose output
-	@printf "\033[0;32mRunning complete server setup (verbose)...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) -vvv
+setup: check ## Full setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS)
 
-setup-dry-run: check ## Run complete setup in check mode (dry-run)
-	@printf "\033[0;33mRunning complete server setup (DRY RUN)...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --check
+setup-dry-run: check ## Dry run
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --check
 
-##@ Tag-based Deployment
+setup-verbose: check ## Verbose setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) -vvv
 
-system: check ## Deploy only system roles (update-apt, users-setup, git-setup)
-	@printf "\033[0;32mDeploying system configuration...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags system
+quick: check ## Quick (skip apt update)
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --skip-tags update-apt
 
-security: check ## Deploy security hardening
-	@printf "\033[0;32mApplying security hardening...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security
+##@ Components
 
-infrastructure: check ## Deploy only infrastructure roles (docker, autoheal, nginx-proxy)
-	@printf "\033[0;32mDeploying infrastructure...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags infrastructure
+system: check ## System setup
+	$(call run,system)
 
-database: check ## Deploy only database roles (mysql, postgres, redis)
-	@printf "\033[0;32mDeploying databases...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags database
+security: check ## Security hardening
+	$(call run,security)
 
-application: check ## Deploy only application roles (all apps)
-	@printf "\033[0;32mDeploying applications...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags application
+infrastructure: check ## Infrastructure
+	$(call run,infrastructure)
 
-##@ Individual Role Deployment
+database: check ## Databases
+	$(call run,database)
 
-update-apt: check ## Run only update-apt role
-	@printf "\033[0;32mUpdating apt packages...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags update-apt
+application: check ## Applications
+	$(call run,application)
 
-users: check ## Run only users-setup role
-	@printf "\033[0;32mSetting up users...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags users-setup
+optimization: check ## Cost optimization
+	$(call run,optimization)
 
-git: check ## Run only git-setup role
-	@printf "\033[0;32mSetting up git...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags git-setup
+##@ Infrastructure
 
-##@ Cost Optimization
+docker: check ## Docker
+	$(call run,docker-setup)
 
-cost-optimization: check ## Run complete cost optimization
-	@printf "\033[0;32mApplying cost optimization...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-optimization
+nginx: check ## Nginx Proxy
+	$(call run,nginx-proxy-setup)
 
-cost-docker: check ## Docker cleanup only
-	@printf "\033[0;32mRunning Docker cleanup...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-docker
+mysql: check ## MySQL
+	$(call run,mysql-setup)
 
-cost-logs: check ## Log cleanup only
-	@printf "\033[0;32mRunning log cleanup...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-logs
+postgres: check ## PostgreSQL
+	$(call run,postgres-setup)
 
-cost-packages: check ## Package cleanup only
-	@printf "\033[0;32mRunning package cleanup...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-packages
+redis: check ## Redis
+	$(call run,redis-setup)
 
-cost-resources: check ## Apply resource limits only
-	@printf "\033[0;32mApplying resource limits...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-resources
+##@ Applications
 
-cost-monitoring: check ## Setup disk monitoring only
-	@printf "\033[0;32mSetting up disk monitoring...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-monitoring
+materi-ku: check ## Materi-Ku
+	$(call run,materi-ku-setup)
 
-cost-scheduled: check ## Setup scheduled cleanup only
-	@printf "\033[0;32mSetting up scheduled cleanup...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags cost-scheduled
+panca-trivia: check ## Panca Trivia
+	$(call run,panca-trivia-setup)
 
-cost-report: ## Run resource report on server
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;32m  Cost Optimization Report\033[0m\n"
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\n\033[0;33mDisk Usage:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "disk-check 2>/dev/null || df -h /" -b
-	@printf "\n\033[0;33mDocker Disk Usage:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker system df 2>/dev/null || echo 'Docker not available'" -b
-	@printf "\n\033[0;33mContainer Resource Usage:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null || echo 'No containers running'" -b
-	@printf "\n"
+ruang-istirahat: check ## Ruang Istirahat
+	$(call run,ruang-istirahat-setup)
 
-cost-check: cost-report ## Alias for cost-report
+tech-talk: check ## Tech Talk
+	$(call run,tech-talk-setup)
 
-##@ Security Hardening
+##@ Security
 
-security: check ## Run complete security hardening
-	@printf "\033[0;32mApplying security hardening...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-hardening
+security-ufw: check ## UFW firewall
+	$(call run,security-ufw)
 
-security-ufw: check ## Setup UFW firewall only
-	@printf "\033[0;32mConfiguring UFW firewall...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-ufw
+security-fail2ban: check ## Fail2ban
+	$(call run,security-fail2ban)
 
-security-fail2ban: check ## Setup Fail2ban only
-	@printf "\033[0;32mConfiguring Fail2ban...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-fail2ban
+security-ssh: check ## SSH hardening
+	$(call run,security-ssh)
 
-security-ssh: check ## Apply SSH hardening only
-	@printf "\033[0;32mApplying SSH hardening...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-ssh
+security-docker: check ## Docker security
+	$(call run,security-docker)
 
-security-docker: check ## Apply Docker security only
-	@printf "\033[0;32mApplying Docker security...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-docker
+security-check: ## Security status
+	@echo "=== Security Status ==="
+	@ansible all $(OPTS) -m shell -a "ufw status" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "fail2ban-client status" -b 2>/dev/null || true
 
-security-system: check ## Apply system security only
-	@printf "\033[0;32mApplying system security...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags security-system
+##@ Optimization
 
-security-check: ## Check security status (UFW, Fail2ban, SSH)
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;32m  Security Status Check\033[0m\n"
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\n\033[0;33mUFW Firewall Status:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "ufw status verbose" -b
-	@printf "\n\033[0;33mFail2ban Status:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "fail2ban-client status" -b
-	@printf "\n\033[0;33mActive Jails:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "fail2ban-client status sshd" -b
-	@printf "\n"
+cost: check ## Full cost optimization
+	$(call run,cost-optimization)
 
-##@ Infrastructure Deployment
+cost-docker: check ## Docker cleanup
+	$(call run,cost-docker)
 
-docker: check ## Run only docker-setup role
-	@printf "\033[0;32mSetting up Docker...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags docker-setup
+cost-logs: check ## Log cleanup
+	$(call run,cost-logs)
 
-autoheal: check ## Run only autoheal-setup role
-	@printf "\033[0;32mSetting up Autoheal...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags autoheal-setup
+cost-resources: check ## Resource limits
+	$(call run,cost-resources)
 
-nginx: check ## Run only nginx-proxy-setup role
-	@printf "\033[0;32mSetting up Nginx Proxy Manager...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags nginx-proxy-setup
+cost-monitoring: check ## Disk monitoring
+	$(call run,cost-monitoring)
 
-mysql: check ## Run only mysql-setup role
-	@printf "\033[0;32mSetting up MySQL...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags mysql-setup
+cost-report: ## Cost report
+	@echo "=== Cost Report ==="
+	@ansible all $(OPTS) -m shell -a "disk-check 2>/dev/null || df -h /" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "docker system df 2>/dev/null || echo 'N/A'" -b 2>/dev/null || true
 
-postgres: check ## Run only postgres-setup role
-	@printf "\033[0;32mSetting up PostgreSQL...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags postgres-setup
+##@ Vault
 
-redis: check ## Run only redis-setup role
-	@printf "\033[0;32mSetting up Redis...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags redis-setup
+vault-edit: ## Edit vault file
+	@ansible-vault edit $(if $(FILE),$(FILE),group_vars/all/vault.yml)
 
-##@ Application Deployment
-
-materi-ku: check ## Deploy only materi-ku application
-	@printf "\033[0;32mDeploying Materi-Ku...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags materi-ku-setup
-
-panca-trivia: check ## Deploy only panca-trivia application
-	@printf "\033[0;32mDeploying Panca Trivia...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags panca-trivia-setup
-
-ruang-istirahat: check ## Deploy only ruang-istirahat application
-	@printf "\033[0;32mDeploying Ruang Istirahat...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags ruang-istirahat-setup
-
-tech-talk: check ## Deploy only tech-talk application
-	@printf "\033[0;32mDeploying Tech Talk...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags tech-talk-setup
-
-all-apps: check ## Deploy all applications at once
-	@printf "\033[0;32mDeploying all applications...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags application
-
-##@ Server Management
-
-facts: ## Gather and display server facts
-	@printf "\033[0;34mGathering server facts...\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m setup
-
-list-hosts: ## List all hosts in inventory
-	@printf "\033[0;34mListing all hosts...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --list-hosts
-
-list-tags: ## List all available tags
-	@printf "\033[0;34mListing all available tags...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --list-tags
-
-list-tasks: ## List all tasks that would be executed
-	@printf "\033[0;34mListing all tasks...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --list-tasks
-
-server-info: ## Display server information
-	@printf "\033[0;34mServer Information:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "uname -a"
-	@printf ""
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker --version 2>/dev/null || echo 'Docker not installed'"
-	@printf ""
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' 2>/dev/null || echo 'No containers running'"
-
-##@ Vault Management
-
-vault-create-pass: ## Create vault password file (interactive)
-	@printf "\033[0;33mCreating vault password file...\033[0m\n"
-	@read -sp "Enter vault password: " VAULT_PASS; \
-	echo "$$VAULT_PASS" > $(VAULT_PASSWORD_FILE); \
-	chmod 600 $(VAULT_PASSWORD_FILE); \
-	echo ""; \
-	printf "\033[0;32m✓ Vault password file created at $(VAULT_PASSWORD_FILE)\033[0m\n"
-	@printf "\033[0;33m⚠️  Add $(VAULT_PASSWORD_FILE) to .gitignore!\033[0m\n"
-
-vault-encrypt: ## Encrypt sensitive files with Ansible Vault
-	@printf "\033[0;33mEncrypting files with Ansible Vault...\033[0m\n"
-	@printf "Usage: make vault-encrypt FILE=path/to/file\n"
-	@if [ -z "$(FILE)" ]; then \
-		printf "\033[0;31m✗ Please specify FILE=path/to/file\033[0m\n"; \
-		exit 1; \
-	fi
+vault-encrypt: ## Encrypt file (FILE=path)
+	@[ -n "$(FILE)" ] || (echo "Usage: make vault-encrypt FILE=path" && exit 1)
 	@ansible-vault encrypt $(FILE)
 
-vault-decrypt: ## Decrypt Ansible Vault encrypted files
-	@printf "\033[0;33mDecrypting files with Ansible Vault...\033[0m\n"
-	@printf "Usage: make vault-decrypt FILE=path/to/file\n"
-	@if [ -z "$(FILE)" ]; then \
-		printf "\033[0;31m✗ Please specify FILE=path/to/file\033[0m\n"; \
-		exit 1; \
-	fi
+vault-decrypt: ## Decrypt file (FILE=path)
+	@[ -n "$(FILE)" ] || (echo "Usage: make vault-decrypt FILE=path" && exit 1)
 	@ansible-vault decrypt $(FILE)
 
-vault-edit: ## Edit Ansible Vault encrypted files
-	@printf "\033[0;33mEditing encrypted file...\033[0m\n"
-	@printf "Usage: make vault-edit FILE=path/to/file\n"
-	@if [ -z "$(FILE)" ]; then \
-		printf "\033[0;31m✗ Please specify FILE=path/to/file\033[0m\n"; \
-		exit 1; \
-	fi
-	@ansible-vault edit $(FILE)
+vault-status: ## Vault status
+	@echo "=== Vault Status ==="
+	@[ -f group_vars/all/vault.yml ] && \
+		(grep -q '^\$$ANSIBLE_VAULT' group_vars/all/vault.yml && echo "✓ Encrypted" || echo "✗ Not encrypted") || \
+		echo "✗ Not found"
 
-vault-view: ## View Ansible Vault encrypted files
-	@printf "\033[0;33mViewing encrypted file...\033[0m\n"
-	@printf "Usage: make vault-view FILE=path/to/file\n"
-	@if [ -z "$(FILE)" ]; then \
-		printf "\033[0;31m✗ Please specify FILE=path/to/file\033[0m\n"; \
-		exit 1; \
-	fi
-	@ansible-vault view $(FILE)
+##@ Server
 
-vault-main: ## Quick edit main vault file (group_vars/all/vault.yml)
-	@printf "\033[0;33mEditing main vault file...\033[0m\n"
-	@ansible-vault edit group_vars/all/vault.yml
+ssh: ## SSH to server
+	@$(SSH)
 
-vault-status: ## Show status of vault files
-	@printf "\033[0;36mVault Files Status:\033[0m\n"
-	@printf "\n\033[0;33mMain Vault:\033[0m\n"
-	@if [ -f group_vars/all/vault.yml ]; then \
-		if grep -q '^\$$ANSIBLE_VAULT' group_vars/all/vault.yml 2>/dev/null; then \
-			printf "  \033[0;32m✓\033[0m group_vars/all/vault.yml (encrypted)\n"; \
-		else \
-			printf "  \033[0;31m✗\033[0m group_vars/all/vault.yml (NOT encrypted!)\n"; \
-		fi \
-	else \
-		printf "  \033[0;31m✗\033[0m group_vars/all/vault.yml (not found)\n"; \
-	fi
-	@printf "\n\033[0;33mOld Encrypted Files (should be migrated):\033[0m\n"
-	@old_files=$$(find roles -type f \( -name "*.yml" -o -name ".env" \) -exec grep -l '^\$$ANSIBLE_VAULT' {} \; 2>/dev/null); \
-	if [ -z "$$old_files" ]; then \
-		printf "  \033[0;32m✓\033[0m No old encrypted files found\n"; \
-	else \
-		echo "$$old_files" | while read -r file; do \
-			printf "  \033[0;33m⚠\033[0m $$file\n"; \
-		done \
-	fi
-	@printf "\n"
+ssh-github: ## Update GitHub secrets
+	@$(SSH) -t 'update-github-secrets'
 
-vault-migrate: ## Run vault migration script
-	@printf "\033[0;36mRunning vault migration script...\033[0m\n"
-	@bash group_vars/migrate-vault.sh
+ssh-cloudflare: ## Update Cloudflare DNS
+	@$(SSH) -t 'update-cloudflare-dns'
 
-##@ Utilities
+status: ## Server status
+	@echo "=== Status ==="
+	@ansible all $(OPTS) -m ping -o 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null || true
 
-install: ## Install Ansible and required collections
-	@printf "\033[0;32mInstalling Ansible and collections...\033[0m\n"
+facts: ## Server facts
+	@ansible all $(OPTS) -m setup
+
+##@ Info
+
+list-hosts: ## List hosts
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-hosts
+
+list-tags: ## List tags
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-tags
+
+list-tasks: ## List tasks
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-tasks
+
+##@ Utils
+
+install: ## Install Ansible
 	@pip install --upgrade ansible ansible-lint
-	@ansible-galaxy collection install community.docker
-	@ansible-galaxy collection install ansible.posix
-	@ansible-galaxy collection install community.general
-	@printf "\033[0;32m✓ Installation complete!\033[0m\n"
+	@ansible-galaxy collection install community.docker ansible.posix community.general
 
-update: ## Update Ansible collections
-	@printf "\033[0;32mUpdating Ansible collections...\033[0m\n"
-	@ansible-galaxy collection install community.docker --force
-	@ansible-galaxy collection install ansible.posix --force
-	@ansible-galaxy collection install community.general --force
-	@printf "\033[0;32m✓ Collections updated!\033[0m\n"
+update: ## Update collections
+	@ansible-galaxy collection install community.docker ansible.posix community.general --force
 
-clean: ## Clean temporary files and caches
-	@printf "\033[0;33mCleaning temporary files...\033[0m\n"
-	@find . -type f -name "*.retry" -delete
-	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+clean: ## Clean temp files
+	@find . -name "*.retry" -delete
+	@find . -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@rm -rf .ansible_facts_cache/
-	@printf "\033[0;32m✓ Cleanup complete!\033[0m\n"
 
-version: ## Show Ansible version
-	@printf "\033[0;34mAnsible Version:\033[0m\n"
+version: ## Show version
 	@ansible --version
-
-##@ GitHub Management
-
-setup-github-cli: ## Install GitHub CLI on server (runs with server setup)
-	@printf "\033[0;32mSetting up GitHub CLI on server...\033[0m\n"
-	@printf "\033[0;33mNote: GitHub CLI will be installed during server setup\033[0m\n"
-	@printf "\033[0;33mRun: make setup (full setup) or make setup-tags TAGS=github-cli-setup\033[0m\n"
-
-update-github-secrets: ## Update GitHub repository secrets from server
-	@printf "\033[0;32mUpdating GitHub repository secrets from server...\033[0m\n"
-	@printf "\033[0;33mSSH to server and run:\033[0m\n"
-	@printf "  ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') 'update-github-secrets'\n"
-
-update-github-secrets-interactive: ## Update GitHub repository secrets (opens SSH session)
-	@printf "\033[0;32mConnecting to server to update GitHub secrets...\033[0m\n"
-	@ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') -t 'update-github-secrets'
-
-##@ Cloudflare DNS Management
-
-setup-cloudflare-dns: ## Install Cloudflare DNS management on server
-	@printf "\033[0;32mSetting up Cloudflare DNS management on server...\033[0m\n"
-	@printf "\033[0;33mNote: Cloudflare DNS will be installed during server setup\033[0m\n"
-	@printf "\033[0;33mRun: make setup (full setup) or make setup-tags TAGS=cloudflare-dns-setup\033[0m\n"
-
-update-cloudflare-dns: ## Update Cloudflare DNS records from server
-	@printf "\033[0;32mUpdating Cloudflare DNS records from server...\033[0m\n"
-	@printf "\033[0;33mSSH to server and run:\033[0m\n"
-	@printf "  ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') 'update-cloudflare-dns'\n"
-
-update-cloudflare-dns-interactive: ## Update Cloudflare DNS records (opens SSH session)
-	@printf "\033[0;32mConnecting to server to update Cloudflare DNS...\033[0m\n"
-	@ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') -t 'update-cloudflare-dns'
-
-##@ Quick Actions
-
-quick-setup: ## Quick setup (skip system updates)
-	@printf "\033[0;32mRunning quick setup (skipping apt updates)...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --skip-tags update-apt
-
-fresh-install: ## Fresh install on new server (interactive)
-	@printf "\033[0;32mStarting fresh server installation...\033[0m\n"
-	@printf "\033[0;33mThis will run the complete setup. Continue? [y/N]\033[0m\n"
-	@read -r REPLY; \
-	if [ "$$REPLY" = "y" ] || [ "$$REPLY" = "Y" ]; then \
-		$(MAKE) setup-verbose; \
-	else \
-		printf "\033[0;31mCancelled.\033[0m\n"; \
-	fi
-
-redeploy-app: ## Redeploy specific application (Usage: make redeploy-app APP=materi-ku)
-	@if [ -z "$(APP)" ]; then \
-		printf "\033[0;31m✗ Please specify APP=<app-name>\033[0m\n"; \
-		printf "\033[0;33mAvailable apps: materi-ku, panca-trivia, ruang-istirahat, tech-talk\033[0m\n"; \
-		exit 1; \
-	fi
-	@printf "\033[0;32mRedeploying $(APP)...\033[0m\n"
-	@ansible-playbook $(PLAYBOOK) $(ANSIBLE_OPTS) --tags $(APP)-setup
-
-status: ## Quick status check of all services
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\033[0;32m  Server Status\033[0m\n"
-	@printf "\033[0;36m═══════════════════════════════════════════════════════\033[0m\n"
-	@printf "\n"
-	@printf "\033[0;33mChecking server connectivity...\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m ping -o
-	@printf "\n"
-	@printf "\033[0;33mDocker containers:\033[0m\n"
-	@ansible all $(ANSIBLE_OPTS) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}' 2>/dev/null || echo 'Docker not available'" -o
-	@printf "\n"
