@@ -23,6 +23,8 @@
       tags: [system, users-setup]
     - role: git-setup
       tags: [system, git-setup]
+    - role: github-cli-setup
+      tags: [system, github-cli-setup]
 
     # Infrastructure
     - role: docker-setup

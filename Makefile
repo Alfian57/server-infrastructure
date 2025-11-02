@@ -274,6 +274,22 @@ version: ## Show Ansible version
 	@printf "\033[0;34mAnsible Version:\033[0m\n"
 	@ansible --version
 
+##@ GitHub Management
+
+setup-github-cli: ## Install GitHub CLI on server (runs with server setup)
+	@printf "\033[0;32mSetting up GitHub CLI on server...\033[0m\n"
+	@printf "\033[0;33mNote: GitHub CLI will be installed during server setup\033[0m\n"
+	@printf "\033[0;33mRun: make setup (full setup) or make setup-tags TAGS=github-cli-setup\033[0m\n"
+
+update-github-secrets: ## Update GitHub repository secrets from server
+	@printf "\033[0;32mUpdating GitHub repository secrets from server...\033[0m\n"
+	@printf "\033[0;33mSSH to server and run:\033[0m\n"
+	@printf "  ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') 'update-github-secrets'\n"
+
+update-github-secrets-interactive: ## Update GitHub repository secrets (opens SSH session)
+	@printf "\033[0;32mConnecting to server to update GitHub secrets...\033[0m\n"
+	@ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') -t 'update-github-secrets'
+
 ##@ Quick Actions
 
 quick-setup: ## Quick setup (skip system updates)
