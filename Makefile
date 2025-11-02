@@ -290,6 +290,22 @@ update-github-secrets-interactive: ## Update GitHub repository secrets (opens SS
 	@printf "\033[0;32mConnecting to server to update GitHub secrets...\033[0m\n"
 	@ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') -t 'update-github-secrets'
 
+##@ Cloudflare DNS Management
+
+setup-cloudflare-dns: ## Install Cloudflare DNS management on server
+	@printf "\033[0;32mSetting up Cloudflare DNS management on server...\033[0m\n"
+	@printf "\033[0;33mNote: Cloudflare DNS will be installed during server setup\033[0m\n"
+	@printf "\033[0;33mRun: make setup (full setup) or make setup-tags TAGS=cloudflare-dns-setup\033[0m\n"
+
+update-cloudflare-dns: ## Update Cloudflare DNS records from server
+	@printf "\033[0;32mUpdating Cloudflare DNS records from server...\033[0m\n"
+	@printf "\033[0;33mSSH to server and run:\033[0m\n"
+	@printf "  ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') 'update-cloudflare-dns'\n"
+
+update-cloudflare-dns-interactive: ## Update Cloudflare DNS records (opens SSH session)
+	@printf "\033[0;32mConnecting to server to update Cloudflare DNS...\033[0m\n"
+	@ssh -p $(shell grep '^ansible_port' ansible.cfg | awk -F'=' '{print $$2}' | tr -d ' ') deployer@$(shell grep -v '^#' inventory/hosts.ini | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}') -t 'update-cloudflare-dns'
+
 ##@ Quick Actions
 
 quick-setup: ## Quick setup (skip system updates)

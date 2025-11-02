@@ -25,6 +25,8 @@
       tags: [system, git-setup]
     - role: github-cli-setup
       tags: [system, github-cli-setup]
+    - role: cloudflare-dns-setup
+      tags: [system, cloudflare-dns-setup]
 
     # Infrastructure
     - role: docker-setup
