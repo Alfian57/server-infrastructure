@@ -95,15 +95,33 @@
     owner: deployer
     group: deployer
 
+- name: Run update-cloudflare-dns to sync DNS records
+  ansible.builtin.command:
+    cmd: /home/deployer/.local/cloudflare-venv/bin/python /home/deployer/.local/bin/update-cloudflare-dns
+  become: true
+  become_user: deployer
+  register: cloudflare_dns_result
+  changed_when: "'Created' in cloudflare_dns_result.stdout or 'Updated' in cloudflare_dns_result.stdout"
+  failed_when: false
+  tags:
+    - cloudflare-dns
+
+- name: Display Cloudflare DNS update output
+  ansible.builtin.debug:
+    msg: "{{ cloudflare_dns_result.stdout_lines | default(['No output']) }}"
+  when: cloudflare_dns_result.stdout_lines is defined
+  tags:
+    - cloudflare-dns
+
 - name: Display completion message
   ansible.builtin.debug:
     msg:
       - "✓ Cloudflare DNS setup complete on server!"
       - "✓ Python Cloudflare library installed"
       - "✓ update-cloudflare-dns script installed to /home/deployer/.local/bin/"
-      - "✓ DNS records configuration saved"
+      - "✓ DNS records have been automatically synced"
       - ""
-      - "To update DNS records, SSH to server and run:"
+      - "To manually update DNS records, SSH to server and run:"
       - "  update-cloudflare-dns"
       - ""
       - "This will create/update:"
