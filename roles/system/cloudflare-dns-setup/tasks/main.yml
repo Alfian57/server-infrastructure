@@ -97,17 +97,14 @@
 
 - name: Display completion message
   ansible.builtin.debug:
-    msg: |
-      ✓ Cloudflare DNS setup complete on server!
-      ✓ Python Cloudflare library installed
-      ✓ update-cloudflare-dns script installed to /home/deployer/.local/bin/
-      ✓ DNS records configuration saved
-      
-      To update DNS records, SSH to server and run:
-        update-cloudflare-dns
-      
-      This will create/update:
-        - {{ cloudflare_dns_records | length }} DNS records for {{ cloudflare_domain }}
-{% if cloudflare_solvo_dns_records is defined %}
-        - {{ cloudflare_solvo_dns_records | length }} DNS records for {{ cloudflare_solvo_domain }}
-{% endif %}
+    msg:
+      - "✓ Cloudflare DNS setup complete on server!"
+      - "✓ Python Cloudflare library installed"
+      - "✓ update-cloudflare-dns script installed to /home/deployer/.local/bin/"
+      - "✓ DNS records configuration saved"
+      - ""
+      - "To update DNS records, SSH to server and run:"
+      - "  update-cloudflare-dns"
+      - ""
+      - "This will create/update:"
+      - "  - {{ cloudflare_dns_records | length }} DNS records for {{ cloudflare_domain }}"
