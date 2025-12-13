@@ -1,0 +1,14 @@
+---
+# Users Setup Role Defaults
+
+# Example users configuration
+# Override this in group_vars/all/vars.yml or host_vars
+users: []
+# users:
+#   - name: "deployer"
+#     comment: "Deploy User"
+#     groups: ["sudo", "docker"]
+#     shell: "/bin/bash"
+#     ssh_key: "ssh-ed25519 AAAA... user@host"
+#     state: "present"
+#     system: false

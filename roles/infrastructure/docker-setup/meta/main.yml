@@ -1,0 +1,30 @@
+---
+# Role Metadata: docker-setup
+
+galaxy_info:
+  author: "Alfian"
+  description: "Installs and configures Docker Engine and Docker Compose"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - infrastructure
+    - docker
+    - containers
+
+dependencies:
+  - role: update-apt
+
+# Required collections
+collections:
+  - community.docker

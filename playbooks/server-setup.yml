@@ -3,61 +3,191 @@
   hosts: all
   gather_facts: true
   become: true
+  
+  vars:
+    # Control which role categories to run
+    setup_system: true
+    setup_security: true
+    setup_infrastructure: true
+    setup_databases: true
+    setup_applications: true
+    setup_optimization: true
 
   pre_tasks:
+    - name: Validate minimum Ansible version
+      ansible.builtin.assert:
+        that:
+          - ansible_version.full is version('2.12', '>=')
+        fail_msg: "This playbook requires Ansible 2.12 or higher"
+        quiet: true
+      tags: always
+
     - name: Ensure server is reachable
       ansible.builtin.ping:
+      tags: always
 
     - name: Display server information
       ansible.builtin.debug:
         msg:
-          - "Target Host: {{ inventory_hostname }}"
-          - "OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
-          - "Kernel: {{ ansible_kernel }}"
+          - "═══════════════════════════════════════════════════════════"
+          - "  Server Setup - {{ inventory_hostname }}"
+          - "═══════════════════════════════════════════════════════════"
+          - "  OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "  Kernel: {{ ansible_kernel }}"
+          - "  Architecture: {{ ansible_architecture }}"
+          - "  IPv4: {{ ansible_default_ipv4.address | default('N/A') }}"
+          - "═══════════════════════════════════════════════════════════"
+      tags: always
 
   roles:
-    # System setup
+    # ═══════════════════════════════════════════════════════════
+    # SYSTEM SETUP
+    # Basic system configuration and tools
+    # ═══════════════════════════════════════════════════════════
     - role: update-apt
       tags: [system, update-apt]
+      when: setup_system | bool
+
     - role: users-setup
       tags: [system, users-setup]
+      when: setup_system | bool
+
     - role: git-setup
       tags: [system, git-setup]
+      when: setup_system | bool
+
     - role: github-cli-setup
       tags: [system, github-cli-setup]
+      when: setup_system | bool
+
     - role: cloudflare-dns-setup
       tags: [system, cloudflare-dns-setup]
+      when: setup_system | bool
 
-    # Security
+    # ═══════════════════════════════════════════════════════════
+    # SECURITY HARDENING
+    # Firewall, Fail2ban, SSH hardening, system security
+    # ═══════════════════════════════════════════════════════════
     - role: security-hardening
       tags: [security, security-hardening]
+      when: setup_security | bool
 
-    # Infrastructure
+    # ═══════════════════════════════════════════════════════════
+    # INFRASTRUCTURE
+    # Docker, reverse proxy, container management, object storage
+    # ═══════════════════════════════════════════════════════════
     - role: docker-setup
       tags: [infrastructure, docker-setup]
+      when: setup_infrastructure | bool
+
     - role: autoheal-setup
       tags: [infrastructure, autoheal-setup]
+      when: setup_infrastructure | bool
+
     - role: nginx-proxy-setup
       tags: [infrastructure, nginx-proxy-setup]
+      when: setup_infrastructure | bool
 
-    # Databases
+    - role: minio-setup
+      tags: [infrastructure, minio-setup]
+      when: setup_infrastructure | bool
+
+    # ═══════════════════════════════════════════════════════════
+    # DATABASES
+    # MySQL, PostgreSQL, Redis
+    # ═══════════════════════════════════════════════════════════
     - role: mysql-setup
       tags: [database, mysql-setup]
+      when: setup_databases | bool
+
     - role: postgres-setup
       tags: [database, postgres-setup]
+      when: setup_databases | bool
+
     - role: redis-setup
       tags: [database, redis-setup]
+      when: setup_databases | bool
 
-    # Applications
+    # ═══════════════════════════════════════════════════════════
+    # APPLICATIONS
+    # Application deployments
+    # ═══════════════════════════════════════════════════════════
+    # Laravel Applications
     - role: materi-ku-setup
       tags: [application, materi-ku-setup]
+      when: setup_applications | bool
+
     - role: panca-trivia-setup
       tags: [application, panca-trivia-setup]
+      when: setup_applications | bool
+
     - role: ruang-istirahat-setup
       tags: [application, ruang-istirahat-setup]
+      when: setup_applications | bool
+
     - role: tech-talk-setup
       tags: [application, tech-talk-setup]
+      when: setup_applications | bool
 
-    # Optimization
+    - role: posyandu-setup
+      tags: [application, posyandu-setup]
+      when: setup_applications | bool
+
+    - role: solvo-setup
+      tags: [application, solvo-setup]
+      when: setup_applications | bool
+
+    - role: presensi-skansaba-web-setup
+      tags: [application, presensi-skansaba-web-setup]
+      when: setup_applications | bool
+
+    # Go Applications
+    - role: campus-project-hub-api-setup
+      tags: [application, campus-project-hub-api-setup]
+      when: setup_applications | bool
+
+    - role: ruang-tenang-api-setup
+      tags: [application, ruang-tenang-api-setup]
+      when: setup_applications | bool
+
+    # Next.js Applications
+    - role: campus-project-hub-web-setup
+      tags: [application, campus-project-hub-web-setup]
+      when: setup_applications | bool
+
+    - role: personal-portofolio-setup
+      tags: [application, personal-portofolio-setup]
+      when: setup_applications | bool
+
+    - role: ruang-tenang-web-setup
+      tags: [application, ruang-tenang-web-setup]
+      when: setup_applications | bool
+
+    # Node.js/Express Applications
+    - role: file-pod-api-setup
+      tags: [application, file-pod-api-setup]
+      when: setup_applications | bool
+
+    # ═══════════════════════════════════════════════════════════
+    # OPTIMIZATION
+    # Cost optimization, cleanup, monitoring
+    # ═══════════════════════════════════════════════════════════
     - role: cost-optimization
       tags: [optimization, cost-optimization]
+      when: setup_optimization | bool
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════════"
+          - "  ✓ Server Setup Complete!"
+          - "═══════════════════════════════════════════════════════════"
+          - ""
+          - "  Next Steps:"
+          - "  1. Verify services: make status"
+          - "  2. Check security: sudo security-check"
+          - "  3. View logs: make logs"
+          - ""
+          - "═══════════════════════════════════════════════════════════"
+      tags: always

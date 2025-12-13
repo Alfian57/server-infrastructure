@@ -1,0 +1,8 @@
+---
+- name: Deploy File Pod API application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-express-app.yml
+  vars:
+    app_name: "file-pod-api"
+    requires_database: true
+    create_uploads_dir: true
+    app_port: 8080

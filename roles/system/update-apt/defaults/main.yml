@@ -1,0 +1,14 @@
+---
+# Update APT Role Defaults
+
+# Use 'safe' for conservative upgrades, 'dist' for distribution upgrades
+apt_upgrade_type: "safe"
+
+# Auto-remove unused packages
+apt_autoremove: true
+
+# Auto-clean package cache
+apt_autoclean: true
+
+# Cache valid time in seconds (3600 = 1 hour)
+apt_cache_valid_time: 3600

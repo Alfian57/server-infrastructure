@@ -12,7 +12,7 @@ VAULT_PASS := .vault_pass
 
 # Ansible options
 ifneq (,$(wildcard $(VAULT_PASS)))
-	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS)
+	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS) -e @group_vars/all/vault.yml
 else
 	OPTS := -i $(INVENTORY)
 endif
@@ -45,11 +45,28 @@ lint: ## Lint playbook
 
 ##@ Deployment
 
-setup: check ## Full setup
+bootstrap: ## Bootstrap SSH key (first run with password)
+	@echo "═══════════════════════════════════════════"
+	@echo "  SSH Key Bootstrap"
+	@echo "═══════════════════════════════════════════"
+	@echo "This will setup SSH key authentication on fresh VPS"
+	@echo "You will be prompted for the VPS password"
+	@echo ""
+	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
+	@echo ""
+	@echo "If successful, run: make switch-to-ssh"
+
+switch-to-ssh: ## Switch inventory to use SSH key (after bootstrap)
+	@./scripts/update-inventory-ssh.sh
+
+deploy: check ## Full deployment (use after bootstrap)
+	@ansible-playbook $(PLAYBOOK) $(OPTS)
+
+setup: check ## Full setup (alias for deploy)
 	@ansible-playbook $(PLAYBOOK) $(OPTS)
 
 setup-dry-run: check ## Dry run
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --check
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --check --diff
 
 setup-verbose: check ## Verbose setup
 	@ansible-playbook $(PLAYBOOK) $(OPTS) -vvv
@@ -57,160 +74,202 @@ setup-verbose: check ## Verbose setup
 quick: check ## Quick (skip apt update)
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --skip-tags update-apt
 
-##@ Components
+##@ Category Deployment
 
-system: check ## System setup
-	$(call run,system)
+system: check ## System setup only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags system
 
-security: check ## Security hardening
-	$(call run,security)
+security: check ## Security hardening only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags security
 
-infrastructure: check ## Infrastructure
-	$(call run,infrastructure)
+infrastructure: check ## Infrastructure only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags infrastructure
 
-database: check ## Databases
-	$(call run,database)
+database: check ## Databases only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags database
 
-application: check ## Applications
-	$(call run,application)
+application: check ## Applications only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application
 
-optimization: check ## Cost optimization
-	$(call run,optimization)
+optimization: check ## Cost optimization only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags optimization
 
-##@ Infrastructure
+##@ Individual Roles - Infrastructure
 
-docker: check ## Docker
-	$(call run,docker-setup)
+docker: check ## Docker setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags docker-setup
 
-nginx: check ## Nginx Proxy
-	$(call run,nginx-proxy-setup)
+nginx: check ## Nginx Proxy Manager
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags nginx-proxy-setup
 
-mysql: check ## MySQL
-	$(call run,mysql-setup)
+autoheal: check ## Autoheal setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags autoheal-setup
 
-postgres: check ## PostgreSQL
-	$(call run,postgres-setup)
+##@ Individual Roles - Databases
 
-redis: check ## Redis
-	$(call run,redis-setup)
+mysql: check ## MySQL setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags mysql-setup
 
-##@ Applications
+postgres: check ## PostgreSQL setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags postgres-setup
 
-materi-ku: check ## Materi-Ku
-	$(call run,materi-ku-setup)
+redis: check ## Redis setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags redis-setup
 
-panca-trivia: check ## Panca Trivia
-	$(call run,panca-trivia-setup)
+##@ Individual Roles - Applications
 
-ruang-istirahat: check ## Ruang Istirahat
-	$(call run,ruang-istirahat-setup)
+materi-ku: check ## Materi-Ku app
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags materi-ku-setup
 
-tech-talk: check ## Tech Talk
-	$(call run,tech-talk-setup)
+panca-trivia: check ## Panca Trivia app
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags panca-trivia-setup
 
-##@ Security
+ruang-istirahat: check ## Ruang Istirahat app
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags ruang-istirahat-setup
 
-security-ufw: check ## UFW firewall
-	$(call run,security-ufw)
+tech-talk: check ## Tech Talk app
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags tech-talk-setup
 
-security-fail2ban: check ## Fail2ban
-	$(call run,security-fail2ban)
+##@ Security Operations
 
-security-ssh: check ## SSH hardening
-	$(call run,security-ssh)
+security-ufw: check ## UFW firewall only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags security-ufw
 
-security-docker: check ## Docker security
-	$(call run,security-docker)
+security-fail2ban: check ## Fail2ban only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags security-fail2ban
 
-security-check: ## Security status
-	@echo "=== Security Status ==="
-	@ansible all $(OPTS) -m shell -a "ufw status" -b 2>/dev/null || true
-	@ansible all $(OPTS) -m shell -a "fail2ban-client status" -b 2>/dev/null || true
+security-ssh: check ## SSH hardening only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags security-ssh
 
-##@ Optimization
+security-docker: check ## Docker security only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags security-docker
+
+security-check: ## Check security status
+	@echo "═══════════════════════════════════════════"
+	@echo "  Security Status Check"
+	@echo "═══════════════════════════════════════════"
+	@ansible all $(OPTS) -m shell -a "echo '=== UFW Status ===' && ufw status numbered" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "echo '=== Fail2ban ===' && fail2ban-client status" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "echo '=== SSH Config ===' && sshd -T 2>/dev/null | grep -E 'permitrootlogin|passwordauthentication|maxauthtries'" -b 2>/dev/null || true
+
+##@ Cost Optimization
 
 cost: check ## Full cost optimization
-	$(call run,cost-optimization)
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cost-optimization
 
-cost-docker: check ## Docker cleanup
-	$(call run,cost-docker)
+cost-docker: check ## Docker cleanup only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cost-docker
 
-cost-logs: check ## Log cleanup
-	$(call run,cost-logs)
+cost-logs: check ## Log cleanup only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cost-logs
 
-cost-resources: check ## Resource limits
-	$(call run,cost-resources)
+cost-resources: check ## Resource limits only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cost-resources
 
-cost-monitoring: check ## Disk monitoring
-	$(call run,cost-monitoring)
+cost-monitoring: check ## Disk monitoring only
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cost-monitoring
 
-cost-report: ## Cost report
-	@echo "=== Cost Report ==="
-	@ansible all $(OPTS) -m shell -a "disk-check 2>/dev/null || df -h /" -b 2>/dev/null || true
-	@ansible all $(OPTS) -m shell -a "docker system df 2>/dev/null || echo 'N/A'" -b 2>/dev/null || true
+cost-report: ## Show cost/resource report
+	@echo "═══════════════════════════════════════════"
+	@echo "  Resource & Cost Report"
+	@echo "═══════════════════════════════════════════"
+	@ansible all $(OPTS) -m shell -a "echo '=== Disk Usage ===' && df -h / /opt 2>/dev/null" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "echo '=== Memory ===' && free -h" -b 2>/dev/null || true
+	@ansible all $(OPTS) -m shell -a "echo '=== Docker ===' && docker system df" -b 2>/dev/null || true
 
-##@ Vault
+##@ Vault Management
+
+vault-create: ## Create vault from example
+	@[ ! -f group_vars/all/vault.yml ] || (echo "vault.yml already exists!" && exit 1)
+	@cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+	@echo "Edit group_vars/all/vault.yml then run: make vault-encrypt"
 
 vault-edit: ## Edit vault file
 	@ansible-vault edit $(if $(FILE),$(FILE),group_vars/all/vault.yml)
 
 vault-encrypt: ## Encrypt file (FILE=path)
-	@[ -n "$(FILE)" ] || (echo "Usage: make vault-encrypt FILE=path" && exit 1)
-	@ansible-vault encrypt $(FILE)
+	@[ -n "$(FILE)" ] && ansible-vault encrypt $(FILE) || ansible-vault encrypt group_vars/all/vault.yml
 
 vault-decrypt: ## Decrypt file (FILE=path)
-	@[ -n "$(FILE)" ] || (echo "Usage: make vault-decrypt FILE=path" && exit 1)
-	@ansible-vault decrypt $(FILE)
+	@[ -n "$(FILE)" ] && ansible-vault decrypt $(FILE) || ansible-vault decrypt group_vars/all/vault.yml
 
-vault-status: ## Vault status
-	@echo "=== Vault Status ==="
+vault-view: ## View vault file
+	@ansible-vault view $(if $(FILE),$(FILE),group_vars/all/vault.yml)
+
+vault-status: ## Check vault encryption status
+	@echo "═══════════════════════════════════════════"
+	@echo "  Vault Status"
+	@echo "═══════════════════════════════════════════"
 	@[ -f group_vars/all/vault.yml ] && \
-		(grep -q '^\$$ANSIBLE_VAULT' group_vars/all/vault.yml && echo "✓ Encrypted" || echo "✗ Not encrypted") || \
-		echo "✗ Not found"
+		(head -1 group_vars/all/vault.yml | grep -q '^\$$ANSIBLE_VAULT' && echo "✓ vault.yml: Encrypted" || echo "✗ vault.yml: NOT ENCRYPTED (DANGER!)") || \
+		echo "✗ vault.yml: Not found"
+	@[ -f .vault_pass ] && echo "✓ .vault_pass: Found" || echo "⚠ .vault_pass: Not found (will prompt for password)"
 
-##@ Server
+##@ Server Management
 
 ssh: ## SSH to server
 	@$(SSH)
 
-ssh-github: ## Update GitHub secrets
-	@$(SSH) -t 'update-github-secrets'
+reboot: ## Reboot server
+	@echo "⚠️  Rebooting server..."
+	@ansible all $(OPTS) -m reboot -a "reboot_timeout=300"
 
-ssh-cloudflare: ## Update Cloudflare DNS
-	@$(SSH) -t 'update-cloudflare-dns'
+status: ## Show server status
+	@echo "═══════════════════════════════════════════"
+	@echo "  Server Status"
+	@echo "═══════════════════════════════════════════"
+	@ansible all $(OPTS) -m ping -o 2>/dev/null && echo "✓ Server reachable" || echo "✗ Server unreachable"
+	@ansible all $(OPTS) -m shell -a "uptime" 2>/dev/null || true
 
-status: ## Server status
-	@echo "=== Status ==="
-	@ansible all $(OPTS) -m ping -o 2>/dev/null || true
-	@ansible all $(OPTS) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}'" 2>/dev/null || true
+containers: ## Show running containers
+	@ansible all $(OPTS) -m shell -a "docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'" 2>/dev/null || true
 
-facts: ## Server facts
+logs: ## Show container logs (CONTAINER=name)
+	@[ -n "$(CONTAINER)" ] && ansible all $(OPTS) -m shell -a "docker logs --tail 50 $(CONTAINER)" 2>/dev/null || \
+		echo "Usage: make logs CONTAINER=container_name"
+
+facts: ## Gather server facts
 	@ansible all $(OPTS) -m setup
 
-##@ Info
+##@ Information
 
-list-hosts: ## List hosts
+list-hosts: ## List inventory hosts
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-hosts
 
-list-tags: ## List tags
+list-tags: ## List available tags
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-tags
 
-list-tasks: ## List tasks
+list-tasks: ## List all tasks
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --list-tasks
 
-##@ Utils
+list-roles: ## List roles structure
+	@cat roles/ROLES.md 2>/dev/null || ls -la roles/
 
-install: ## Install Ansible
-	@pip install --upgrade ansible ansible-lint
-	@ansible-galaxy collection install community.docker ansible.posix community.general
+##@ Setup & Utilities
 
-update: ## Update collections
-	@ansible-galaxy collection install community.docker ansible.posix community.general --force
+install: ## Install Ansible and dependencies
+	@echo "Installing Ansible and dependencies..."
+	@pip install --upgrade pip
+	@pip install --upgrade ansible ansible-lint yamllint
+	@ansible-galaxy collection install -r requirements.yml --force
+	@echo "✓ Installation complete"
 
-clean: ## Clean temp files
+update: ## Update Ansible collections
+	@ansible-galaxy collection install -r requirements.yml --force
+
+clean: ## Clean temporary files
+	@echo "Cleaning temporary files..."
 	@find . -name "*.retry" -delete
 	@find . -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@rm -rf .ansible_facts_cache/
+	@rm -rf /tmp/ansible_facts_cache/ 2>/dev/null || true
+	@echo "✓ Clean complete"
 
-version: ## Show version
-	@ansible --version
+validate: check lint ## Full validation (syntax + lint)
+
+version: ## Show versions
+	@echo "═══════════════════════════════════════════"
+	@echo "  Version Information"
+	@echo "═══════════════════════════════════════════"
+	@ansible --version | head -1
+	@ansible-lint --version 2>/dev/null || echo "ansible-lint: not installed"
+

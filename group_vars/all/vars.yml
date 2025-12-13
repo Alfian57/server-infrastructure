@@ -29,9 +29,31 @@ docker_stack_infrastructure: "{{ docker_stack_base }}/infrastructure"
 docker_stack_databases: "{{ docker_stack_base }}/databases"
 docker_stack_applications: "{{ docker_stack_base }}/applications"
 
-# Docker Images (non-sensitive)
-mysql_image: "mysql:8.0"
-postgres_image: "postgres:14-alpine"
-redis_image: "redis:7-alpine"
+# Docker Images (non-sensitive) - using x86-64-v1 compatible images for older CPUs
+mysql_image: "mariadb:10.11"
+postgres_image: "postgres:15-bookworm"
+redis_image: "redis:7-bookworm"
 nginx_proxy_image: "jc21/nginx-proxy-manager:latest"
 autoheal_image: "willfarrell/autoheal:latest"
+
+# ============================================================================
+# User Configuration
+# ============================================================================
+users:
+  - name: "deployer"
+    comment: "Deploy User"
+    groups: ["sudo", "docker"]
+    shell: "/bin/bash"
+    password: "{{ vault_user_deployer_password }}"
+    ssh_key: "{{ vault_server_ssh_public_key }}"
+    state: "present"
+    system: false
+
+  - name: "alfiang"
+    comment: "Alfian Gading"
+    groups: ["sudo", "docker"]
+    shell: "/bin/bash"
+    password: "{{ vault_user_alfiang_password }}"
+    ssh_key: "{{ vault_server_ssh_public_key }}"
+    state: "present"
+    system: false

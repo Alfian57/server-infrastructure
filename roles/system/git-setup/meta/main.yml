@@ -1,0 +1,31 @@
+---
+# Role Metadata: git-setup
+
+galaxy_info:
+  author: "Alfian"
+  description: "Installs and configures Git and related tools"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - system
+    - git
+    - development
+
+dependencies:
+  - role: users-setup
+    when: git_config_global | default(true)
+
+# Required collections
+collections:
+  - community.general

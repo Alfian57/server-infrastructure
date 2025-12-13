@@ -1,0 +1,20 @@
+---
+# Redis Role Defaults
+
+# Docker image
+redis_image: "redis:7-alpine"
+
+# Network configuration
+redis_network: "redis_network"
+
+# Resource limits
+redis_memory_limit: "512M"
+redis_memory_reservation: "256M"
+
+# Custom config
+redis_custom_config: false
+
+# Redis Commander settings
+redis_enable_commander: true
+redis_commander_version: "latest"
+redis_commander_port: "8083"

@@ -1,0 +1,30 @@
+---
+# Role Metadata: mysql-setup
+
+galaxy_info:
+  author: "Alfian"
+  description: "Deploys MySQL database using Docker Compose"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - database
+    - mysql
+    - docker
+
+dependencies:
+  - role: docker-setup
+
+# Required collections
+collections:
+  - community.docker

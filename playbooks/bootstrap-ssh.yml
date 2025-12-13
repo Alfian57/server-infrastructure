@@ -1,0 +1,233 @@
+---
+# ============================================================================
+# SSH Key Bootstrap Playbook
+# ============================================================================
+# This playbook sets up SSH key authentication on fresh VPS
+# Run this FIRST before the main server-setup.yml playbook
+# 
+# Usage:
+#   ansible-playbook playbooks/bootstrap-ssh.yml --ask-pass
+#   OR: make bootstrap
+# ============================================================================
+
+- name: Bootstrap SSH Key Authentication
+  hosts: all
+  gather_facts: false
+  become: true
+
+  vars:
+    ssh_public_key_path: "~/.ssh/server_ed25519.pub"
+    ssh_private_key_path: "~/.ssh/server_ed25519"
+    
+    # Users to configure SSH key for
+    bootstrap_users:
+      - root
+      - deployer
+      - alfiang
+
+  pre_tasks:
+    - name: Wait for SSH connection
+      ansible.builtin.wait_for_connection:
+        timeout: 60
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+    - name: Display bootstrap information
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════════"
+          - "  SSH Key Bootstrap"
+          - "═══════════════════════════════════════════════════════════"
+          - "  Server: {{ inventory_hostname }}"
+          - "  OS: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "═══════════════════════════════════════════════════════════"
+
+  tasks:
+    # =========================================================================
+    # Read Local SSH Public Key
+    # =========================================================================
+    - name: Read local SSH public key
+      ansible.builtin.set_fact:
+        ssh_public_key: "{{ lookup('file', ssh_public_key_path) }}"
+      delegate_to: localhost
+      become: false
+
+    - name: Display SSH public key (first 50 chars)
+      ansible.builtin.debug:
+        msg: "Using SSH key: {{ ssh_public_key[:50] }}..."
+
+    # =========================================================================
+    # Setup SSH Directory for Root
+    # =========================================================================
+    - name: Ensure .ssh directory exists for root
+      ansible.builtin.file:
+        path: /root/.ssh
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+
+    - name: Add SSH key to root authorized_keys
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ ssh_public_key }}"
+        state: present
+        exclusive: false
+
+    # =========================================================================
+    # Create Additional Users (if not exist)
+    # =========================================================================
+    - name: Ensure deployer user exists
+      ansible.builtin.user:
+        name: deployer
+        comment: "Deploy User"
+        groups: ["sudo"]
+        shell: /bin/bash
+        createhome: true
+        state: present
+
+    - name: Ensure alfiang user exists
+      ansible.builtin.user:
+        name: alfiang
+        comment: "Alfian Gading"
+        groups: ["sudo"]
+        shell: /bin/bash
+        createhome: true
+        state: present
+
+    # =========================================================================
+    # Setup SSH Directory for All Users
+    # =========================================================================
+    - name: Ensure .ssh directory exists for deployer
+      ansible.builtin.file:
+        path: /home/deployer/.ssh
+        state: directory
+        owner: deployer
+        group: deployer
+        mode: "0700"
+
+    - name: Ensure .ssh directory exists for alfiang
+      ansible.builtin.file:
+        path: /home/alfiang/.ssh
+        state: directory
+        owner: alfiang
+        group: alfiang
+        mode: "0700"
+
+    - name: Add SSH key to deployer authorized_keys
+      ansible.posix.authorized_key:
+        user: deployer
+        key: "{{ ssh_public_key }}"
+        state: present
+        exclusive: false
+
+    - name: Add SSH key to alfiang authorized_keys
+      ansible.posix.authorized_key:
+        user: alfiang
+        key: "{{ ssh_public_key }}"
+        state: present
+        exclusive: false
+
+    # =========================================================================
+    # Configure SSHD
+    # =========================================================================
+    - name: Backup original sshd_config
+      ansible.builtin.copy:
+        src: /etc/ssh/sshd_config
+        dest: /etc/ssh/sshd_config.backup
+        remote_src: true
+        mode: "0600"
+        force: false
+
+    - name: Enable PubkeyAuthentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PubkeyAuthentication"
+        line: "PubkeyAuthentication yes"
+        state: present
+      notify: Restart SSHD
+
+    - name: Set AuthorizedKeysFile path
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?AuthorizedKeysFile"
+        line: "AuthorizedKeysFile .ssh/authorized_keys"
+        state: present
+      notify: Restart SSHD
+
+    # =========================================================================
+    # Test SSH Key Authentication Before Disabling Password
+    # =========================================================================
+    - name: Flush handlers to apply SSH config
+      ansible.builtin.meta: flush_handlers
+
+    - name: Test SSH key authentication
+      ansible.builtin.command:
+        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i {{ ssh_private_key_path }} root@{{ inventory_hostname }} echo 'SSH key auth works'"
+      delegate_to: localhost
+      become: false
+      register: ssh_test
+      ignore_errors: true
+      changed_when: false
+
+    - name: Display SSH test result
+      ansible.builtin.debug:
+        msg: "SSH Key authentication test: {{ 'SUCCESS' if ssh_test.rc == 0 else 'FAILED' }}"
+
+    # =========================================================================
+    # Disable Password Authentication (only if SSH key works)
+    # =========================================================================
+    - name: Disable PasswordAuthentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+      when: ssh_test.rc == 0
+      notify: Restart SSHD
+
+    - name: Disable ChallengeResponseAuthentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?ChallengeResponseAuthentication"
+        line: "ChallengeResponseAuthentication no"
+        state: present
+      when: ssh_test.rc == 0
+      notify: Restart SSHD
+
+    - name: Warning if SSH key test failed
+      ansible.builtin.debug:
+        msg: 
+          - "⚠️  WARNING: SSH key authentication test failed!"
+          - "Password authentication has NOT been disabled for safety."
+          - "Please check your SSH key configuration and try again."
+      when: ssh_test.rc != 0
+
+  handlers:
+    - name: Restart SSHD
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════════"
+          - "  ✓ SSH Key Bootstrap Complete!"
+          - "═══════════════════════════════════════════════════════════"
+          - ""
+          - "  SSH Key configured for users:"
+          - "    - root"
+          - "    - deployer" 
+          - "    - alfiang"
+          - ""
+          - "  {{ 'Password authentication: DISABLED' if ssh_test.rc == 0 else 'Password authentication: STILL ENABLED (SSH key test failed)' }}"
+          - ""
+          - "  Next steps:"
+          - "  1. Update inventory to use SSH key:"
+          - "     ansible_ssh_private_key_file=~/.ssh/server_ed25519"
+          - "  2. Run: make deploy"
+          - ""
+          - "═══════════════════════════════════════════════════════════"

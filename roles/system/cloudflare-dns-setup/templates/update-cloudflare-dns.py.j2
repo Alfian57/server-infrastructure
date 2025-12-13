@@ -1,0 +1,336 @@
+#!/usr/bin/env python3
+"""
+Update Cloudflare DNS Records
+Automatically creates or updates DNS records to point to current VPS IP
+"""
+
+import sys
+import os
+import yaml
+import configparser
+from typing import List, Dict, Optional
+import CloudFlare
+
+# ANSI color codes
+class Colors:
+    RED = '\033[0;31m'
+    GREEN = '\033[0;32m'
+    YELLOW = '\033[0;33m'
+    BLUE = '\033[0;36m'
+    NC = '\033[0m'  # No Color
+
+# Configuration - Multiple domains
+DOMAINS = [
+    {
+        "domain": "{{ cloudflare_domain }}",
+        "records_file": os.path.expanduser("~/.config/cloudflare/dns-records.yml")
+    },
+{% if cloudflare_solvo_domain is defined %}
+    {
+        "domain": "{{ cloudflare_solvo_domain }}",
+        "records_file": os.path.expanduser("~/.config/cloudflare/dns-records-solvo.yml")
+    },
+{% endif %}
+]
+
+CONFIG_DIR = os.path.expanduser("~/.config/cloudflare")
+CLOUDFLARE_INI = os.path.join(CONFIG_DIR, "cloudflare.ini")
+
+def print_header():
+    """Print script header"""
+    print()
+    print(f"{Colors.BLUE}╔═══════════════════════════════════════════════════════════════╗{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  {Colors.GREEN}Update Cloudflare DNS Records{Colors.NC}                          {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}╚═══════════════════════════════════════════════════════════════╝{Colors.NC}")
+    print()
+
+def print_step(msg: str):
+    """Print step message"""
+    print(f"{Colors.BLUE}▶{Colors.NC} {msg}")
+
+def print_success(msg: str):
+    """Print success message"""
+    print(f"{Colors.GREEN}✓{Colors.NC} {msg}")
+
+def print_error(msg: str):
+    """Print error message"""
+    print(f"{Colors.RED}✗{Colors.NC} {msg}")
+
+def print_warning(msg: str):
+    """Print warning message"""
+    print(f"{Colors.YELLOW}⚠{Colors.NC} {msg}")
+
+def get_vps_ip() -> str:
+    """Get VPS IP from inventory file"""
+    inventory_file = "/home/deployer/ansible-workspace/hosts.ini"
+    
+    try:
+        with open(inventory_file, 'r') as f:
+            for line in f:
+                line = line.strip()
+                # Skip comments and empty lines
+                if line.startswith('#') or not line or line.startswith('['):
+                    continue
+                # Get first field (IP address)
+                parts = line.split()
+                if parts:
+                    return parts[0]
+    except FileNotFoundError:
+        print_error(f"Inventory file not found: {inventory_file}")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Error reading inventory: {e}")
+        sys.exit(1)
+    
+    print_error("Could not find VPS IP in inventory")
+    sys.exit(1)
+
+def load_dns_records(records_file: str) -> List[Dict]:
+    """Load DNS records configuration"""
+    try:
+        with open(records_file, 'r') as f:
+            records = yaml.safe_load(f)
+            return records if records else []
+    except FileNotFoundError:
+        print_error(f"DNS records file not found: {records_file}")
+        return []
+    except Exception as e:
+        print_error(f"Error loading DNS records: {e}")
+        return []
+
+def get_cloudflare_client() -> CloudFlare.CloudFlare:
+    """Initialize Cloudflare client"""
+    try:
+        # Read token from config file
+        config = configparser.ConfigParser()
+        config.read(CLOUDFLARE_INI)
+        token = config.get('CloudFlare', 'token')
+        
+        # Initialize client with token
+        cf = CloudFlare.CloudFlare(token=token)
+        return cf
+    except Exception as e:
+        print_error(f"Failed to initialize Cloudflare client: {e}")
+        sys.exit(1)
+
+def get_zone_id(cf: CloudFlare.CloudFlare, domain: str) -> str:
+    """Get Cloudflare Zone ID for domain"""
+    try:
+        zones = cf.zones.get(params={'name': domain})
+        if not zones:
+            print_error(f"Domain not found in Cloudflare: {domain}")
+            sys.exit(1)
+        return zones[0]['id']
+    except Exception as e:
+        print_error(f"Error getting zone ID: {e}")
+        sys.exit(1)
+
+def get_existing_records(cf: CloudFlare.CloudFlare, zone_id: str) -> Dict[str, Dict]:
+    """Get existing DNS records"""
+    try:
+        records = cf.zones.dns_records.get(zone_id)
+        # Create lookup dict by name
+        return {r['name']: r for r in records if r['type'] == 'A'}
+    except Exception as e:
+        print_error(f"Error getting DNS records: {e}")
+        return {}
+
+def create_or_update_record(
+    cf: CloudFlare.CloudFlare,
+    zone_id: str,
+    record_config: Dict,
+    vps_ip: str,
+    existing_records: Dict[str, Dict],
+    domain: str
+) -> bool:
+    """Create or update a DNS record"""
+    
+    # Build full record name
+    name = record_config['name']
+    if name == '@':
+        full_name = domain
+    elif name == '*':
+        full_name = f"*.{domain}"
+    else:
+        full_name = f"{name}.{domain}"
+    
+    record_type = record_config['type']
+    proxied = record_config.get('proxied', False)
+    comment = record_config.get('comment', '')
+    
+    # Check if record exists
+    existing = existing_records.get(full_name)
+    
+    try:
+        if existing:
+            # Check if update needed
+            needs_update = (
+                existing['content'] != vps_ip or
+                existing['proxied'] != proxied
+            )
+            
+            if needs_update:
+                # Update existing record
+                update_data = {
+                    'name': name if name != '@' else domain,
+                    'type': record_type,
+                    'content': vps_ip,
+                    'proxied': proxied,
+                    'comment': comment
+                }
+                cf.zones.dns_records.put(zone_id, existing['id'], data=update_data)
+                proxy_status = "Proxied" if proxied else "DNS Only"
+                print_success(f"Updated {full_name} → {vps_ip} ({proxy_status})")
+            else:
+                print_success(f"Already up-to-date: {full_name} → {vps_ip}")
+        else:
+            # Create new record
+            create_data = {
+                'name': name if name != '@' else domain,
+                'type': record_type,
+                'content': vps_ip,
+                'proxied': proxied,
+                'comment': comment
+            }
+            cf.zones.dns_records.post(zone_id, data=create_data)
+            proxy_status = "Proxied" if proxied else "DNS Only"
+            print_success(f"Created {full_name} → {vps_ip} ({proxy_status})")
+        
+        return True
+        
+    except CloudFlare.exceptions.CloudFlareAPIError as e:
+        print_error(f"Failed to update {full_name}: {e}")
+        return False
+    except Exception as e:
+        print_error(f"Error processing {full_name}: {e}")
+        return False
+
+def main():
+    """Main function"""
+    print_header()
+    
+    # Step 1: Check requirements
+    print_step("Checking requirements...")
+    
+    if not os.path.exists(CLOUDFLARE_INI):
+        print_error(f"Cloudflare credentials not found: {CLOUDFLARE_INI}")
+        sys.exit(1)
+    print_success(f"Cloudflare credentials found")
+    
+    print()
+    
+    # Step 2: Get VPS IP
+    print_step("Getting VPS IP from inventory...")
+    vps_ip = get_vps_ip()
+    print_success(f"VPS IP: {vps_ip}")
+    print()
+    
+    # Step 3: Initialize Cloudflare client
+    print_step("Connecting to Cloudflare API...")
+    cf = get_cloudflare_client()
+    print_success("Connected to Cloudflare API")
+    print()
+    
+    total_success = 0
+    total_fail = 0
+    total_records = 0
+    
+    # Process each domain
+    for domain_config in DOMAINS:
+        domain = domain_config["domain"]
+        records_file = domain_config["records_file"]
+        
+        print(f"{Colors.BLUE}═══════════════════════════════════════════════════════════════{Colors.NC}")
+        print(f"{Colors.BLUE}  Processing domain: {domain}{Colors.NC}")
+        print(f"{Colors.BLUE}═══════════════════════════════════════════════════════════════{Colors.NC}")
+        print()
+        
+        # Load DNS records for this domain
+        print_step(f"Loading DNS records for {domain}...")
+        dns_records = load_dns_records(records_file)
+        if not dns_records:
+            print_warning(f"No DNS records found for {domain}, skipping...")
+            print()
+            continue
+        print_success(f"Loaded {len(dns_records)} DNS records")
+        print()
+        
+        # Get Zone ID
+        print_step(f"Getting Zone ID for {domain}...")
+        zone_id = get_zone_id(cf, domain)
+        print_success(f"Zone ID: {zone_id}")
+        print()
+        
+        # Get existing records
+        print_step("Fetching existing DNS records...")
+        existing_records = get_existing_records(cf, zone_id)
+        print_success(f"Found {len(existing_records)} existing A records")
+        print()
+        
+        # Show records to update
+        print(f"{Colors.BLUE}DNS Records to configure for {domain}:{Colors.NC}")
+        for record in dns_records:
+            name = record['name']
+            if name == '@':
+                display_name = domain
+            elif name == '*':
+                display_name = f"*.{domain}"
+            else:
+                display_name = f"{name}.{domain}"
+            
+            proxy_status = "Proxied" if record.get('proxied', False) else "DNS Only"
+            print(f"  • {display_name} → {vps_ip} ({proxy_status})")
+        print()
+        
+        total_records += len(dns_records)
+        
+        # Create/Update records
+        print_step(f"Updating DNS records for {domain}...")
+        print()
+        
+        for record in dns_records:
+            if create_or_update_record(cf, zone_id, record, vps_ip, existing_records, domain):
+                total_success += 1
+            else:
+                total_fail += 1
+        
+        print()
+    
+    # Confirm before continuing
+    try:
+        response = input(f"{Colors.YELLOW}Proceed with DNS updates? [y/N]{Colors.NC} ").strip().lower()
+        if response not in ['y', 'yes']:
+            print_warning("Cancelled by user")
+            sys.exit(0)
+    except KeyboardInterrupt:
+        print()
+        print_warning("Cancelled by user")
+        sys.exit(0)
+    print()
+    
+    # Summary
+    print()
+    print(f"{Colors.BLUE}╔═══════════════════════════════════════════════════════════════╗{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  {Colors.GREEN}Summary{Colors.NC}                                                      {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}╠═══════════════════════════════════════════════════════════════╣{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  Domains processed: {len(DOMAINS):<38} {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  VPS IP: {vps_ip:<49} {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  Total records processed: {total_records:<32} {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}║{Colors.NC}  {Colors.GREEN}Successful: {total_success}{Colors.NC:<52} {Colors.BLUE}║{Colors.NC}")
+    if total_fail > 0:
+        print(f"{Colors.BLUE}║{Colors.NC}  {Colors.RED}Failed: {total_fail}{Colors.NC:<56} {Colors.BLUE}║{Colors.NC}")
+    print(f"{Colors.BLUE}╚═══════════════════════════════════════════════════════════════╝{Colors.NC}")
+    print()
+    
+    if total_fail > 0:
+        print_warning("Some records failed to update. Check errors above.")
+        sys.exit(1)
+    else:
+        print_success("All DNS records updated successfully!")
+        print()
+        print(f"{Colors.BLUE}Note:{Colors.NC} DNS propagation may take a few minutes.")
+        print(f"Verify records at: https://dash.cloudflare.com/")
+        print()
+
+if __name__ == "__main__":
+    main()

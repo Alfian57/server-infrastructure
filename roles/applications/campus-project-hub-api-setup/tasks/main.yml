@@ -1,0 +1,8 @@
+---
+- name: Deploy Campus Project Hub API application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-golang-app.yml
+  vars:
+    app_name: "campus-project-hub-api"
+    requires_database: true
+    requires_redis: false
+    create_data_dir: true

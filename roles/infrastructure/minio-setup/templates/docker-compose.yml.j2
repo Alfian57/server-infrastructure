@@ -1,0 +1,30 @@
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - minio_network
+      - nginx_proxy_manager_network
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  minio_network:
+    external: true
+  nginx_proxy_manager_network:
+    external: true
+
+volumes:
+  minio_data:

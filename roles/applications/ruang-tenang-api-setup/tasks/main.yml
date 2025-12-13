@@ -1,0 +1,5 @@
+---
+- name: Deploy Ruang Tenang API application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-golang-app.yml
+  vars:
+    app_name: "ruang-tenang-api"

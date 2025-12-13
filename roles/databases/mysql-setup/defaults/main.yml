@@ -1,0 +1,22 @@
+---
+# MySQL Role Defaults
+
+# Docker image
+mysql_image: "mysql:8.0"
+
+# Network configuration
+mysql_network: "mysql_network"
+
+# Resource limits
+mysql_memory_limit: "1G"
+mysql_memory_reservation: "512M"
+
+# Custom config
+mysql_custom_config: false
+
+# phpMyAdmin settings
+mysql_enable_phpmyadmin: true
+phpmyadmin_version: "5.2.2"
+phpmyadmin_port: "8081"
+phpmyadmin_upload_limit: "50M"
+phpmyadmin_memory_limit: "128M"

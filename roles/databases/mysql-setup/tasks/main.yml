@@ -1,0 +1,54 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - vault_mysql_root_password is defined
+      - vault_mysql_root_password | length >= 16
+    fail_msg: "vault_mysql_root_password must be defined and at least 16 characters"
+    quiet: true
+
+- name: Create mysql directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_databases }}/mysql"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+
+- name: Copy mysql docker-compose.yml
+  ansible.builtin.template:
+    src: "docker-compose.yml.j2"
+    dest: "{{ docker_stack_databases }}/mysql/docker-compose.yml"
+    mode: "0640"
+    owner: root
+    group: root
+  register: mysql_compose_changed
+
+- name: Generate .env from vault credentials
+  ansible.builtin.template:
+    src: ".env.j2"
+    dest: "{{ docker_stack_databases }}/mysql/.env"
+    mode: "0600"
+    owner: root
+    group: root
+  no_log: true
+  register: mysql_env_changed
+
+- name: Deploy MySQL container
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_databases }}/mysql"
+    env_files: "{{ docker_stack_databases }}/mysql/.env"
+    state: present
+    pull: "{{ 'always' if mysql_compose_changed.changed else 'policy' }}"
+  register: mysql_container
+
+- name: Wait for MySQL container to be healthy
+  community.docker.docker_container_info:
+    name: mysql-db
+  register: container_info
+  until: >
+    container_info.container.State.Health.Status is defined and
+    (container_info.container.State.Health.Status == "healthy" or
+     container_info.container.State.Health.Status == "starting")
+  retries: 12
+  delay: 10

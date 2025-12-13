@@ -1,0 +1,30 @@
+services:
+  ruang-tenang-api:
+    image: ghcr.io/alfian57/ruang-tenang-api:latest
+    container_name: ruang-tenang-api
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - ruang_tenang_api_uploads:/app/uploads
+    networks:
+      - nginx_proxy_manager_network
+      - postgres_network
+      - redis_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  nginx_proxy_manager_network:
+    external: true
+  postgres_network:
+    external: true
+  redis_network:
+    external: true
+
+volumes:
+  ruang_tenang_api_uploads:

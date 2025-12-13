@@ -1,0 +1,156 @@
+---
+# Security Hardening Default Variables
+
+# ==========================================
+# UFW Firewall Configuration
+# ==========================================
+security_ufw_reset: false
+security_ufw_logging_level: "low"  # off, low, medium, high, full
+
+# SSH port - Keep at 22 to avoid lockout
+# Only change if you've confirmed port change works
+security_ssh_port: 22
+
+# Allow NPM dashboard externally
+security_allow_npm_dashboard: true
+
+# Database external access (default: localhost only)
+security_allow_mysql_external: false
+security_allow_postgres_external: false
+security_allow_redis_external: false
+
+# Custom allowed ports
+security_custom_allowed_ports: []
+# Example:
+# security_custom_allowed_ports:
+#   - port: 8080
+#     proto: tcp
+#     comment: "Custom application"
+
+# IP Whitelist (allow these IPs for all ports)
+security_whitelist_ips: []
+# Example:
+# security_whitelist_ips:
+#   - ip: "192.168.1.100"
+#     comment: "Office IP"
+
+# IP Blacklist (deny these IPs)
+security_blacklist_ips: []
+# Example:
+# security_blacklist_ips:
+#   - ip: "1.2.3.4"
+#     comment: "Known attacker"
+
+# ==========================================
+# Fail2ban Configuration
+# ==========================================
+security_fail2ban_enable_nginx: true
+security_fail2ban_enable_docker: true
+
+# Ban settings
+security_fail2ban_bantime: "1h"        # Duration of ban
+security_fail2ban_findtime: "10m"      # Time window to count failures
+security_fail2ban_maxretry: 5          # Max failures before ban
+
+# SSH specific
+security_fail2ban_ssh_maxretry: 3      # More strict for SSH
+security_fail2ban_ssh_bantime: "24h"   # Longer ban for SSH
+
+# Nginx specific
+security_fail2ban_nginx_maxretry: 10   # More lenient for web
+security_fail2ban_nginx_bantime: "1h"
+
+# Email notifications (optional)
+security_fail2ban_destemail: ""        # Leave empty to disable
+security_fail2ban_sender: "fail2ban@{{ ansible_fqdn }}"
+
+# ==========================================
+# SSH Hardening Configuration
+# ==========================================
+security_ssh_harden_config: true
+
+# Authentication
+# prohibit-password = allow SSH key auth for root, deny password
+security_ssh_permit_root_login: "prohibit-password"
+security_ssh_password_authentication: "no"   # Use key-based only
+security_ssh_max_auth_tries: 3
+security_ssh_max_sessions: 10
+
+# Timeout settings
+security_ssh_client_alive_interval: 300      # 5 minutes
+security_ssh_client_alive_count_max: 2       # 2 * 5 = 10 minutes total
+
+# Logging
+security_ssh_log_level: "VERBOSE"            # QUIET, FATAL, ERROR, INFO, VERBOSE, DEBUG
+
+# Allowed users (leave empty to allow all)
+security_ssh_allowed_users: []
+# Example:
+# security_ssh_allowed_users:
+#   - deployer
+#   - admin
+
+# Cryptographic settings (strong ciphers only)
+security_ssh_ciphers: "chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr"
+security_ssh_macs: "hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256"
+security_ssh_kex_algorithms: "curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group-exchange-sha256"
+
+# ==========================================
+# Docker Security Configuration
+# ==========================================
+security_docker_harden: true
+
+# User namespace remapping (isolate containers)
+security_docker_userns_remap: "default"      # 'default' or specific user
+
+# Prevent privilege escalation
+security_docker_no_new_privileges: true
+
+# Seccomp and AppArmor
+security_docker_use_seccomp: true
+security_docker_use_apparmor: true
+
+# Log configuration
+security_docker_log_max_size: "10m"
+security_docker_log_max_file: "3"
+security_docker_log_rotate_count: 7
+
+# Socket permissions
+security_docker_restrict_socket: true
+
+# Audit logging
+security_docker_enable_audit: false          # Requires auditd
+
+# Live restore (keep containers running during daemon restart)
+security_docker_live_restore: true
+
+# ==========================================
+# System Security Configuration
+# ==========================================
+# Automatic security updates
+security_auto_updates: true
+
+# Kernel parameters
+security_sysctl_ip_forward: "0"              # Set to '1' if server is a router/VPN
+security_sysctl_ignore_ping: "0"             # Set to '1' to ignore ping
+
+# Secure /tmp with noexec
+security_secure_tmp: false                   # May break some applications
+
+# Rootkit detection
+security_enable_rkhunter: false              # Enable for periodic scans
+
+# Services to disable (add unnecessary services)
+security_disabled_services: []
+# Example:
+# security_disabled_services:
+#   - bluetooth
+#   - cups
+#   - avahi-daemon
+
+# ==========================================
+# Notification Configuration
+# ==========================================
+security_notification_email: ""              # Email for security alerts
+security_notification_slack_webhook: ""      # Slack webhook for alerts
+security_notification_discord_webhook: ""    # Discord webhook for alerts

@@ -1,0 +1,11 @@
+---
+# Autoheal Role Defaults
+
+# Docker image
+autoheal_image: "willfarrell/autoheal:latest"
+
+# Configuration
+autoheal_label: "all"           # Container label to monitor (use 'all' for all containers with labels, or 'autoheal=true')
+autoheal_interval: "5"          # Check interval in seconds
+autoheal_start_period: "0"      # Initial delay before checking
+autoheal_stop_timeout: "10"     # Timeout for stopping unhealthy containers

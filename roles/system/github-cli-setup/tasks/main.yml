@@ -1,0 +1,172 @@
+---
+# GitHub CLI Setup Role
+# Installs and configures GitHub CLI (gh) on the server
+
+- name: Check if GitHub CLI is already installed
+  ansible.builtin.command: which gh
+  register: gh_check
+  failed_when: false
+  changed_when: false
+
+- name: Install GitHub CLI
+  when: gh_check.rc != 0
+  block:
+    - name: Download GitHub CLI GPG key
+      ansible.builtin.get_url:
+        url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+        dest: /usr/share/keyrings/githubcli-archive-keyring.gpg
+        mode: '0644'
+
+    - name: Add GitHub CLI repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main"
+        state: present
+        filename: github-cli
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install GitHub CLI
+      ansible.builtin.apt:
+        name: gh
+        state: present
+
+- name: Check GitHub CLI version
+  ansible.builtin.command: gh --version
+  register: gh_version
+  changed_when: false
+
+- name: Display GitHub CLI version
+  ansible.builtin.debug:
+    msg: "GitHub CLI installed: {{ gh_version.stdout_lines[0] }}"
+
+- name: Authenticate GitHub CLI with token
+  ansible.builtin.shell: |
+    echo "{{ vault_github_token }}" | gh auth login --with-token
+  args:
+    executable: /bin/bash
+  become: true
+  become_user: deployer
+  register: gh_auth
+  changed_when: gh_auth.rc == 0
+  no_log: true
+
+- name: Verify GitHub CLI authentication
+  ansible.builtin.command: gh auth status
+  register: gh_auth_status
+  failed_when: false
+  changed_when: false
+  become: true
+  become_user: deployer
+
+- name: Display authentication status
+  ansible.builtin.debug:
+    msg: "✓ GitHub CLI authenticated successfully"
+  when: gh_auth_status.rc == 0
+
+- name: Create deployer scripts directory
+  ansible.builtin.file:
+    path: /home/deployer/.local/bin
+    state: directory
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
+- name: Create Ansible workspace directory on server
+  ansible.builtin.file:
+    path: /home/deployer/ansible-workspace
+    state: directory
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
+- name: Copy inventory file to server
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../inventory/hosts.ini"
+    dest: /home/deployer/ansible-workspace/hosts.ini
+    mode: "0644"
+    owner: deployer
+    group: deployer
+
+- name: Copy ansible.cfg to server
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../ansible.cfg"
+    dest: /home/deployer/ansible-workspace/ansible.cfg
+    mode: "0644"
+    owner: deployer
+    group: deployer
+
+- name: Copy vault file to server
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../group_vars/all/vault.yml"
+    dest: /home/deployer/ansible-workspace/vault.yml
+    mode: "0600"
+    owner: deployer
+    group: deployer
+
+- name: Copy vault password to server
+  ansible.builtin.copy:
+    content: "{{ vault_password }}"
+    dest: /home/deployer/ansible-workspace/.vault_pass
+    mode: "0600"
+    owner: deployer
+    group: deployer
+  no_log: true
+
+- name: Copy SSH private key to server
+  ansible.builtin.copy:
+    content: "{{ vault_server_ssh_private_key }}"
+    dest: /home/deployer/.ssh/server_ed25519
+    mode: "0600"
+    owner: deployer
+    group: deployer
+  no_log: true
+
+- name: Copy update-github-secrets script to server
+  ansible.builtin.template:
+    src: update-github-secrets.sh.j2
+    dest: /home/deployer/.local/bin/update-github-secrets
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
+- name: Add ~/.local/bin to PATH in deployer's bashrc
+  ansible.builtin.lineinfile:
+    path: /home/deployer/.bashrc
+    line: 'export PATH="$HOME/.local/bin:$PATH"'
+    regexp: '^\s*export\s+PATH=.*\.local/bin'
+    state: present
+    create: true
+    owner: deployer
+    group: deployer
+
+- name: Run update-github-secrets to sync all repository secrets
+  ansible.builtin.command:
+    cmd: /home/deployer/.local/bin/update-github-secrets -y
+  become: true
+  become_user: deployer
+  register: github_secrets_result
+  changed_when: github_secrets_result.rc == 0
+  failed_when: false
+  tags:
+    - github-secrets
+
+- name: Display GitHub secrets update output
+  ansible.builtin.debug:
+    msg: "{{ github_secrets_result.stdout_lines | default(['No output']) }}"
+  when: github_secrets_result.stdout_lines is defined
+  tags:
+    - github-secrets
+
+- name: Display completion message
+  ansible.builtin.debug:
+    msg: |
+      ✓ GitHub CLI setup complete on server!
+      ✓ update-github-secrets script installed to /home/deployer/.local/bin/
+      ✓ GitHub secrets have been automatically synced to all repositories
+      
+      To manually update secrets, SSH to server and run:
+        update-github-secrets                    # Update default repos (interactive)
+        update-github-secrets -y                 # Update default repos (non-interactive)
+        update-github-secrets repo1 repo2        # Update custom repos

@@ -1,0 +1,68 @@
+---
+- name: Create MinIO directory
+  ansible.builtin.file:
+    path: /opt/docker-stack/infrastructure/minio
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Create MinIO data directory
+  ansible.builtin.file:
+    path: /opt/docker-stack/infrastructure/minio/data
+    state: directory
+    mode: "0755"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Copy MinIO docker-compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: /opt/docker-stack/infrastructure/minio/docker-compose.yml
+    mode: "0644"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Copy MinIO .env file
+  ansible.builtin.template:
+    src: .env.j2
+    dest: /opt/docker-stack/infrastructure/minio/.env
+    mode: "0600"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+
+- name: Ensure MinIO network exists
+  community.docker.docker_network:
+    name: minio_network
+    state: present
+
+- name: Deploy MinIO container
+  community.docker.docker_compose_v2:
+    project_src: /opt/docker-stack/infrastructure/minio
+    pull: always
+    state: present
+  register: minio_deployment
+
+- name: Wait for MinIO to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:9000/minio/health/live"
+    method: GET
+    status_code: [200]
+    timeout: 10
+  register: minio_health
+  retries: 10
+  delay: 5
+  until: minio_health.status == 200
+
+- name: Display MinIO deployment status
+  ansible.builtin.debug:
+    msg:
+      - "═══════════════════════════════════════════════════════════"
+      - "  ✓ MinIO Deployed Successfully"
+      - "═══════════════════════════════════════════════════════════"
+      - ""
+      - "  Console URL: http://{{ ansible_default_ipv4.address }}:9001"
+      - "  API URL: http://{{ ansible_default_ipv4.address }}:9000"
+      - "  Internal: minio:9000 (from docker network)"
+      - ""
+      - "═══════════════════════════════════════════════════════════"

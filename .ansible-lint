@@ -1,0 +1,47 @@
+# Ansible Lint Configuration
+# See: https://ansible.readthedocs.io/projects/lint/configuring/
+
+profile: production
+
+# Exclude paths
+exclude_paths:
+  - .git/
+  - .github/
+  - Makefile.old
+  - roles/infrastructure/  # Legacy folder
+
+# Enable specific rules
+enable_list:
+  - args
+  - empty-string-compare
+  - no-log-password
+  - no-same-owner
+
+# Skip specific rules
+skip_list:
+  - yaml[line-length]  # Allow long lines in YAML
+  - name[casing]       # Allow flexible naming
+
+# Warn on specific rules (don't fail)
+warn_list:
+  - experimental
+  - role-name
+
+# Specific rule configurations
+# var-naming pattern
+var_naming_pattern: "^[a-z_][a-z0-9_]*$"
+
+# Task naming
+task_name_prefix: "{stem} | "
+
+# Offline mode (don't download anything)
+offline: false
+
+# Use default rules
+use_default_rules: true
+
+# Parseable output
+parseable: true
+
+# Show progress bar
+quiet: false

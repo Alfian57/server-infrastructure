@@ -1,0 +1,5 @@
+---
+- name: Deploy Presensi Skansaba Web application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-laravel-app.yml
+  vars:
+    app_name: "presensi-skansaba-web"

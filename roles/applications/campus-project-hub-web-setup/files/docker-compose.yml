@@ -1,0 +1,27 @@
+services:
+  campus-project-hub-web:
+    image: ghcr.io/alfian57/campus-project-hub-web:latest
+    container_name: campus-project-hub-web
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - nginx_proxy_manager_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  nginx_proxy_manager_network:
+    external: true

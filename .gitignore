@@ -1,9 +1,36 @@
-# Ansible
+# ═══════════════════════════════════════════════════════════
+# Ansible Project .gitignore
+# ═══════════════════════════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────
+# SECURITY - NEVER COMMIT THESE!
+# ─────────────────────────────────────────────────────────────
+.vault_pass
+vault_pass.txt
+*.vault_pass
+vault.yml.decrypted
+*_unencrypted*
+*password*.txt
+
+# SSH keys (in case accidentally placed here)
+*.pem
+*.key
+id_rsa
+id_ed25519
+*.p12
+*.pfx
+
+# ─────────────────────────────────────────────────────────────
+# Ansible temporary files
+# ─────────────────────────────────────────────────────────────
 *.retry
 .ansible/
-*.log
+.ansible_facts_cache/
+/tmp/ansible_facts_cache/
 
+# ─────────────────────────────────────────────────────────────
 # Python
+# ─────────────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
@@ -11,6 +38,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 build/
 develop-eggs/
@@ -28,25 +56,37 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDE
+# ─────────────────────────────────────────────────────────────
+# IDE/Editor
+# ─────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-.DS_Store
+.*.sw?
 
-# Temporary files
+# ─────────────────────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─────────────────────────────────────────────────────────────
+# Temporary/Backup files
+# ─────────────────────────────────────────────────────────────
 *.tmp
 *.bak
 *.orig
+*.backup
+*.log
 
-# Secrets (in case someone forgets to use vault)
-*_unencrypted*
-*.pem
-*.key
-*password*.txt
-.vault_pass
+# ─────────────────────────────────────────────────────────────
+# Local testing
+# ─────────────────────────────────────────────────────────────
+test_*.yml
+local_*.yml
+
 
 # Vault files (only commit encrypted versions)
 # DO NOT commit decrypted vault.yml

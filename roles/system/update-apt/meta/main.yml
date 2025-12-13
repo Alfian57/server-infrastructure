@@ -1,0 +1,26 @@
+---
+# Role Metadata: update-apt
+
+galaxy_info:
+  author: "Alfian"
+  description: "Updates and upgrades APT packages on Debian/Ubuntu systems"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - system
+    - apt
+    - update
+    - packages
+
+dependencies: []

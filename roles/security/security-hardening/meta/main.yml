@@ -1,0 +1,33 @@
+---
+# Role Metadata: security-hardening
+
+galaxy_info:
+  author: "Alfian"
+  description: "Comprehensive security hardening for Linux servers"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - security
+    - hardening
+    - firewall
+    - fail2ban
+    - ssh
+
+dependencies:
+  - role: users-setup
+
+# Required collections
+collections:
+  - community.general
+  - ansible.posix

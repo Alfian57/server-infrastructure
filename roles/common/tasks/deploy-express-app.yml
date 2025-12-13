@@ -73,9 +73,9 @@
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
 
-- name: Copy .env file to server
-  ansible.builtin.copy:
-    src: .env
+- name: Generate .env from vault credentials
+  ansible.builtin.template:
+    src: .env.j2
     dest: "{{ app_install_dir }}/.env"
     mode: "0600"
     owner: "{{ ansible_user | default('root') }}"

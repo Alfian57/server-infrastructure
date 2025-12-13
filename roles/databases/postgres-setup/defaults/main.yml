@@ -1,0 +1,20 @@
+---
+# PostgreSQL Role Defaults
+
+# Docker image
+postgres_image: "postgres:14-alpine"
+
+# Network configuration
+postgres_network: "postgres_network"
+
+# Resource limits
+postgres_memory_limit: "1G"
+postgres_memory_reservation: "512M"
+
+# Custom config
+postgres_custom_config: false
+
+# pgAdmin settings
+postgres_enable_pgadmin: true
+pgadmin_version: "8.4"
+pgadmin_port: "8082"

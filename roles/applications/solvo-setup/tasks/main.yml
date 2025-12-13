@@ -1,0 +1,5 @@
+---
+- name: Deploy Solvo application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-laravel-app.yml
+  vars:
+    app_name: "solvo"

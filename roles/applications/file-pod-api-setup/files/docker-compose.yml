@@ -1,0 +1,38 @@
+services:
+  file-pod-api:
+    image: ghcr.io/alfian57/file-pod-api:latest
+    container_name: file-pod-api
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - file_pod_api_uploads:/app/uploads
+    networks:
+      - nginx_proxy_manager_network
+      - postgres_network
+      - minio_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  nginx_proxy_manager_network:
+    external: true
+  postgres_network:
+    external: true
+  minio_network:
+    external: true
+
+volumes:
+  file_pod_api_uploads:

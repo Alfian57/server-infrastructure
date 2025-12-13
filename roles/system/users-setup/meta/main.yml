@@ -1,0 +1,30 @@
+---
+# Role Metadata: users-setup
+
+galaxy_info:
+  author: "Alfian"
+  description: "Creates and configures system users with SSH keys"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - system
+    - users
+    - security
+    - ssh
+
+dependencies: []
+
+# Required collections
+collections:
+  - ansible.posix

@@ -1,0 +1,35 @@
+services:
+  campus-project-hub-api:
+    image: ghcr.io/alfian57/campus-project-hub-api:latest
+    container_name: campus-project-hub-api
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - campus_project_hub_api_uploads:/app/uploads
+    networks:
+      - nginx_proxy_manager_network
+      - postgres_network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  nginx_proxy_manager_network:
+    external: true
+  postgres_network:
+    external: true
+
+volumes:
+  campus_project_hub_api_uploads:

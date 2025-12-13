@@ -1,0 +1,5 @@
+---
+- name: Deploy Personal Portfolio application
+  ansible.builtin.include_tasks: ../../common/tasks/deploy-nextjs-app.yml
+  vars:
+    app_name: "personal-portofolio"

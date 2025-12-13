@@ -1,0 +1,78 @@
+---
+# Users are now configured in bootstrap-ssh.yml
+# This role is skipped if no additional users need to be configured
+
+- name: Check if users variable is defined
+  ansible.builtin.set_fact:
+    users_defined: "{{ users is defined and users is iterable and users | length > 0 }}"
+
+- name: Skip user setup (already configured in bootstrap)
+  ansible.builtin.debug:
+    msg: "User setup skipped - users already configured via bootstrap-ssh.yml"
+  when: not users_defined | default(false)
+
+- name: Ensure required groups exist
+  ansible.builtin.group:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ users | selectattr('groups', 'defined') | map(attribute='groups') | flatten | unique }}"
+  when: 
+    - users_defined | default(false)
+    - users | selectattr('groups', 'defined') | list | length > 0
+
+- name: Create users with advanced configuration
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    password: "{{ item.password | default(omit) }}"
+    comment: "{{ item.comment | default(omit) }}"
+    groups: "{{ item.groups | default([]) }}"
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    createhome: true
+    state: "{{ item.state | default('present') }}"
+    system: "{{ item.system | default(false) }}"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: users_created
+  when: users_defined | default(false)
+
+- name: Configure SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ item.name }}/.ssh"
+    state: directory
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0700"
+  loop: "{{ users }}"
+  when: 
+    - users_defined | default(false)
+    - item.ssh_key is defined
+    - item.state | default('present') == 'present'
+    - not item.system | default(false)
+
+- name: Add SSH authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: "{{ item.ssh_key }}"
+    state: present
+    exclusive: false
+  loop: "{{ users }}"
+  when: 
+    - users_defined | default(false)
+    - item.ssh_key is defined
+    - item.state | default('present') == 'present'
+
+# NOTE: Reboot is NOT needed for user changes
+# Removed automatic reboot - it was causing unnecessary restarts
+# User changes take effect immediately for new sessions
+# Only kernel/driver updates require reboot
+
+- name: Check if system reboot is required (unrelated to user changes)
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: reboot_required_file
+
+- name: Display reboot notice if required
+  ansible.builtin.debug:
+    msg: "⚠️  System reboot is required (kernel/driver updates). Run 'make reboot' when ready."
+  when: reboot_required_file.stat.exists

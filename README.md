@@ -8,69 +8,80 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
 - [Struktur Proyek](#️-struktur-proyek)
 - [Prerequisites](#-prerequisites)
 - [Quick Start](#-quick-start)
-- [Instalasi](#-instalasi)
+- [Roles Organization](#-roles-organization)
 - [Penggunaan dengan Makefile](#-penggunaan-dengan-makefile)
-- [Penggunaan Manual](#-penggunaan-manual)
-- [Roles](#-roles)
+- [Security](#-security)
 - [Konfigurasi](#️-konfigurasi)
 
 ## ✨ Features
 
 - 🎯 **One-Command Deployment**: Deploy complete infrastructure dengan satu command
-- 🔒 **Secure by Default**: Ansible Vault untuk credentials, proper file permissions
+- 🔒 **Secure by Default**: Ansible Vault untuk credentials, proper file permissions, security hardening
 - 🚀 **Multi-Stack Support**: Laravel, React, Next.js, Express.js, Golang
 - 📦 **DRY Principle**: Shared tasks untuk minimize code duplication
 - 🏷️ **Tag-based Execution**: Deploy specific layers (system/infrastructure/database/application)
 - 🔄 **Auto-healing**: Automatic restart untuk unhealthy containers
+- 🛡️ **Security Hardening**: UFW, Fail2ban, SSH hardening, Docker security
 - 📊 **Health Checks**: Built-in health monitoring untuk semua services
 - 🛠️ **Makefile Commands**: 50+ shortcut commands untuk ease of use
-- 📝 **Comprehensive Docs**: Detailed documentation untuk setiap role dan stack
+- 💰 **Cost Optimization**: Docker cleanup, log rotation, resource limits
 
 ## 🏗️ Struktur Proyek
 
 ```
 .
-├── Makefile                   # 50+ command shortcuts
-├── MAKEFILE_GUIDE.md          # Comprehensive Makefile documentation
 ├── ansible.cfg                # Konfigurasi Ansible
+├── Makefile                   # Command shortcuts
+├── requirements.yml           # Ansible Galaxy collections
 ├── inventory/
 │   └── hosts.ini              # Daftar host server
+├── group_vars/
+│   └── all/
+│       ├── vars.yml           # Non-sensitive variables
+│       └── vault.yml          # Encrypted credentials (Ansible Vault)
 ├── playbooks/
-│   └── server-setup.yml       # Main playbook untuk setup server
+│   └── server-setup.yml       # Main playbook
 └── roles/
-    ├── common/                # Shared tasks dan files
-    │   ├── tasks/
-    │   │   ├── deploy-laravel-app.yml    # Laravel deployment template
-    │   │   ├── deploy-react-app.yml      # React deployment template
-    │   │   ├── deploy-nextjs-app.yml     # Next.js deployment template
-    │   │   ├── deploy-express-app.yml    # Express deployment template
-    │   │   └── deploy-golang-app.yml     # Golang deployment template
+    ├── common/                    # Shared deployment templates
     │   ├── files/
-    │   │   └── update.sh                 # Auto-update script for containers
-    │   ├── README.md                     # Shared tasks documentation
-    │   ├── APPLICATION_TEMPLATE.md       # Quick start guide for new apps
-    │   └── DOCKER_COMPOSE_TEMPLATES.md   # Docker compose examples
-    ├── update-apt/            # Update sistem Ubuntu/Debian
-    ├── users-setup/           # Manajemen user dan SSH keys
-    ├── git-setup/             # Instalasi dan konfigurasi Git
-    ├── docker-setup/          # Instalasi Docker & Docker Compose
-    ├── autoheal-setup/        # Auto-healing untuk Docker containers
-    ├── nginx-proxy-setup/     # Nginx Proxy Manager
-    ├── mysql-setup/           # MySQL database
-    ├── postgres-setup/        # PostgreSQL database
-    ├── redis-setup/           # Redis cache
-    ├── materi-ku-setup/       # Aplikasi Materi-Ku (Laravel)
-    ├── panca-trivia-setup/    # Aplikasi Panca Trivia (Laravel)
-    ├── ruang-istirahat-setup/ # Aplikasi Ruang Istirahat (Laravel)
-    └── tech-talk-setup/       # Aplikasi Tech Talk (Laravel)
+    │   └── tasks/
+    │
+    ├── system/                    # 🖥️ System Configuration
+    │   ├── update-apt/            # APT package updates
+    │   ├── users-setup/           # User & SSH management
+    │   ├── git-setup/             # Git configuration
+    │   ├── github-cli-setup/      # GitHub CLI
+    │   └── cloudflare-dns-setup/  # Cloudflare DNS
+    │
+    ├── security/                  # 🔒 Security Hardening
+    │   └── security-hardening/    # UFW, Fail2ban, SSH, Docker security
+    │
+    ├── infrastructure/            # 🏗️ Infrastructure
+    │   ├── docker-setup/          # Docker Engine
+    │   ├── autoheal-setup/        # Container auto-healing
+    │   └── nginx-proxy-setup/     # Nginx Proxy Manager
+    │
+    ├── databases/                 # 🗄️ Databases
+    │   ├── mysql-setup/           # MySQL + phpMyAdmin
+    │   ├── postgres-setup/        # PostgreSQL + pgAdmin
+    │   └── redis-setup/           # Redis + Commander
+    │
+    ├── applications/              # 📱 Applications
+    │   ├── materi-ku-setup/       # Laravel app
+    │   ├── panca-trivia-setup/    # Laravel app
+    │   ├── ruang-istirahat-setup/ # Laravel app
+    │   └── tech-talk-setup/       # Laravel app
+    │
+    └── optimization/              # 💰 Optimization
+        └── cost-optimization/     # Cleanup, monitoring, limits
 ```
 
 ## 📦 Prerequisites
 
-- **Ansible** 2.9 atau lebih tinggi
-- **Python** 3.x
+- **Ansible** >= 2.12
+- **Python** >= 3.8
 - **Make** (untuk menggunakan Makefile commands)
-- **SSH access** ke target server
+- **SSH key** untuk akses server
 - **Sudo privileges** pada target server
 
 Check prerequisites:
@@ -78,7 +89,6 @@ Check prerequisites:
 ansible --version
 python3 --version
 make --version
-ssh user@your-server
 ```
 
 ## ⚡ Quick Start
@@ -89,14 +99,63 @@ ssh user@your-server
 git clone <repository-url>
 cd server-infra-with-ansible
 
+# Install Ansible dan dependencies
+make install
+```
+
+### 2. Bootstrap SSH Key (Fresh VPS dengan Password)
+```bash
+# Jika VPS masih menggunakan password authentication
+# Jalankan bootstrap untuk setup SSH key
+make bootstrap
+
+# Saat diminta, masukkan password VPS
+# Script akan:
+# - Setup SSH key untuk semua users (root, deployer, alfiang)
+# - Disable password authentication setelah SSH key berhasil
+# - Test koneksi dengan SSH key
+
+# Setelah berhasil, switch inventory ke SSH key
+make switch-to-ssh
+```
+
+### 3. Full Deployment
+```bash
+# Deploy semua infrastructure
+make deploy
+
+# Atau deploy per kategori
+make system          # System setup (apt, users, git)
+make security        # Security hardening
+make infrastructure  # Docker, Nginx Proxy, MinIO
+make database        # MySQL, PostgreSQL, Redis
+make application     # Deploy all applications
+```
+
+### 4. Update GitHub Secrets
+```bash
+# SSH ke server
+make ssh
+
+# Jalankan script update secrets
+update-github-secrets
+```
+
 # Install dependencies
 make install
 ```
 
-### 2. Konfigurasi Vault Password (untuk decrypt encrypted files)
+### 2. Konfigurasi Vault
 ```bash
-# Buat vault password file
-make vault-create-pass
+# Buat vault dari template
+make vault-create
+
+# Edit credentials
+make vault-edit
+
+# Encrypt vault
+make vault-encrypt
+```
 
 # Atau manual
 echo "your-vault-password" > .vault_pass

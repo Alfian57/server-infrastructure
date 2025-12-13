@@ -1,0 +1,163 @@
+---
+# Docker Security Hardening
+# Additional security measures for Docker
+
+- name: Check if Docker is installed
+  ansible.builtin.command: which docker
+  register: docker_check
+  failed_when: false
+  changed_when: false
+
+- name: Skip Docker security if Docker not installed
+  ansible.builtin.debug:
+    msg: "Docker not installed yet, skipping Docker security hardening"
+  when: docker_check.rc != 0
+
+- name: Ensure Docker daemon.json exists
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    mode: "0755"
+  when: docker_check.rc == 0
+
+- name: Configure Docker daemon security settings
+  ansible.builtin.template:
+    src: docker-daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    owner: root
+    group: root
+  notify: Restart docker
+  when: 
+    - docker_check.rc == 0
+    - security_docker_harden | default(true)
+
+- name: Create Docker security profile directory
+  ansible.builtin.file:
+    path: /etc/docker/seccomp
+    state: directory
+    mode: "0755"
+  when: docker_check.rc == 0
+
+- name: Copy Docker seccomp profile
+  ansible.builtin.copy:
+    src: docker-seccomp-profile.json
+    dest: /etc/docker/seccomp/default.json
+    mode: "0644"
+    owner: root
+    group: root
+  when: 
+    - docker_check.rc == 0
+    - security_docker_use_seccomp | default(true)
+
+# AppArmor profile (Ubuntu/Debian specific)
+- name: Check if AppArmor is available
+  ansible.builtin.command: which apparmor_parser
+  register: apparmor_check
+  changed_when: false
+  failed_when: false
+  when: docker_check.rc == 0
+
+- name: Install AppArmor utilities
+  ansible.builtin.apt:
+    name:
+      - apparmor
+      - apparmor-utils
+    state: present
+  when: 
+    - docker_check.rc == 0
+    - apparmor_check.rc is defined and apparmor_check.rc != 0
+    - security_docker_use_apparmor | default(true)
+
+- name: Create Docker AppArmor profile
+  ansible.builtin.copy:
+    src: docker-apparmor-profile
+    dest: /etc/apparmor.d/docker-default
+    mode: "0644"
+    owner: root
+    group: root
+  when: 
+    - docker_check.rc == 0
+    - apparmor_check.rc is defined
+    - apparmor_check.rc == 0 or security_docker_use_apparmor | default(true)
+  notify: Reload apparmor
+
+# Docker log rotation
+- name: Configure Docker log rotation
+  ansible.builtin.copy:
+    content: |
+      /var/lib/docker/containers/*/*.log {
+        rotate {{ security_docker_log_rotate_count }}
+        daily
+        compress
+        maxsize {{ security_docker_log_max_size }}
+        missingok
+        delaycompress
+        copytruncate
+      }
+    dest: /etc/logrotate.d/docker-containers
+    mode: "0644"
+    owner: root
+    group: root
+  when: docker_check.rc == 0
+
+# Docker socket permissions
+- name: Set Docker socket permissions
+  ansible.builtin.file:
+    path: /var/run/docker.sock
+    mode: "0660"
+    owner: root
+    group: docker
+  when: 
+    - docker_check.rc == 0
+    - security_docker_restrict_socket | default(true)
+
+# Audit Docker daemon
+- name: Install auditd for Docker monitoring
+  ansible.builtin.apt:
+    name: auditd
+    state: present
+  when: 
+    - docker_check.rc == 0
+    - security_docker_enable_audit | default(false)
+
+- name: Configure auditd rules for Docker
+  ansible.builtin.copy:
+    content: |
+      # Docker daemon
+      -w /usr/bin/dockerd -k docker
+      -w /var/lib/docker -k docker
+      -w /etc/docker -k docker
+      
+      # Docker files
+      -w /etc/default/docker -k docker
+      -w /etc/docker/daemon.json -k docker
+      -w /usr/lib/systemd/system/docker.service -k docker
+      -w /usr/lib/systemd/system/docker.socket -k docker
+      
+      # Docker socket
+      -w /var/run/docker.sock -k docker
+      
+      # Containerd
+      -w /usr/bin/containerd -k docker
+      -w /var/run/containerd -k docker
+    dest: /etc/audit/rules.d/docker.rules
+    mode: "0640"
+    owner: root
+    group: root
+  notify: Restart auditd
+  when: 
+    - docker_check.rc == 0
+    - security_docker_enable_audit | default(false)
+
+- name: Display Docker security status
+  ansible.builtin.debug:
+    msg:
+      - "Docker Security Applied:"
+      - "  • User namespace remapping: {{ security_docker_userns_remap | default('disabled') }}"
+      - "  • No new privileges: {{ security_docker_no_new_privileges | default('enabled') }}"
+      - "  • Seccomp profile: {{ 'enabled' if security_docker_use_seccomp | default(true) else 'disabled' }}"
+      - "  • AppArmor profile: {{ 'enabled' if security_docker_use_apparmor | default(true) else 'disabled' }}"
+      - "  • Log rotation: {{ security_docker_log_max_size }} / {{ security_docker_log_rotate_count }} days"
+      - "  • Audit logging: {{ 'enabled' if security_docker_enable_audit | default(false) else 'disabled' }}"
+  when: docker_check.rc == 0

@@ -1,0 +1,113 @@
+---
+# Cloudflare DNS Setup Role
+# Installs dependencies and configures Cloudflare DNS management on the server
+
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - vault_cloudflare_api_token is defined
+      - cloudflare_domain is defined
+    fail_msg: "vault_cloudflare_api_token and cloudflare_domain must be defined"
+    quiet: true
+
+- name: Install Python pip and venv
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - python3-venv
+    state: present
+    update_cache: true
+
+- name: Create deployer scripts directory
+  ansible.builtin.file:
+    path: /home/deployer/.local/bin
+    state: directory
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
+- name: Create Python virtual environment for Cloudflare
+  ansible.builtin.command:
+    cmd: python3 -m venv /home/deployer/.local/cloudflare-venv
+    creates: /home/deployer/.local/cloudflare-venv/bin/python
+  become: true
+  become_user: deployer
+
+- name: Install Python Cloudflare library in venv
+  ansible.builtin.pip:
+    name: cloudflare
+    state: present
+    virtualenv: /home/deployer/.local/cloudflare-venv
+  become: true
+  become_user: deployer
+
+- name: Create Cloudflare config directory
+  ansible.builtin.file:
+    path: /home/deployer/.config/cloudflare
+    state: directory
+    mode: "0700"
+    owner: deployer
+    group: deployer
+
+- name: Copy Cloudflare credentials
+  ansible.builtin.template:
+    src: cloudflare.ini.j2
+    dest: /home/deployer/.config/cloudflare/cloudflare.ini
+    mode: "0600"
+    owner: deployer
+    group: deployer
+  no_log: true
+
+- name: Copy DNS configuration
+  ansible.builtin.copy:
+    content: |
+      {{ cloudflare_dns_records | to_nice_yaml }}
+    dest: /home/deployer/.config/cloudflare/dns-records.yml
+    mode: "0644"
+    owner: deployer
+    group: deployer
+
+- name: Copy Solvo DNS configuration
+  ansible.builtin.copy:
+    content: |
+      {{ cloudflare_solvo_dns_records | to_nice_yaml }}
+    dest: /home/deployer/.config/cloudflare/dns-records-solvo.yml
+    mode: "0644"
+    owner: deployer
+    group: deployer
+  when: cloudflare_solvo_dns_records is defined
+
+- name: Copy update-cloudflare-dns script
+  ansible.builtin.template:
+    src: update-cloudflare-dns.py.j2
+    dest: /home/deployer/.local/bin/update-cloudflare-dns
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
+- name: Ensure ~/.local/bin is in PATH
+  ansible.builtin.lineinfile:
+    path: /home/deployer/.bashrc
+    line: 'export PATH="$HOME/.local/bin:$PATH"'
+    regexp: '^\s*export\s+PATH=.*\.local/bin'
+    state: present
+    create: true
+    owner: deployer
+    group: deployer
+
+- name: Display completion message
+  ansible.builtin.debug:
+    msg: |
+      ✓ Cloudflare DNS setup complete on server!
+      ✓ Python Cloudflare library installed
+      ✓ update-cloudflare-dns script installed to /home/deployer/.local/bin/
+      ✓ DNS records configuration saved
+      
+      To update DNS records, SSH to server and run:
+        update-cloudflare-dns
+      
+      This will create/update:
+        - {{ cloudflare_dns_records | length }} DNS records for {{ cloudflare_domain }}
+{% if cloudflare_solvo_dns_records is defined %}
+        - {{ cloudflare_solvo_dns_records | length }} DNS records for {{ cloudflare_solvo_domain }}
+{% endif %}
