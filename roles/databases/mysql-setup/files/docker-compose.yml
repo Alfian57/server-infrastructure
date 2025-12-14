@@ -1,6 +1,6 @@
 services:
   mysql-db:
-    image: mysql:9.3.0
+    image: mariadb:10.11
     container_name: mysql-db
     restart: unless-stopped
     environment:
@@ -11,7 +11,7 @@ services:
       test:
         [
           "CMD",
-          "mysqladmin",
+          "mariadb-admin",
           "ping",
           "-h",
           "localhost",

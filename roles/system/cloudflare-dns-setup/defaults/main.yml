@@ -4,6 +4,7 @@
 # Domain configuration
 cloudflare_domain: "alfian-gading.site"
 cloudflare_solvo_domain: "solvo-tech.site"
+cloudflare_ruang_tenang_domain: "ruang-tenang.site"
 
 # DNS records to create/update for alfian-gading.site
 cloudflare_dns_records:
@@ -54,11 +55,6 @@ cloudflare_dns_records:
     proxied: true
     comment: "Campus Project Hub API"
 
-  - name: "ruang-tenang-api"
-    type: "A"
-    proxied: true
-    comment: "Ruang Tenang API"
-
   # ═══════════════════════════════════════════════════════════
   # Next.js Applications
   # ═══════════════════════════════════════════════════════════
@@ -66,11 +62,6 @@ cloudflare_dns_records:
     type: "A"
     proxied: true
     comment: "Campus Project Hub Web"
-
-  - name: "ruang-tenang-web"
-    type: "A"
-    proxied: true
-    comment: "Ruang Tenang Web"
 
   # ═══════════════════════════════════════════════════════════
   # Node.js/Express Applications
@@ -92,6 +83,18 @@ cloudflare_solvo_dns_records:
     type: "A"
     proxied: true
     comment: "Root domain - Solvo application"
+
+# DNS records for ruang-tenang.site (separate domain)
+cloudflare_ruang_tenang_dns_records:
+  - name: "@"
+    type: "A"
+    proxied: true
+    comment: "Root domain - Ruang Tenang Web"
+
+  - name: "api"
+    type: "A"
+    proxied: true
+    comment: "API subdomain - Ruang Tenang API"
 
 # Python packages to install
 cloudflare_python_packages:

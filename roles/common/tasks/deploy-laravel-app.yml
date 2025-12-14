@@ -25,9 +25,9 @@
   ansible.builtin.file:
     path: "/var/log/docker-updates"
     state: directory
-    mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    mode: "0775"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Log in to GitHub Container Registry
   community.docker.docker_login:
@@ -42,8 +42,8 @@
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
     mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Copy docker-compose file to server
   ansible.builtin.copy:
@@ -113,6 +113,10 @@
   failed_when: false
   changed_when: false
 
+- name: Set fresh deployment flag
+  ansible.builtin.set_fact:
+    is_fresh_deployment: "{{ migration_status.rc != 0 or 'Migration table not found' in (migration_status.stderr | default('')) }}"
+
 - name: Run database migrations
   ansible.builtin.command:
     cmd: docker exec {{ app_name }} php artisan migrate --force
@@ -135,7 +139,7 @@
   when: 
     - run_seeder | bool
     - container_info.container.State.Health.Status == 'healthy'
-    - "'Nothing to migrate' not in (migration_result.stdout | default(''))"
+    - is_fresh_deployment | bool
   failed_when: false
 
 - name: Clear and cache config

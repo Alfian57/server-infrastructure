@@ -79,6 +79,16 @@
     group: deployer
   when: cloudflare_solvo_dns_records is defined
 
+- name: Copy Ruang Tenang DNS configuration
+  ansible.builtin.copy:
+    content: |
+      {{ cloudflare_ruang_tenang_dns_records | to_nice_yaml }}
+    dest: /home/deployer/.config/cloudflare/dns-records-ruang-tenang.yml
+    mode: "0644"
+    owner: deployer
+    group: deployer
+  when: cloudflare_ruang_tenang_dns_records is defined
+
 - name: Copy update-cloudflare-dns script
   ansible.builtin.template:
     src: update-cloudflare-dns.py.j2

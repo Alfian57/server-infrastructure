@@ -31,9 +31,9 @@
   ansible.builtin.file:
     path: "/var/log/docker-updates"
     state: directory
-    mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    mode: "0775"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Create .next cache directory
   ansible.builtin.file:
@@ -56,8 +56,8 @@
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
     mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Copy docker-compose file to server
   ansible.builtin.copy:
@@ -67,6 +67,13 @@
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
 
+- name: Check if .env template exists
+  ansible.builtin.stat:
+    path: "{{ role_path }}/templates/.env.j2"
+  delegate_to: localhost
+  become: false
+  register: env_template_check
+
 - name: Check if .env file exists
   ansible.builtin.stat:
     path: "{{ role_path }}/files/.env"
@@ -74,14 +81,25 @@
   become: false
   register: env_file_check
 
-- name: Copy .env file to server
+- name: Generate .env from template (if template exists)
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ app_install_dir }}/.env"
+    mode: "0600"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  when: env_template_check.stat.exists | default(false)
+
+- name: Copy .env file to server (if no template but file exists)
   ansible.builtin.copy:
     src: .env
     dest: "{{ app_install_dir }}/.env"
     mode: "0600"
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
-  when: env_file_check.stat.exists | default(false)
+  when: 
+    - not (env_template_check.stat.exists | default(false))
+    - env_file_check.stat.exists | default(false)
 
 - name: Pull latest Docker image
   community.docker.docker_image:

@@ -56,7 +56,7 @@
 - name: Create application databases
   ansible.builtin.command:
     cmd: >-
-      docker exec mysql-db mysql -u root -p'{{ vault_mysql_root_password }}'
+      docker exec mysql-db mariadb -u root -p'{{ vault_mysql_root_password }}'
       -e "CREATE DATABASE IF NOT EXISTS {{ item }} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
   loop: "{{ mysql_databases | default([]) }}"
   register: db_creation

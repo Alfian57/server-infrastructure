@@ -36,9 +36,9 @@
   ansible.builtin.file:
     path: "/var/log/docker-updates"
     state: directory
-    mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    mode: "0775"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Create uploads directory (if needed)
   ansible.builtin.file:
@@ -62,8 +62,8 @@
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
     mode: "0755"
-    owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    owner: "deployer"
+    group: "deployer"
 
 - name: Copy docker-compose file to server
   ansible.builtin.copy:

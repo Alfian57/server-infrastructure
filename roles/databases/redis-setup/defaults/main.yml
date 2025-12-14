@@ -1,8 +1,13 @@
 ---
 # Redis Role Defaults
 
+# Path configuration
+docker_stack_base: "/opt/docker-stack"
+docker_stack_databases: "{{ docker_stack_base }}/databases"
+
 # Docker image
-redis_image: "redis:7-alpine"
+# Using bookworm (Debian) for x86-64-v1 CPU compatibility (older VPS/QEMU)
+redis_image: "redis:7-bookworm"
 
 # Network configuration
 redis_network: "redis_network"

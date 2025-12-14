@@ -274,6 +274,7 @@
         letsencrypt_email: "{{ npm_admin_email }}"
         letsencrypt_agree: true
         dns_challenge: false
+      provider: "letsencrypt"
     status_code: [200, 201]
   vars:
     target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
@@ -288,6 +289,73 @@
   retries: 3
   delay: 10
   until: ssl_cert_request.status in [200, 201] or ssl_cert_request.status == 400
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Fallback SSL for domains behind Cloudflare proxy (Let's Encrypt will fail)
+# ═══════════════════════════════════════════════════════════════════════════════
+- name: Create custom SSL directory for self-signed certificates
+  ansible.builtin.file:
+    path: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl"
+    state: directory
+    mode: "0755"
+  when: proxy_hosts is defined
+
+- name: Identify domains that failed Let's Encrypt (Cloudflare proxied domains)
+  ansible.builtin.set_fact:
+    failed_ssl_domains: "{{ failed_ssl_domains | default([]) + [item.item] }}"
+  loop: "{{ ssl_cert_request.results | default([]) }}"
+  when:
+    - item.status is defined
+    - item.status not in [200, 201]
+    - item.item is defined
+
+- name: Generate self-signed SSL certificates for failed domains (Cloudflare Flexible SSL)
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
+      -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
+      -subj "/CN={{ target_domain }}"
+    creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+  loop: "{{ failed_ssl_domains | default([]) }}"
+  when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
+  register: self_signed_certs
+
+- name: Get proxy host IDs for failed SSL domains
+  ansible.builtin.set_fact:
+    failed_domain_proxy_hosts: "{{ failed_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+    host_info: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+  loop: "{{ failed_ssl_domains | default([]) }}"
+  when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
+
+- name: Generate custom nginx config for Cloudflare proxied domains with self-signed SSL
+  ansible.builtin.template:
+    src: cloudflare_proxy_host.conf.j2
+    dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
+    mode: "0644"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+    host_id: "{{ failed_domain_proxy_hosts[target_domain].id }}"
+    forward_host: "{{ item.forward_host }}"
+    forward_port: "{{ item.forward_port }}"
+    caching_enabled: "{{ item.caching_enabled | default(false) }}"
+    ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+    ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
+  loop: "{{ failed_ssl_domains | default([]) }}"
+  when:
+    - failed_ssl_domains is defined and failed_ssl_domains | length > 0
+    - failed_domain_proxy_hosts[target_domain].id is defined
+  register: cloudflare_nginx_config
+
+- name: Reload nginx in NPM container after custom SSL config
+  ansible.builtin.command:
+    cmd: docker exec nginx-proxy-manager nginx -s reload
+  when: cloudflare_nginx_config.changed | default(false)
+  changed_when: true
 
 - name: Wait for SSL certificates to be issued
   ansible.builtin.pause:

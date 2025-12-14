@@ -32,6 +32,12 @@ DOMAINS = [
         "records_file": os.path.expanduser("~/.config/cloudflare/dns-records-solvo.yml")
     },
 {% endif %}
+{% if cloudflare_ruang_tenang_domain is defined %}
+    {
+        "domain": "{{ cloudflare_ruang_tenang_domain }}",
+        "records_file": os.path.expanduser("~/.config/cloudflare/dns-records-ruang-tenang.yml")
+    },
+{% endif %}
 ]
 
 CONFIG_DIR = os.path.expanduser("~/.config/cloudflare")

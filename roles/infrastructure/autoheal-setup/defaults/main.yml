@@ -1,6 +1,10 @@
 ---
 # Autoheal Role Defaults
 
+# Path configuration
+docker_stack_base: "/opt/docker-stack"
+docker_stack_infrastructure: "{{ docker_stack_base }}/infrastructure"
+
 # Docker image
 autoheal_image: "willfarrell/autoheal:latest"
 

@@ -1,8 +1,13 @@
 ---
 # PostgreSQL Role Defaults
 
+# Path configuration
+docker_stack_base: "/opt/docker-stack"
+docker_stack_databases: "{{ docker_stack_base }}/databases"
+
 # Docker image
-postgres_image: "postgres:14-alpine"
+# Using bookworm (Debian) for x86-64-v1 CPU compatibility (older VPS/QEMU)
+postgres_image: "postgres:15-bookworm"
 
 # Network configuration
 postgres_network: "postgres_network"

@@ -91,7 +91,8 @@ proxy_hosts:
     caching_enabled: false
     websocket_support: false
 
-  - subdomain: "ruang-tenang-api"
+  # Ruang Tenang API - Custom Domain
+  - domain: "api.ruang-tenang.site"
     scheme: "http"
     forward_host: "ruang-tenang-api"
     forward_port: 8080
@@ -108,7 +109,8 @@ proxy_hosts:
     caching_enabled: true
     websocket_support: false
 
-  - subdomain: "ruang-tenang-web"
+  # Ruang Tenang Web - Custom Domain
+  - domain: "ruang-tenang.site"
     scheme: "http"
     forward_host: "ruang-tenang-web"
     forward_port: 3000
