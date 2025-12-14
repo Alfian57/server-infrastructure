@@ -76,7 +76,7 @@
     # Get current container resource usage
     - name: Get container resource usage
       ansible.builtin.shell: |
-        docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | head -20
+        docker stats --no-stream --format "table {% raw %}{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}{% endraw %}" | head -20
       register: container_stats
       changed_when: false
 

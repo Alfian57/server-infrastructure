@@ -45,6 +45,48 @@ lint: ## Lint playbook
 
 ##@ Deployment
 
+full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy (for fresh server)
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@echo "  FULL SERVER SETUP - One Command Deployment"
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "This will run:"
+	@echo "  1. Bootstrap SSH key authentication"
+	@echo "  2. Full server setup (Docker, databases, etc)"
+	@echo "  3. Deploy all applications with migrations & seeders"
+	@echo ""
+	@echo "You will be prompted for the VPS root password."
+	@echo ""
+	@read -p "Press Enter to continue or Ctrl+C to cancel..."
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 1/3: Bootstrap SSH Key"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 2/3: Switching to SSH Key Authentication"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@./scripts/update-inventory-ssh.sh || true
+	@sleep 2
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 3/3: Full Deployment with Migrations & Seeders"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true"
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  ✅ FULL SETUP COMPLETE!"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "Your server is now ready. Access your apps via Nginx Proxy Manager."
+	@echo ""
+	@echo "Useful commands:"
+	@echo "  make status     - Check server status"
+	@echo "  make containers - List running containers"
+	@echo "  make ssh        - SSH to server"
+	@echo ""
+
 bootstrap: ## Bootstrap SSH key (first run with password)
 	@echo "═══════════════════════════════════════════"
 	@echo "  SSH Key Bootstrap"

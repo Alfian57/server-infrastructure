@@ -208,7 +208,9 @@
 
 - name: Check DNS propagation for each subdomain
   ansible.builtin.command:
-    cmd: "dig +short {{ item.domain | default(item.subdomain + '.' + npm_domain_name) }} @8.8.8.8"
+    cmd: "dig +short {{ target_domain }} @8.8.8.8"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
   register: dns_check
   loop: "{{ proxy_hosts }}"
   changed_when: false
@@ -218,18 +220,22 @@
 - name: Display DNS propagation status
   ansible.builtin.debug:
     msg: |
-      DNS Check for {{ item.item.domain | default(item.item.subdomain + '.' + npm_domain_name) }}:
-      {% if item.stdout %}
+      DNS Check for {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
+      {% if item.stdout is defined and item.stdout %}
       ✅ Resolved to: {{ item.stdout_lines | join(', ') }}
+      {% elif item.failed is defined and item.failed %}
+      ❌ Failed: {{ item.msg | default('Unknown error') }}
       {% else %}
       ⚠️  Not resolved yet - will retry
       {% endif %}
   loop: "{{ dns_check.results }}"
-  when: dns_check.results is defined
+  when: dns_check.results is defined and item.item is defined
 
 - name: Wait for DNS propagation (retry until all domains resolve)
   ansible.builtin.command:
-    cmd: "dig +short {{ item.domain | default(item.subdomain + '.' + npm_domain_name) }} @8.8.8.8"
+    cmd: "dig +short {{ target_domain }} @8.8.8.8"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
   register: dns_propagation_check
   until: dns_propagation_check.stdout != ""
   retries: 30
@@ -246,8 +252,10 @@
       ║ DNS Propagation Check Complete
       ╠════════════════════════════════════════════════════════════════╣
       {% for result in dns_propagation_check.results %}
-      ║ {{ result.item.domain | default(result.item.subdomain + '.' + npm_domain_name) }}:
-      ║   {% if result.stdout %}✅ Resolved: {{ result.stdout }}{% else %}⚠️  Not resolved (may affect SSL){% endif %}
+      {% if result.item is defined %}
+      ║ {% if result.item.domain is defined %}{{ result.item.domain }}{% else %}{{ result.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
+      ║   {% if result.stdout is defined and result.stdout %}✅ Resolved: {{ result.stdout }}{% else %}⚠️  Not resolved (may affect SSL){% endif %}
+      {% endif %}
       {% endfor %}
       ╚════════════════════════════════════════════════════════════════╝
   when: dns_propagation_check.results is defined
@@ -268,7 +276,7 @@
         dns_challenge: false
     status_code: [200, 201]
   vars:
-    target_domain: "{{ item.domain | default(item.subdomain + '.' + npm_domain_name) }}"
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
     # Check if certificate already exists for this domain
     existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
   register: ssl_cert_request
@@ -324,7 +332,7 @@
       hsts_subdomains: 0
     status_code: [200, 201]
   vars:
-    target_domain: "{{ item.domain | default(item.subdomain + '.' + npm_domain_name) }}"
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
     # Get the proxy host ID
     current_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
     proxy_host_id: "{{ current_host.id | default('') }}"
@@ -343,7 +351,8 @@
   ansible.builtin.debug:
     msg: |
       ╔════════════════════════════════════════════════════════════════╗
-      ║ Proxy Host: {{ item.item.domain | default(item.item.subdomain + '.' + npm_domain_name) }}
+      ║ Proxy Host: {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}
+
       ╠════════════════════════════════════════════════════════════════╣
       {% if item.skipped | default(false) %}
       ║ Status: ⚠️  Created without SSL (DNS via Cloudflare proxy)

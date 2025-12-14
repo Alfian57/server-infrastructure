@@ -22,7 +22,14 @@ EOF
 echo "✓ Inventory updated!"
 echo ""
 echo "Testing SSH connection..."
-ansible all -i "$INVENTORY_FILE" -m ping
+
+# Check if vault password file exists and use it
+VAULT_PASS=".vault_pass"
+if [ -f "$VAULT_PASS" ]; then
+    ansible all -i "$INVENTORY_FILE" --vault-password-file="$VAULT_PASS" -m ping
+else
+    ansible all -i "$INVENTORY_FILE" -m ping
+fi
 
 echo ""
 echo "If successful, you can now run: make deploy"

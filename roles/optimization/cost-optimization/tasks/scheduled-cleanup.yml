@@ -37,11 +37,7 @@
     weekday: "{{ cost_weekly_cleanup_day }}"
     hour: "{{ cost_weekly_cleanup_time.split(':')[0] }}"
     minute: "{{ cost_weekly_cleanup_time.split(':')[1] }}"
-    job: |
-      /usr/local/bin/docker-cleanup && \
-      apt-get autoremove -y && \
-      apt-get autoclean -y && \
-      journalctl --vacuum-time={{ cost_journal_retention }} >> /var/log/cleanup.log 2>&1
+    job: "/usr/local/bin/docker-cleanup && apt-get autoremove -y && apt-get autoclean -y && journalctl --vacuum-time={{ cost_journal_retention }} >> /var/log/cleanup.log 2>&1"
     user: root
     state: "{{ 'present' if cost_enable_weekly_cleanup else 'absent' }}"
 
@@ -52,10 +48,7 @@
     day: "1"
     hour: "{{ cost_monthly_cleanup_time.split(':')[0] }}"
     minute: "{{ cost_monthly_cleanup_time.split(':')[1] }}"
-    job: |
-      docker system prune -a -f --volumes && \
-      find /var/log -type f -name "*.gz" -mtime +30 -delete && \
-      find /tmp -type f -mtime +7 -delete >> /var/log/cleanup.log 2>&1
+    job: "docker system prune -a -f --volumes && find /var/log -type f -name '*.gz' -mtime +30 -delete && find /tmp -type f -mtime +7 -delete >> /var/log/cleanup.log 2>&1"
     user: root
     state: "{{ 'present' if cost_enable_monthly_cleanup else 'absent' }}"
   when: cost_enable_monthly_cleanup | default(false)

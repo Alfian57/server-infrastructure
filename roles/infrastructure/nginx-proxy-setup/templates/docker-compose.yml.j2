@@ -19,7 +19,7 @@ services:
         environment:
             - DISABLE_IPV6=true
         networks:
-            - nginx_proxy_manager
+            - nginx_proxy_manager_network
 
 volumes:
     npm_data:
@@ -28,6 +28,6 @@ volumes:
         driver: local
 
 networks:
-    nginx_proxy_manager:
+    nginx_proxy_manager_network:
         driver: bridge
-        name: nginx_proxy_manager
+        name: nginx_proxy_manager_network

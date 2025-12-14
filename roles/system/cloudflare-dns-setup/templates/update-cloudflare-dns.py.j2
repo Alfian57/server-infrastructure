@@ -7,6 +7,7 @@ Automatically creates or updates DNS records to point to current VPS IP
 import sys
 import os
 import yaml
+import argparse
 import configparser
 from typing import List, Dict, Optional
 import CloudFlare
@@ -207,6 +208,12 @@ def create_or_update_record(
 
 def main():
     """Main function"""
+    # Parse arguments
+    parser = argparse.ArgumentParser(description='Update Cloudflare DNS Records')
+    parser.add_argument('--auto', '-y', action='store_true', 
+                        help='Automatically proceed without confirmation prompt')
+    args = parser.parse_args()
+    
     print_header()
     
     # Step 1: Check requirements
@@ -295,18 +302,6 @@ def main():
                 total_fail += 1
         
         print()
-    
-    # Confirm before continuing
-    try:
-        response = input(f"{Colors.YELLOW}Proceed with DNS updates? [y/N]{Colors.NC} ").strip().lower()
-        if response not in ['y', 'yes']:
-            print_warning("Cancelled by user")
-            sys.exit(0)
-    except KeyboardInterrupt:
-        print()
-        print_warning("Cancelled by user")
-        sys.exit(0)
-    print()
     
     # Summary
     print()

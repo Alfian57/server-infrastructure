@@ -2,4 +2,5 @@
 - name: Deploy Tech-Talk application
   ansible.builtin.include_tasks: ../../common/tasks/deploy-laravel-app.yml
   vars:
-    app_name: "tech-talk"    run_seeder_on_deploy: true
+    app_name: "tech-talk"
+    run_seeder_on_deploy: true

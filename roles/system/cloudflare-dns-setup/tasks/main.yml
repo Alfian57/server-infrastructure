@@ -35,7 +35,9 @@
 
 - name: Install Python Cloudflare library in venv
   ansible.builtin.pip:
-    name: cloudflare
+    name:
+      - cloudflare
+      - pyyaml
     state: present
     virtualenv: /home/deployer/.local/cloudflare-venv
   become: true
@@ -97,7 +99,7 @@
 
 - name: Run update-cloudflare-dns to sync DNS records
   ansible.builtin.command:
-    cmd: /home/deployer/.local/cloudflare-venv/bin/python /home/deployer/.local/bin/update-cloudflare-dns
+    cmd: /home/deployer/.local/cloudflare-venv/bin/python /home/deployer/.local/bin/update-cloudflare-dns --auto
   become: true
   become_user: deployer
   register: cloudflare_dns_result
