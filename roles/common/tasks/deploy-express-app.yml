@@ -123,6 +123,20 @@
     - container_info.container.State is defined
     - container_info.container.State.Running | bool
 
+- name: Run Prisma migrations (if using Prisma)
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} npx prisma migrate deploy
+  register: prisma_migration_result
+  when: 
+    - container_info.container.State.Running | bool
+    - use_prisma | default(false) | bool
+  failed_when: false
+
+- name: Display Prisma migration result
+  ansible.builtin.debug:
+    msg: "Prisma migration result: {{ prisma_migration_result.stdout | default('No output') }}"
+  when: prisma_migration_result is defined and prisma_migration_result.stdout is defined
+
 - name: Verify API health endpoint
   ansible.builtin.uri:
     url: "http://localhost:{{ app_port }}{{ health_endpoint | default('/health') }}"

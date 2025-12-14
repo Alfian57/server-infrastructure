@@ -6,3 +6,4 @@
     requires_database: true
     create_uploads_dir: true
     app_port: 8080
+    use_prisma: true

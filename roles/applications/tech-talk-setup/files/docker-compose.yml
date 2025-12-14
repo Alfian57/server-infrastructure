@@ -2,25 +2,24 @@ services:
   tech-talk:
     image: ghcr.io/alfian57/tech-talk:latest
     container_name: tech-talk
-    env_file:
-      - .env
     restart: unless-stopped
     volumes:
+      - ./.env:/var/www/html/.env:ro
       - tech_talk_storage:/var/www/html/storage
       - tech_talk_bootstrap_cache:/var/www/html/bootstrap/cache
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost"]
+      test: ["CMD", "sh", "-c", "pidof nginx && pidof php-fpm"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
     networks:
-      - nginx_proxy_manager
+      - nginx_proxy_manager_network
       - mysql_network
     command: sh -c "php artisan config:cache && php artisan optimize && php-fpm & nginx -g 'daemon off;'"
 
 networks:
-  nginx_proxy_manager:
+  nginx_proxy_manager_network:
     external: true
   mysql_network:
     external: true

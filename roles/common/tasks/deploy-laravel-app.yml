@@ -100,6 +100,57 @@
   delay: 10
   failed_when: false
 
+- name: Clear bootstrap cache (prevent serialized closure errors)
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} rm -f /var/www/html/bootstrap/cache/*.php
+  when: container_info.container.State.Health.Status == 'healthy'
+  failed_when: false
+
+- name: Check if this is a fresh deployment (no migration table exists)
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan migrate:status
+  register: migration_status
+  failed_when: false
+  changed_when: false
+
+- name: Run database migrations
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan migrate --force
+  register: migration_result
+  when: container_info.container.State.Health.Status == 'healthy'
+
+- name: Display migration result
+  ansible.builtin.debug:
+    msg: "Migration result: {{ migration_result.stdout | default('No output') }}"
+  when: migration_result is defined and migration_result.stdout is defined
+
+- name: Check if seeder should run (fresh deployment only)
+  ansible.builtin.set_fact:
+    run_seeder: "{{ run_seeder_on_deploy | default(false) }}"
+
+- name: Run database seeders (fresh deployment only)
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan db:seed --force
+  register: seeder_result
+  when: 
+    - run_seeder | bool
+    - container_info.container.State.Health.Status == 'healthy'
+    - "'Nothing to migrate' not in (migration_result.stdout | default(''))"
+  failed_when: false
+
+- name: Clear and cache config
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan {{ item }}
+  loop:
+    - config:clear
+    - config:cache
+    - route:clear
+    - route:cache
+    - view:clear
+    - view:cache
+  when: container_info.container.State.Health.Status == 'healthy'
+  failed_when: false
+
 - name: Display deployment status
   ansible.builtin.debug:
     msg: "{{ app_name }} deployment {{ 'successful' if container_info.container.State.Health.Status == 'healthy' else 'completed but may need verification' }}"

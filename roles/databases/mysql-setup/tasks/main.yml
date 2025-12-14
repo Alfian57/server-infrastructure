@@ -52,3 +52,14 @@
      container_info.container.State.Health.Status == "starting")
   retries: 12
   delay: 10
+
+- name: Create application databases
+  ansible.builtin.command:
+    cmd: >-
+      docker exec mysql-db mysql -u root -p'{{ vault_mysql_root_password }}'
+      -e "CREATE DATABASE IF NOT EXISTS {{ item }} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+  loop: "{{ mysql_databases | default([]) }}"
+  register: db_creation
+  changed_when: "'Query OK' in db_creation.stdout or db_creation.rc == 0"
+  failed_when: false
+  no_log: true

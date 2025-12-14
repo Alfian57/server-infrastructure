@@ -20,3 +20,13 @@ phpmyadmin_version: "5.2.2"
 phpmyadmin_port: "8081"
 phpmyadmin_upload_limit: "50M"
 phpmyadmin_memory_limit: "128M"
+
+# List of databases to create for applications
+mysql_databases:
+  - materi_ku
+  - panca_trivia
+  - posyandu
+  - presensi_skansaba
+  - ruang_istirahat
+  - solvo
+  - tech_talk

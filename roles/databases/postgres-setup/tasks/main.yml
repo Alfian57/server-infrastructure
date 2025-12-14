@@ -52,3 +52,13 @@
      container_info.container.State.Health.Status == "starting")
   retries: 12
   delay: 10
+
+- name: Create application databases
+  ansible.builtin.command:
+    cmd: >-
+      docker exec postgres-db psql -U postgres
+      -c "SELECT 'CREATE DATABASE {{ item }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ item }}')\gexec"
+  loop: "{{ postgres_databases | default([]) }}"
+  register: db_creation
+  changed_when: "'CREATE DATABASE' in db_creation.stdout"
+  failed_when: false

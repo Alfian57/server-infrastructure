@@ -15,7 +15,7 @@ log ""
 # Application containers (Laravel apps)
 APP_CONTAINERS=(materi-ku panca-trivia ruang-istirahat tech-talk)
 for container in "${APP_CONTAINERS[@]}"; do
-    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+    if docker ps --format "{% raw %}{{.Names}}{% endraw %}" | grep -q "^${container}$"; then
         log "Setting limits for application container: $container"
         docker update \
             --cpus="{{ cost_app_container_cpu_limit }}" \
@@ -31,7 +31,7 @@ done
 # Database containers
 DB_CONTAINERS=(mysql postgres redis)
 for container in "${DB_CONTAINERS[@]}"; do
-    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+    if docker ps --format "{% raw %}{{.Names}}{% endraw %}" | grep -q "^${container}$"; then
         log "Setting limits for database container: $container"
         docker update \
             --cpus="{{ cost_db_container_cpu_limit }}" \
@@ -47,7 +47,7 @@ done
 # Infrastructure containers
 INFRA_CONTAINERS=(npm autoheal)
 for container in "${INFRA_CONTAINERS[@]}"; do
-    if docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+    if docker ps --format "{% raw %}{{.Names}}{% endraw %}" | grep -q "^${container}$"; then
         log "Setting limits for infrastructure container: $container"
         docker update \
             --cpus="{{ cost_infra_container_cpu_limit }}" \
@@ -64,6 +64,6 @@ log ""
 log "=== Resource Limits Applied ==="
 log ""
 log "Current container stats:"
-docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | tee -a "$LOG_FILE"
+docker stats --no-stream --format "table {% raw %}{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}{% endraw %}" | tee -a "$LOG_FILE"
 
 exit 0

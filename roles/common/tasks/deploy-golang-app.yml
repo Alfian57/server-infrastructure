@@ -99,6 +99,13 @@
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
 
+- name: Check if .env.j2 template exists
+  ansible.builtin.stat:
+    path: "{{ role_path }}/templates/.env.j2"
+  delegate_to: localhost
+  become: false
+  register: env_template_check
+
 - name: Generate .env from vault credentials
   ansible.builtin.template:
     src: .env.j2
@@ -106,7 +113,7 @@
     mode: "0600"
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
-  when: lookup('first_found', dict(files=['.env.j2'], paths=['templates'], errors='ignore'))
+  when: env_template_check.stat.exists | default(false)
 
 - name: Copy config files to server
   ansible.builtin.copy:

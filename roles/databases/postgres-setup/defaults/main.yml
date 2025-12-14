@@ -18,3 +18,9 @@ postgres_custom_config: false
 postgres_enable_pgadmin: true
 pgadmin_version: "8.4"
 pgadmin_port: "8082"
+
+# List of databases to create for applications
+postgres_databases:
+  - campus_project_hub
+  - file_pod
+  - ruang_tenang

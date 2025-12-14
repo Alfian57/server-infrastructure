@@ -43,14 +43,15 @@
 
 - name: Authenticate GitHub CLI with token
   ansible.builtin.shell: |
-    echo "{{ vault_github_token }}" | gh auth login --with-token
+    set -o pipefail
+    echo "{{ vault_github_token }}" | gh auth login --with-token 2>&1 || true
   args:
     executable: /bin/bash
   become: true
   become_user: deployer
   register: gh_auth
-  changed_when: gh_auth.rc == 0
-  no_log: true
+  changed_when: "'Logged in' in gh_auth.stdout or gh_auth.rc == 0"
+  failed_when: false
 
 - name: Verify GitHub CLI authentication
   ansible.builtin.command: gh auth status

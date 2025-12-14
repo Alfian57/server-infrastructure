@@ -59,6 +59,13 @@
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
 
+- name: Check if .env file exists
+  ansible.builtin.stat:
+    path: "{{ role_path }}/files/.env"
+  delegate_to: localhost
+  become: false
+  register: env_file_check
+
 - name: Copy .env file to server (if exists)
   ansible.builtin.copy:
     src: .env
@@ -66,7 +73,7 @@
     mode: "0600"
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
-  when: lookup('first_found', dict(files=['.env'], paths=['files'], errors='ignore'))
+  when: env_file_check.stat.exists | default(false)
 
 - name: Pull latest Docker image
   community.docker.docker_image:

@@ -3,3 +3,4 @@
   ansible.builtin.include_tasks: ../../common/tasks/deploy-laravel-app.yml
   vars:
     app_name: "posyandu"
+    run_seeder_on_deploy: true
