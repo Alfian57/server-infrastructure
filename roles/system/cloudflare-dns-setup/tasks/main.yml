@@ -36,7 +36,7 @@
 - name: Install Python Cloudflare library in venv
   ansible.builtin.pip:
     name:
-      - cloudflare
+      - "cloudflare<3"
       - pyyaml
     state: present
     virtualenv: /home/deployer/.local/cloudflare-venv
