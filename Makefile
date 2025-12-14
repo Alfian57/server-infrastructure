@@ -62,6 +62,15 @@ switch-to-ssh: ## Switch inventory to use SSH key (after bootstrap)
 deploy: check ## Full deployment (use after bootstrap)
 	@ansible-playbook $(PLAYBOOK) $(OPTS)
 
+deploy-fresh: check ## Fresh deployment with seeders
+	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true"
+
+deploy-script: ## Full deployment using script (interactive)
+	@./scripts/full-deploy.sh
+
+deploy-dry-run: ## Dry run deployment
+	@./scripts/full-deploy.sh --dry-run
+
 setup: check ## Full setup (alias for deploy)
 	@ansible-playbook $(PLAYBOOK) $(OPTS)
 

@@ -103,7 +103,100 @@ cd server-infra-with-ansible
 make install
 ```
 
-### 2. Bootstrap SSH Key (Fresh VPS dengan Password)
+### 2. Konfigurasi Vault (Credentials)
+```bash
+# Buat vault password
+echo "your-secure-password" > .vault_pass
+chmod 600 .vault_pass
+
+# Copy dan edit vault credentials
+cp group_vars/all/vault.yml.example group_vars/all/vault.yml
+make vault-edit
+```
+
+### 3. Update Inventory
+```bash
+# Edit dengan server IP Anda
+nano inventory/hosts.ini
+
+# Isi dengan:
+# [all]
+# YOUR_SERVER_IP ansible_user=root ansible_port=22
+```
+
+### 4. Test Connection
+```bash
+make ping
+```
+
+### 5. 🚀 One-Command Full Deployment
+```bash
+# Full deployment (RECOMMENDED)
+make deploy
+
+# Atau dengan script interaktif
+./scripts/full-deploy.sh
+
+# Fresh deployment dengan seeders (untuk pertama kali)
+make deploy-fresh
+```
+
+## 🎯 Deployment Options
+
+### One-Command Options
+
+| Command | Description |
+|---------|-------------|
+| `make deploy` | Full deployment semua komponen |
+| `make deploy-fresh` | Fresh deployment dengan database seeders |
+| `make deploy-script` | Interactive deployment dengan script |
+| `make deploy-dry-run` | Preview perubahan tanpa eksekusi |
+
+### Script Options
+```bash
+./scripts/full-deploy.sh [options]
+
+Options:
+  --dry-run     Preview perubahan (tidak ada eksekusi)
+  --verbose     Mode verbose untuk debugging
+  --skip-apt    Skip apt update (lebih cepat)
+  --apps-only   Deploy aplikasi saja
+  --infra-only  Deploy infrastructure saja
+  --db-only     Deploy databases saja
+  --fresh       Fresh install dengan seeders
+```
+
+### Selective Deployment (by Category)
+```bash
+make system          # System setup (apt, users, git)
+make security        # Security hardening (ufw, fail2ban, ssh)
+make infrastructure  # Docker, Nginx Proxy Manager, Autoheal
+make database        # MySQL, PostgreSQL, Redis
+make application     # Deploy semua applications
+make optimization    # Cost optimization
+```
+
+### Individual Roles
+```bash
+# Infrastructure
+make docker          # Docker setup
+make nginx           # Nginx Proxy Manager
+make autoheal        # Container auto-healing
+
+# Databases
+make mysql           # MySQL + phpMyAdmin
+make postgres        # PostgreSQL + pgAdmin
+make redis           # Redis + Commander
+
+# Specific Applications
+make materi-ku       # Deploy Materi-Ku app
+make panca-trivia    # Deploy Panca Trivia app
+# ... dan lainnya
+```
+
+## 🔐 Untuk Server Baru (Fresh VPS)
+
+### Bootstrap SSH Key (Fresh VPS dengan Password)
 ```bash
 # Jika VPS masih menggunakan password authentication
 # Jalankan bootstrap untuk setup SSH key
@@ -119,69 +212,13 @@ make bootstrap
 make switch-to-ssh
 ```
 
-### 3. Full Deployment
+### Kemudian Deploy
 ```bash
-# Deploy semua infrastructure
-make deploy
-
-# Atau deploy per kategori
-make system          # System setup (apt, users, git)
-make security        # Security hardening
-make infrastructure  # Docker, Nginx Proxy, MinIO
-make database        # MySQL, PostgreSQL, Redis
-make application     # Deploy all applications
-```
-
-### 4. Update GitHub Secrets
-```bash
-# SSH ke server
-make ssh
-
-# Jalankan script update secrets
-update-github-secrets
-```
-
-# Install dependencies
-make install
-```
-
-### 2. Konfigurasi Vault
-```bash
-# Buat vault dari template
-make vault-create
-
-# Edit credentials
-make vault-edit
-
-# Encrypt vault
-make vault-encrypt
-```
-
-# Atau manual
-echo "your-vault-password" > .vault_pass
-chmod 600 .vault_pass
-```
-
-### 3. Update Inventory
-```bash
-# Edit dengan server IP Anda
-nano inventory/hosts.ini
-```
-
-### 4. Test Connection
-```bash
+# Test koneksi
 make ping
-```
 
-### 5. Deploy!
-```bash
-# Full deployment
-make setup
-
-# Atau selective deployment
-make infrastructure    # Deploy Docker, Nginx, Autoheal
-make database         # Deploy MySQL, PostgreSQL, Redis
-make application      # Deploy semua applications
+# Deploy semua
+make deploy
 ```
 
 ## 🚀 Instalasi
