@@ -6,3 +6,6 @@
     requires_database: true
     requires_redis: false
     create_data_dir: true
+    # Enable fresh migration + seeding on first deploy (set to false after)
+    run_fresh_migrate: "{{ campus_project_hub_api_fresh_migrate | default(false) }}"
+    run_seeder: "{{ campus_project_hub_api_run_seeder | default(false) }}"

@@ -91,13 +91,30 @@
     owner: "deployer"
     group: "deployer"
 
-- name: Copy docker-compose file to server
+- name: Check if docker-compose.yml.j2 template exists
+  ansible.builtin.stat:
+    path: "{{ role_path }}/templates/docker-compose.yml.j2"
+  delegate_to: localhost
+  become: false
+  register: compose_template_check
+
+- name: Copy docker-compose file to server (static)
   ansible.builtin.copy:
     src: docker-compose.yml
     dest: "{{ app_install_dir }}/docker-compose.yml"
     mode: "0644"
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
+  when: not compose_template_check.stat.exists | default(true)
+
+- name: Generate docker-compose from template
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ ansible_user | default('root') }}"
+    group: "{{ ansible_user | default('root') }}"
+  when: compose_template_check.stat.exists | default(false)
 
 - name: Check if .env.j2 template exists
   ansible.builtin.stat:

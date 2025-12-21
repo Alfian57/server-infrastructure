@@ -132,6 +132,14 @@
     owner: deployer
     group: deployer
 
+- name: Copy update-repo-settings script to server
+  ansible.builtin.template:
+    src: update-repo-settings.sh.j2
+    dest: /home/deployer/.local/bin/update-repo-settings
+    mode: "0755"
+    owner: deployer
+    group: deployer
+
 - name: Add ~/.local/bin to PATH in deployer's bashrc
   ansible.builtin.lineinfile:
     path: /home/deployer/.bashrc
@@ -160,14 +168,33 @@
   tags:
     - github-secrets
 
+- name: Run update-repo-settings to set workflow permissions
+  ansible.builtin.command:
+    cmd: /home/deployer/.local/bin/update-repo-settings -y
+  become: true
+  become_user: deployer
+  register: repo_settings_result
+  changed_when: repo_settings_result.rc == 0
+  failed_when: false
+  tags:
+    - github-repo-settings
+
+- name: Display repo settings update output
+  ansible.builtin.debug:
+    msg: "{{ repo_settings_result.stdout_lines | default(['No output']) }}"
+  when: repo_settings_result.stdout_lines is defined
+  tags:
+    - github-repo-settings
+
 - name: Display completion message
   ansible.builtin.debug:
     msg: |
       ✓ GitHub CLI setup complete on server!
       ✓ update-github-secrets script installed to /home/deployer/.local/bin/
+      ✓ update-repo-settings script installed to /home/deployer/.local/bin/
       ✓ GitHub secrets have been automatically synced to all repositories
+      ✓ GitHub repo workflow permissions have been set to write
       
-      To manually update secrets, SSH to server and run:
-        update-github-secrets                    # Update default repos (interactive)
-        update-github-secrets -y                 # Update default repos (non-interactive)
-        update-github-secrets repo1 repo2        # Update custom repos
+      To manually update settings, SSH to server and run:
+        update-github-secrets -y      # Sync secrets to all repos
+        update-repo-settings -y       # Set workflow permissions

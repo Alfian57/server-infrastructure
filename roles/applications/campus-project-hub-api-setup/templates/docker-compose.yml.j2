@@ -4,6 +4,10 @@ services:
     container_name: campus-project-hub-api
     env_file:
       - .env
+    environment:
+      - RUN_MIGRATE={{ run_migrate | default(false) | string | lower }}
+      - RUN_MIGRATE_FRESH={{ run_fresh_migrate | default(false) | string | lower }}
+      - RUN_SEEDER={{ run_seeder | default(false) | string | lower }}
     restart: unless-stopped
     volumes:
       - campus_project_hub_api_uploads:/app/uploads

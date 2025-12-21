@@ -1,0 +1,156 @@
+#!/bin/bash
+
+# =============================================================================
+# Update GitHub Repository Settings for CI/CD
+# =============================================================================
+# This script updates GitHub Actions workflow permissions for all repositories
+# to allow writing packages (GHCR push)
+#
+# Usage:
+#   ./update-repo-settings -y
+# =============================================================================
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Parse arguments
+NON_INTERACTIVE=false
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -y|--yes)
+      NON_INTERACTIVE=true
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+# GitHub Owner
+GITHUB_OWNER="alfian57"
+
+# Repositories to update
+REPOS=(
+  "materi-ku"
+  "panca-trivia"
+  "ruang-istirahat"
+  "tech-talk"
+  "posyandu"
+  "solvo"
+  "Presensi-Skansaba-Web"
+  "campus-project-hub-api"
+  "ruang-tenang-api"
+  "campus-project-hub-web"
+  "personal-portofolio"
+  "ruang-tenang-web"
+  "file-pod-api"
+)
+
+print_header() {
+  echo ""
+  echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
+  echo -e "${BLUE}║${NC}  ${GREEN}Update GitHub Repository Settings${NC}                         ${BLUE}║${NC}"
+  echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
+  echo ""
+}
+
+print_step() {
+  echo -e "${BLUE}▶${NC} $1"
+}
+
+print_success() {
+  echo -e "${GREEN}✓${NC} $1"
+}
+
+print_error() {
+  echo -e "${RED}✗${NC} $1"
+}
+
+print_warning() {
+  echo -e "${YELLOW}⚠${NC} $1"
+}
+
+# Check gh CLI is authenticated
+check_auth() {
+  print_step "Checking GitHub CLI authentication..."
+  if ! gh auth status &>/dev/null; then
+    print_error "GitHub CLI is not authenticated. Please run: gh auth login"
+    exit 1
+  fi
+  print_success "GitHub CLI is authenticated"
+}
+
+# Set workflow permissions for a repository
+set_workflow_permissions() {
+  local repo="$1"
+  local full_repo="${GITHUB_OWNER}/${repo}"
+  
+  print_step "Setting workflow permissions for ${full_repo}..."
+  
+  # Use GitHub API to set Actions permissions
+  # default_workflow_permissions: "write" allows workflows to write packages
+  if gh api \
+    --method PUT \
+    -H "Accept: application/vnd.github+json" \
+    "/repos/${full_repo}/actions/permissions/workflow" \
+    -f default_workflow_permissions='write' \
+    -F can_approve_pull_request_reviews=true &>/dev/null; then
+    print_success "Set workflow permissions for ${repo}"
+    return 0
+  else
+    print_error "Failed to set workflow permissions for ${repo}"
+    return 1
+  fi
+}
+
+# Main
+print_header
+
+# Confirmation
+if [ "$NON_INTERACTIVE" != "true" ]; then
+  echo "This will update workflow permissions for ${% raw %}{#{% endraw %}REPOS[@]} repositories."
+  echo "Repositories: ${REPOS[*]}"
+  echo ""
+  read -p "Continue? [y/N] " -n 1 -r
+  echo ""
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "Aborted."
+    exit 0
+  fi
+fi
+
+check_auth
+
+echo ""
+print_step "Updating workflow permissions for ${% raw %}{#{% endraw %}REPOS[@]} repositories..."
+echo ""
+
+SUCCESS_COUNT=0
+FAIL_COUNT=0
+
+for repo in "${REPOS[@]}"; do
+  if set_workflow_permissions "$repo"; then
+    ((SUCCESS_COUNT++))
+  else
+    ((FAIL_COUNT++))
+  fi
+done
+
+echo ""
+echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}Summary:${NC}"
+echo -e "  Successful: ${SUCCESS_COUNT}"
+echo -e "  Failed: ${FAIL_COUNT}"
+echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+echo ""
+
+if [ $FAIL_COUNT -gt 0 ]; then
+  exit 1
+fi

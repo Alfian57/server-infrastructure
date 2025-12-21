@@ -10,7 +10,7 @@
 #   make trigger-actions
 
 - name: Trigger GitHub Actions Workflows
-  hosts: web_servers
+  hosts: all
   become: true
   
   roles:
