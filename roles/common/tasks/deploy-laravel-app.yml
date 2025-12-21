@@ -6,6 +6,11 @@
 #   - github_username: GitHub username for GHCR authentication
 #   - github_token: GitHub personal access token
 #   - docker_networks: List of Docker networks to connect to (default: ['nginx_proxy_manager_network', 'mysql_network'])
+#
+# Optional variables:
+#   - run_fresh_migrate: If true, runs migrate:fresh + seed instead of migrate (default: false)
+#                        WARNING: This destroys all data in the database!
+#   - run_seeder_on_deploy: If true, runs seeder on fresh deployment (default: false)
 
 - name: Set application variables
   ansible.builtin.set_fact:
@@ -41,6 +46,14 @@
   ansible.builtin.copy:
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
+    mode: "0755"
+    owner: "deployer"
+    group: "deployer"
+
+- name: Copy artisan-commands.sh helper script to server
+  ansible.builtin.copy:
+    src: ../../common/files/artisan-commands.sh
+    dest: "{{ app_install_dir }}/artisan-commands.sh"
     mode: "0755"
     owner: "deployer"
     group: "deployer"
@@ -112,16 +125,50 @@
   register: migration_status
   failed_when: false
   changed_when: false
+  when: not (run_fresh_migrate | default(false) | bool)
 
 - name: Set fresh deployment flag
   ansible.builtin.set_fact:
     is_fresh_deployment: "{{ migration_status.rc != 0 or 'Migration table not found' in (migration_status.stderr | default('')) }}"
+  when: not (run_fresh_migrate | default(false) | bool)
 
-- name: Run database migrations
+# Force refresh mode: migrate:fresh + seed (use with caution - destroys all data)
+- name: Run migrate:fresh for force refresh (WARNING - destroys data)
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan migrate:fresh --force
+  register: fresh_migrate_result
+  when:
+    - run_fresh_migrate | default(false) | bool
+    - container_info.container.State.Health.Status == 'healthy'
+  tags:
+    - fresh-deploy
+
+- name: Display migrate:fresh result
+  ansible.builtin.debug:
+    msg: "Migrate:fresh result: {{ fresh_migrate_result.stdout | default('No output') }}"
+  when: fresh_migrate_result is defined and fresh_migrate_result.stdout is defined
+  tags:
+    - fresh-deploy
+
+- name: Run database seeders after fresh migrate
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan db:seed --force
+  register: seeder_fresh_result
+  when:
+    - run_fresh_migrate | default(false) | bool
+    - container_info.container.State.Health.Status == 'healthy'
+  failed_when: false
+  tags:
+    - fresh-deploy
+
+# Normal mode: migrate only
+- name: Run database migrations (normal mode)
   ansible.builtin.command:
     cmd: docker exec {{ app_name }} php artisan migrate --force
   register: migration_result
-  when: container_info.container.State.Health.Status == 'healthy'
+  when:
+    - not (run_fresh_migrate | default(false) | bool)
+    - container_info.container.State.Health.Status == 'healthy'
 
 - name: Display migration result
   ansible.builtin.debug:
@@ -132,14 +179,15 @@
   ansible.builtin.set_fact:
     run_seeder: "{{ run_seeder_on_deploy | default(false) }}"
 
-- name: Run database seeders (fresh deployment only)
+- name: Run database seeders (fresh deployment only - normal mode)
   ansible.builtin.command:
     cmd: docker exec {{ app_name }} php artisan db:seed --force
   register: seeder_result
   when: 
     - run_seeder | bool
+    - not (run_fresh_migrate | default(false) | bool)
     - container_info.container.State.Health.Status == 'healthy'
-    - is_fresh_deployment | bool
+    - is_fresh_deployment | default(false) | bool
   failed_when: false
 
 - name: Clear and cache config
@@ -157,4 +205,6 @@
 
 - name: Display deployment status
   ansible.builtin.debug:
-    msg: "{{ app_name }} deployment {{ 'successful' if container_info.container.State.Health.Status == 'healthy' else 'completed but may need verification' }}"
+    msg: |
+      {{ app_name }} deployment {{ 'successful' if container_info.container.State.Health.Status == 'healthy' else 'completed but may need verification' }}
+      Mode: {{ 'FRESH (migrate:fresh + seed)' if run_fresh_migrate | default(false) | bool else 'NORMAL (migrate only)' }}

@@ -181,6 +181,17 @@ ruang-istirahat: check ## Ruang Istirahat app
 tech-talk: check ## Tech Talk app
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags tech-talk-setup
 
+##@ GitHub Actions
+
+trigger-actions: ## ⚡ Trigger all GitHub Actions workflows
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@echo "  ⚡ Triggering GitHub Actions for all repositories"
+	@echo "═══════════════════════════════════════════════════════════════════"
+	@ansible-playbook playbooks/trigger-github-actions.yml $(OPTS)
+
+trigger-actions-dry: ## Dry run trigger actions
+	@ansible-playbook playbooks/trigger-github-actions.yml $(OPTS) --check
+
 ##@ Security Operations
 
 security-ufw: check ## UFW firewall only

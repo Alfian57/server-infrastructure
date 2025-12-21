@@ -37,6 +37,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   - subdomain: "panca-trivia"
     scheme: "http"
@@ -44,6 +45,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   - subdomain: "ruang-istirahat"
     scheme: "http"
@@ -51,6 +53,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   - subdomain: "tech-talk"
     scheme: "http"
@@ -58,6 +61,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   - subdomain: "posyandu"
     scheme: "http"
@@ -65,6 +69,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   - subdomain: "presensi-skansaba-web"
     scheme: "http"
@@ -72,6 +77,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   # Solvo - Custom Domain
   - domain: "solvo-tech.site"
@@ -80,6 +86,7 @@ proxy_hosts:
     forward_port: 80
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   # ═══════════════════════════════════════════════════════════
   # Go API Applications
@@ -90,6 +97,7 @@ proxy_hosts:
     forward_port: 8080
     caching_enabled: false
     websocket_support: false
+    cloudflare_flexible: true
 
   # Ruang Tenang API - Custom Domain
   - domain: "api.ruang-tenang.site"
@@ -98,6 +106,7 @@ proxy_hosts:
     forward_port: 8080
     caching_enabled: false
     websocket_support: false
+    cloudflare_flexible: true
 
   # ═══════════════════════════════════════════════════════════
   # Next.js Applications
@@ -108,6 +117,7 @@ proxy_hosts:
     forward_port: 3000
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   # Ruang Tenang Web - Custom Domain
   - domain: "ruang-tenang.site"
@@ -116,6 +126,7 @@ proxy_hosts:
     forward_port: 3000
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   # Personal Portfolio - Root Domain
   - domain: "alfian-gading.site"
@@ -124,6 +135,7 @@ proxy_hosts:
     forward_port: 3000
     caching_enabled: true
     websocket_support: false
+    cloudflare_flexible: true
 
   # ═══════════════════════════════════════════════════════════
   # Node.js/Express Applications
@@ -134,3 +146,4 @@ proxy_hosts:
     forward_port: 8080
     caching_enabled: false
     websocket_support: false
+    cloudflare_flexible: true

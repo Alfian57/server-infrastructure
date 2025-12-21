@@ -386,7 +386,7 @@
       forward_host: "{{ item.forward_host }}"
       forward_port: "{{ item.forward_port }}"
       certificate_id: "{{ certificate_id }}"
-      ssl_forced: 1
+      ssl_forced: "{{ 0 if item.cloudflare_flexible | default(false) else 1 }}"
       caching_enabled: "{{ item.caching_enabled | default(false) | int }}"
       block_exploits: 1
       advanced_config: ""
@@ -396,7 +396,7 @@
       access_list_id: 0
       allow_websocket_upgrade: "{{ item.websocket_support | default(false) | int }}"
       http2_support: 1
-      hsts_enabled: 1
+      hsts_enabled: "{{ 0 if item.cloudflare_flexible | default(false) else 1 }}"
       hsts_subdomains: 0
     status_code: [200, 201]
   vars:

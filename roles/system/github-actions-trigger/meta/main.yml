@@ -1,0 +1,5 @@
+---
+# Role metadata for github-actions-trigger
+
+dependencies:
+  - role: github-cli-setup  # Ensures gh CLI is installed and authenticated

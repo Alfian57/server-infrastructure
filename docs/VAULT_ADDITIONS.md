@@ -79,12 +79,25 @@ vault_presensi_skansaba_web_db_password: "{{ vault_mysql_presensi_skansaba_web_p
 # ============================================================================
 # Application: Campus Project Hub API (Go Gin)
 # ============================================================================
+vault_campus_project_hub_api_base_url: "https://campus-project-hub-api.alfian-gading.site"
 vault_campus_project_hub_api_db_host: "postgres-db"
 vault_campus_project_hub_api_db_port: "5432"
 vault_campus_project_hub_api_db_name: "{{ vault_postgres_campus_project_hub_api_database }}"
 vault_campus_project_hub_api_db_user: "{{ vault_postgres_campus_project_hub_api_username }}"
 vault_campus_project_hub_api_db_password: "{{ vault_postgres_campus_project_hub_api_password }}"
 vault_campus_project_hub_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
+# OAuth - Google
+vault_campus_project_hub_api_google_redirect_url: "https://campus-project-hub-api.alfian-gading.site/api/v1/auth/google/callback"
+# OAuth - GitHub
+vault_campus_project_hub_api_github_client_id: "your-github-client-id"
+vault_campus_project_hub_api_github_client_secret: "your-github-client-secret"
+vault_campus_project_hub_api_github_redirect_url: "https://campus-project-hub-api.alfian-gading.site/api/v1/auth/github/callback"
+# Midtrans
+vault_campus_project_hub_api_midtrans_server_key: ""
+vault_campus_project_hub_api_midtrans_client_key: ""
+vault_campus_project_hub_api_midtrans_is_production: false
+# Frontend URL
+vault_campus_project_hub_api_frontend_url: "https://campus-project-hub-web.alfian-gading.site"
 
 # ============================================================================
 # Application: Campus Project Hub Web (Next.js)
@@ -94,8 +107,14 @@ vault_campus_project_hub_web_api_url: "https://campus-project-hub-api.alfian-gad
 # ============================================================================
 # Application: File Pod API (Node.js Express + Prisma)
 # ============================================================================
+vault_file_pod_api_app_url: "https://file-pod-api.alfian-gading.site"
+vault_file_pod_api_cors_origin: "https://file-pod-api.alfian-gading.site"
 vault_file_pod_api_database_url: "postgresql://{{ vault_postgres_file_pod_api_username }}:{{ vault_postgres_file_pod_api_password }}@postgres-db:5432/{{ vault_postgres_file_pod_api_database }}"
 vault_file_pod_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
+# OAuth Configuration
+vault_file_pod_api_google_client_id: "your-google-client-id"
+vault_file_pod_api_github_client_id: "your-github-client-id"
+vault_file_pod_api_github_client_secret: "your-github-client-secret"
 
 # ============================================================================
 # Application: Personal Portofolio (Next.js)
@@ -111,8 +130,16 @@ vault_ruang_tenang_api_db_name: "{{ vault_postgres_ruang_tenang_api_database }}"
 vault_ruang_tenang_api_db_user: "{{ vault_postgres_ruang_tenang_api_username }}"
 vault_ruang_tenang_api_db_password: "{{ vault_postgres_ruang_tenang_api_password }}"
 vault_ruang_tenang_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
+# AI Chat (Gemini API)
+vault_ruang_tenang_api_gemini_api_key: "your-gemini-api-key"
 
 # ============================================================================
 # Application: Ruang Tenang Web (Next.js)
 # ============================================================================
 vault_ruang_tenang_web_api_url: "https://ruang-tenang-api.alfian-gading.site/api"
+
+# ============================================================================
+# Application: File Pod Mobile (Flutter)
+# ============================================================================
+# GitHub repository variable for CI/CD build
+vault_file_pod_mobile_base_url: "https://file-pod-api.alfian-gading.site"

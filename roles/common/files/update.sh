@@ -23,7 +23,14 @@ log() {
     shift
     local message="$@"
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    echo "[${timestamp}] [${level}] ${message}" | tee -a "${LOG_FILE}"
+    
+    # Print to stdout
+    echo "[${timestamp}] [${level}] ${message}"
+    
+    # Try to log to file if directory is writable
+    if [[ -w "$(dirname "${LOG_FILE}")" ]] || [[ -w "${LOG_FILE}" ]]; then
+        echo "[${timestamp}] [${level}] ${message}" >> "${LOG_FILE}" 2>/dev/null || true
+    fi
 }
 
 # Error handler
@@ -32,8 +39,18 @@ error_exit() {
     exit 1
 }
 
-# Create log directory if it doesn't exist
-mkdir -p "$(dirname "${LOG_FILE}")"
+# Create log directory if it doesn't exist (try with sudo if needed)
+if [[ ! -d "$(dirname "${LOG_FILE}")" ]]; then
+    mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || \
+    sudo mkdir -p "$(dirname "${LOG_FILE}")" 2>/dev/null || \
+    log "WARN" "Could not create log directory, logging to stdout only"
+fi
+
+# Make log directory writable if possible
+if [[ -d "$(dirname "${LOG_FILE}")" ]] && [[ ! -w "$(dirname "${LOG_FILE}")" ]]; then
+    sudo chown -R $(whoami):$(whoami) "$(dirname "${LOG_FILE}")" 2>/dev/null || \
+    log "WARN" "Could not set log directory permissions"
+fi
 
 log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
 
@@ -43,9 +60,25 @@ log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
 # Validate password file exists
 [[ -f "${PASSWORD_FILE}" ]] || error_exit "Password file not found: ${PASSWORD_FILE}"
 
-# Login to registry
+# Login to registry (try with sudo if password file is not readable)
 log "INFO" "Logging in to ${REGISTRY}"
-if cat "${PASSWORD_FILE}" | docker login "${REGISTRY}" --username "${REGISTRY_USER}" --password-stdin > /dev/null 2>&1; then
+LOGIN_SUCCESS=false
+
+# Try direct read first
+if [[ -r "${PASSWORD_FILE}" ]]; then
+    if cat "${PASSWORD_FILE}" | docker login "${REGISTRY}" --username "${REGISTRY_USER}" --password-stdin > /dev/null 2>&1; then
+        LOGIN_SUCCESS=true
+    fi
+fi
+
+# Try with sudo if direct read failed
+if [[ "${LOGIN_SUCCESS}" != "true" ]]; then
+    if sudo cat "${PASSWORD_FILE}" 2>/dev/null | docker login "${REGISTRY}" --username "${REGISTRY_USER}" --password-stdin > /dev/null 2>&1; then
+        LOGIN_SUCCESS=true
+    fi
+fi
+
+if [[ "${LOGIN_SUCCESS}" == "true" ]]; then
     log "INFO" "Successfully logged in to ${REGISTRY}"
 else
     error_exit "Failed to login to ${REGISTRY}"
@@ -61,7 +94,13 @@ fi
 
 # Deploy containers with new images
 log "INFO" "Deploying containers"
-if docker compose -f "${COMPOSE_FILE}" up -d; then
+
+# Stop existing containers first to avoid "container is running" error
+log "INFO" "Stopping existing containers..."
+docker compose -f "${COMPOSE_FILE}" down --remove-orphans 2>/dev/null || true
+
+# Start containers with new images
+if docker compose -f "${COMPOSE_FILE}" up -d --force-recreate; then
     log "INFO" "Successfully deployed containers"
 else
     error_exit "Failed to deploy containers"

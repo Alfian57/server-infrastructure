@@ -1,0 +1,18 @@
+---
+# Playbook: Trigger GitHub Actions
+# =================================
+# Triggers workflow_dispatch on all configured GitHub repositories
+#
+# Usage:
+#   ansible-playbook playbooks/trigger-github-actions.yml -i inventory/hosts.ini --vault-password-file=.vault_pass -e @group_vars/all/vault.yml
+#
+# Or via Makefile:
+#   make trigger-actions
+
+- name: Trigger GitHub Actions Workflows
+  hosts: web_servers
+  become: true
+  
+  roles:
+    - role: system/github-actions-trigger
+      tags: [github-actions-trigger]
