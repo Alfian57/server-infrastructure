@@ -54,10 +54,11 @@
   delay: 10
 
 - name: Create application databases
-  ansible.builtin.command:
-    cmd: >-
-      docker exec postgres-db psql -U root -d postgres
-      -c "SELECT 'CREATE DATABASE {{ item }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ item }}')\gexec"
+  ansible.builtin.shell:
+    cmd: |
+      docker exec postgres-db psql -U root -d postgres -tc \
+        "SELECT 1 FROM pg_database WHERE datname = '{{ item }}'" | grep -q 1 || \
+      docker exec postgres-db psql -U root -d postgres -c "CREATE DATABASE {{ item }}"
   loop: "{{ postgres_databases | default([]) }}"
   register: db_creation
   changed_when: "'CREATE DATABASE' in db_creation.stdout"
