@@ -7,3 +7,7 @@
     create_uploads_dir: true
     app_port: 8080
     use_prisma: true
+    # Enable fresh migration on first deploy (set to false after)
+    run_migrate: "{{ file_pod_api_run_migrate | default(true) }}"
+    run_fresh_migrate: "{{ file_pod_api_fresh_migrate | default(false) }}"
+    run_seeder: "{{ file_pod_api_run_seeder | default(false) }}"
