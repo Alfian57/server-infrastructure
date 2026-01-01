@@ -62,6 +62,8 @@ log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
 
 # Login to registry (try with sudo if password file is not readable)
 log "INFO" "Logging in to ${REGISTRY}"
+log "INFO" "Debug: Current user: $(id)"
+log "INFO" "Debug: Password file permissions: $(ls -l "${PASSWORD_FILE}" 2>&1 || echo "Cannot ls file")"
 LOGIN_SUCCESS=false
 
 # Try direct read first
