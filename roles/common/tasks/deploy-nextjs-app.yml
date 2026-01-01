@@ -91,18 +91,18 @@
   ansible.builtin.template:
     src: .env.j2
     dest: "{{ app_install_dir }}/.env"
-    mode: "0600"
+    mode: "0640"
     owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    group: "docker"
   when: env_template_check.stat.exists | default(false)
 
 - name: Copy .env file to server (if no template but file exists)
   ansible.builtin.copy:
     src: .env
     dest: "{{ app_install_dir }}/.env"
-    mode: "0600"
+    mode: "0640"
     owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    group: "docker"
   when: 
     - not (env_template_check.stat.exists | default(false))
     - env_file_check.stat.exists | default(false)

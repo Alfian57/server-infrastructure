@@ -76,9 +76,9 @@
   ansible.builtin.copy:
     src: .env
     dest: "{{ app_install_dir }}/.env"
-    mode: "0600"
+    mode: "0640"
     owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    group: "docker"
   when: env_file_check.stat.exists | default(false)
 
 - name: Pull latest Docker image

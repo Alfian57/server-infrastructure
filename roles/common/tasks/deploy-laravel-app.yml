@@ -76,9 +76,9 @@
   ansible.builtin.template:
     src: .env.j2
     dest: "{{ app_install_dir }}/.env"
-    mode: "0600"
+    mode: "0640"
     owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    group: "docker"
 
 - name: Pull latest Docker image
   community.docker.docker_image:
