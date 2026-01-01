@@ -8,7 +8,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.yml}"
 COMPOSE_PROJECT_NAME=$(basename "$PWD")
 PASSWORD_FILE="${DOCKER_PASSWORD_FILE:-/opt/docker-stack/docker-password.txt}"
 REGISTRY="${DOCKER_REGISTRY:-ghcr.io}"
-REGISTRY_USER="${DOCKER_REGISTRY_USER:-alfiangadingsaputra@gmail.com}"
+REGISTRY_USER="${DOCKER_REGISTRY_USER:-alfian57}"
 LOG_FILE="/var/log/docker-updates/${COMPOSE_PROJECT_NAME}.log"
 
 # Color output
@@ -92,15 +92,9 @@ else
     error_exit "Failed to pull images"
 fi
 
-# Deploy containers with new images
-log "INFO" "Deploying containers"
-
-# Stop existing containers first to avoid "container is running" error
-log "INFO" "Stopping existing containers..."
-docker compose -f "${COMPOSE_FILE}" down --remove-orphans 2>/dev/null || true
-
-# Start containers with new images
-if docker compose -f "${COMPOSE_FILE}" up -d --force-recreate; then
+# Deploy containers with new images (rolling update - no down first)
+log "INFO" "Deploying containers with rolling update"
+if docker compose -f "${COMPOSE_FILE}" up -d --pull always --force-recreate --remove-orphans; then
     log "INFO" "Successfully deployed containers"
 else
     error_exit "Failed to deploy containers"

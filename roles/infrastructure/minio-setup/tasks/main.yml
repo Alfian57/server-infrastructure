@@ -66,3 +66,79 @@
       - "  Internal: minio:9000 (from docker network)"
       - ""
       - "═══════════════════════════════════════════════════════════"
+
+# ═══════════════════════════════════════════════════════════
+# MINIO CLIENT (mc) INSTALLATION
+# ═══════════════════════════════════════════════════════════
+
+- name: Download MinIO client (mc)
+  ansible.builtin.get_url:
+    url: "{{ minio_client_url }}"
+    dest: /usr/local/bin/mc
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Verify MinIO client installation
+  ansible.builtin.command: mc --version
+  register: mc_version
+  changed_when: false
+
+- name: Display MinIO client version
+  ansible.builtin.debug:
+    msg: "{{ mc_version.stdout_lines }}"
+
+# ═══════════════════════════════════════════════════════════
+# CONFIGURE MC ALIAS
+# ═══════════════════════════════════════════════════════════
+
+- name: Configure mc alias for local MinIO
+  ansible.builtin.command: >
+    mc alias set local
+    http://localhost:9000
+    {{ minio_root_user }}
+    {{ minio_root_password }}
+  changed_when: true
+  no_log: true
+
+# ═══════════════════════════════════════════════════════════
+# BUCKET CREATION
+# ═══════════════════════════════════════════════════════════
+
+- name: Check existing buckets
+  ansible.builtin.command: mc ls local/
+  register: existing_buckets
+  changed_when: false
+  failed_when: false
+
+- name: Create MinIO buckets
+  ansible.builtin.command: "mc mb local/{{ item.name }} --ignore-existing"
+  loop: "{{ minio_buckets }}"
+  when: minio_buckets is defined and minio_buckets | length > 0
+  changed_when: true
+
+- name: Set bucket policies
+  ansible.builtin.command: "mc anonymous set {{ item.policy | default('private') }} local/{{ item.name }}"
+  loop: "{{ minio_buckets }}"
+  when:
+    - minio_buckets is defined
+    - minio_buckets | length > 0
+    - item.policy is defined
+    - item.policy != 'private'
+  changed_when: true
+
+- name: List created buckets
+  ansible.builtin.command: mc ls local/
+  register: final_buckets
+  changed_when: false
+
+- name: Display bucket creation status
+  ansible.builtin.debug:
+    msg:
+      - "═══════════════════════════════════════════════════════════"
+      - "  ✓ MinIO Buckets Created"
+      - "═══════════════════════════════════════════════════════════"
+      - ""
+      - "{{ final_buckets.stdout_lines }}"
+      - ""
+      - "═══════════════════════════════════════════════════════════"

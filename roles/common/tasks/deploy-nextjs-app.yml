@@ -51,6 +51,12 @@
     reauthorize: true
   no_log: true
 
+- name: Validate GHCR access - check image exists
+  ansible.builtin.command: "docker manifest inspect {{ app_image }}"
+  register: ghcr_access_check
+  failed_when: ghcr_access_check.rc != 0
+  changed_when: false
+
 - name: Copy update.sh file to server
   ansible.builtin.copy:
     src: ../../common/files/update.sh
@@ -124,7 +130,7 @@
     project_src: "{{ app_install_dir }}"
     pull: always
     remove_orphans: true
-    recreate: always
+    recreate: auto
     state: present
   register: app_deployment
 

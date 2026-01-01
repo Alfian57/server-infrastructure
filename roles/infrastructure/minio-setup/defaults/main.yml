@@ -2,3 +2,14 @@
 # MinIO default configuration
 minio_root_user: "{{ vault_minio_root_user }}"
 minio_root_password: "{{ vault_minio_root_password }}"
+
+# MinIO Client (mc) download URL
+minio_client_url: "https://dl.min.io/client/mc/release/linux-amd64/mc"
+
+# Buckets to create automatically
+# Each item should have:
+#   - name: bucket name (required)
+#   - policy: public, private, download, upload (optional, default: private)
+minio_buckets:
+  - name: file-pod
+    policy: private

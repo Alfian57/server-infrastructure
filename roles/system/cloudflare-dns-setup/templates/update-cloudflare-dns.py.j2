@@ -9,6 +9,9 @@ import os
 import yaml
 import argparse
 import configparser
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning) 
+warnings.filterwarnings("ignore", category=UserWarning) # Catch PendingDeprecationWarning often shown as UserWarning in some libs
 from typing import List, Dict, Optional
 import CloudFlare
 
@@ -136,8 +139,9 @@ def get_existing_records(cf: CloudFlare.CloudFlare, zone_id: str) -> Dict[str, D
     """Get existing DNS records"""
     try:
         records = cf.zones.dns_records.get(zone_id)
-        # Create lookup dict by name
-        return {r['name']: r for r in records if r['type'] == 'A'}
+        # Create lookup dict by name for A and CNAME records
+        # A and CNAME cannot coexist, so this is safe
+        return {r['name']: r for r in records if r['type'] in ['A', 'CNAME']}
     except Exception as e:
         print_error(f"Error getting DNS records: {e}")
         return {}
@@ -170,7 +174,25 @@ def create_or_update_record(
     
     try:
         if existing:
-            # Check if update needed
+            # Check for Type Mismatch (e.g. CNAME vs A)
+            if existing['type'] != record_type:
+                print_warning(f"Conflict: Found {existing['type']} record for {full_name}, but wanted {record_type}. Replacing...")
+                cf.zones.dns_records.delete(zone_id, existing['id'])
+                
+                # Create new record after deletion
+                create_data = {
+                    'name': name if name != '@' else domain,
+                    'type': record_type,
+                    'content': vps_ip,
+                    'proxied': proxied,
+                    'comment': comment
+                }
+                cf.zones.dns_records.post(zone_id, data=create_data)
+                proxy_status = "Proxied" if proxied else "DNS Only"
+                print_success(f"Replaced {full_name} ({existing['type']}) → {vps_ip} ({record_type}, {proxy_status})")
+                return True
+
+            # Check if update needed (Same Type)
             needs_update = (
                 existing['content'] != vps_ip or
                 existing['proxied'] != proxied
@@ -205,12 +227,30 @@ def create_or_update_record(
         
         return True
         
-    except CloudFlare.exceptions.CloudFlareAPIError as e:
-        print_error(f"Failed to update {full_name}: {e}")
         return False
     except Exception as e:
         print_error(f"Error processing {full_name}: {e}")
         return False
+
+def update_ssl_mode(cf: CloudFlare.CloudFlare, zone_id: str, domain: str) -> None:
+    """Ensure SSL mode is set to Full (Strict)"""
+    try:
+        # Check current setting
+        settings = cf.zones.settings.ssl.get(zone_id)
+        current_mode = settings['value']
+        
+        target_mode = 'strict'
+        
+        if current_mode != target_mode:
+            print_step(f"Updating SSL mode for {domain} (current: {current_mode})...")
+            cf.zones.settings.ssl.patch(zone_id, data={'value': target_mode})
+            print_success(f"SSL mode updated to 'Full ({target_mode.capitalize()})'")
+        else:
+            print_success(f"SSL mode is already 'Full ({current_mode.capitalize()})'")
+            
+    except Exception as e:
+        print_error(f"Failed to update SSL mode: {e}")
+
 
 def main():
     """Main function"""
@@ -278,6 +318,10 @@ def main():
         print_step("Fetching existing DNS records...")
         existing_records = get_existing_records(cf, zone_id)
         print_success(f"Found {len(existing_records)} existing A records")
+        print()
+        
+        # Enforce SSL Mode
+        update_ssl_mode(cf, zone_id, domain)
         print()
         
         # Show records to update

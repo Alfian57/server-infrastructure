@@ -92,6 +92,10 @@
       tags: [infrastructure, minio-setup]
       when: setup_infrastructure | bool
 
+    - role: cloudflare-warp-setup
+      tags: [infrastructure, cloudflare-warp-setup]
+      when: setup_infrastructure | bool
+
     # ═══════════════════════════════════════════════════════════
     # DATABASES
     # MySQL, PostgreSQL, Redis

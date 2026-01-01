@@ -1,0 +1,16 @@
+---
+# Cloudflare WARP Setup - Default Variables
+
+# Enable/disable this role
+warp_install: true
+
+# WARP configuration
+warp_mode: "proxy"           # Use proxy mode (safe for SSH, no system-wide VPN)
+warp_proxy_port: 40000       # Internal WARP proxy port (localhost only)
+warp_forward_port: 40001     # External port for Docker access (via socat)
+
+# Repository configuration (force noble for newer Ubuntu compatibility)
+warp_repo_codename: "noble"
+
+# Docker subnet to allow through UFW
+warp_docker_subnet: "172.16.0.0/12"

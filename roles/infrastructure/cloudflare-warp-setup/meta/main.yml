@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: alfiang
+  description: Cloudflare WARP installation and proxy forwarding setup
+  role_name: cloudflare-warp-setup
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+
+dependencies: []

@@ -207,7 +207,7 @@
   handlers:
     - name: Restart SSHD
       ansible.builtin.service:
-        name: sshd
+        name: "{{ 'ssh' if ansible_os_family == 'Debian' else 'sshd' }}"
         state: restarted
 
   post_tasks:
