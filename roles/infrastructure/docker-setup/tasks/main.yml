@@ -124,8 +124,8 @@
     group: "{{ ansible_user | default('root') }}"
 
 - name: Copy docker-password.txt file to server
-  ansible.builtin.copy:
-    src: docker-password.txt
+  ansible.builtin.template:
+    src: docker-password.txt.j2
     dest: "/opt/docker-stack/docker-password.txt"
     mode: "0600"  # Changed from 0755 to 0600 for security
     owner: "{{ ansible_user | default('root') }}"
