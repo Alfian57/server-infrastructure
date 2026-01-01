@@ -127,9 +127,9 @@
   ansible.builtin.template:
     src: docker-password.txt.j2
     dest: "/opt/docker-stack/docker-password.txt"
-    mode: "0600"  # Changed from 0755 to 0600 for security
+    mode: "0640"  # Readable by docker group members (deployer)
     owner: "{{ ansible_user | default('root') }}"
-    group: "{{ ansible_user | default('root') }}"
+    group: "docker"
 
 - name: Notify users to re-login if added to docker group
   ansible.builtin.debug:
