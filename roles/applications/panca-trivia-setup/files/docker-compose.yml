@@ -6,7 +6,6 @@ services:
     volumes:
       - ./.env:/var/www/.env:ro
       - panca_trivia_storage:/var/www/storage
-      - panca_trivia_bootstrap_cache:/var/www/bootstrap/cache
     networks:
       - nginx_proxy_manager_network
       - mysql_network
@@ -26,4 +25,3 @@ networks:
 
 volumes:
   panca_trivia_storage:
-  panca_trivia_bootstrap_cache:

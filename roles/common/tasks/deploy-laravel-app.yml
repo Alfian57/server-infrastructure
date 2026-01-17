@@ -114,14 +114,22 @@
   until: 
     - container_info.container is defined
     - container_info.container.State.Health.Status is defined
-    - container_info.container.State.Health.Status in ['healthy', 'starting']
-  retries: 10
-  delay: 10
+    - container_info.container.State.Health.Status == 'healthy'
+  retries: 15
+  delay: 15
   failed_when: false
+
+- name: Fail if container is not healthy after waiting
+  ansible.builtin.fail:
+    msg: "Container {{ app_name }} failed to become healthy after 225 seconds (status: {{ container_info.container.State.Health.Status | default('unknown') }})"
+  when: 
+    - container_info.container is defined
+    - container_info.container.State.Health.Status is defined
+    - container_info.container.State.Health.Status != 'healthy'
 
 - name: Clear bootstrap cache (prevent serialized closure errors)
   ansible.builtin.command:
-    cmd: docker exec {{ app_name }} rm -f /var/www/html/bootstrap/cache/*.php
+    cmd: docker exec {{ app_name }} rm -f /var/www/bootstrap/cache/*.php
   when: container_info.container.State.Health.Status == 'healthy'
   failed_when: false
 
@@ -183,7 +191,8 @@
 
 - name: Check if seeder should run (fresh deployment only)
   ansible.builtin.set_fact:
-    run_seeder: "{{ run_seeder_on_deploy | default(false) }}"
+    # run_seeder_on_deploy is passed from playbook run (via -e flag), not hardcoded in roles
+    run_seeder: "{{ (run_seeder_on_deploy | default(false)) and (is_fresh_deployment | default(false)) }}"
 
 - name: Run database seeders (fresh deployment only - normal mode)
   ansible.builtin.command:

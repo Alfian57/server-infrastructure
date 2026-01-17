@@ -192,6 +192,29 @@ trigger-actions: ## ⚡ Trigger all GitHub Actions workflows
 trigger-actions-dry: ## Dry run trigger actions
 	@ansible-playbook playbooks/trigger-github-actions.yml $(OPTS) --check
 
+##@ Local Scripts (Run from local machine without server SSH)
+
+update-cloud: ## ☁️ Update ALL cloud services (GitHub + Cloudflare) in sequence
+	@./scripts/update-cloud-services.sh
+
+update-cloud-y: ## ☁️ Update ALL cloud services (auto-confirm)
+	@./scripts/update-cloud-services.sh -y
+
+check-cloud: ## ✅ Verify GitHub secrets and Cloudflare DNS are configured
+	@./scripts/check-cloud-services.sh
+
+update-github-secrets: ## 🔑 Update GitHub secrets from local (no SSH needed)
+	@./scripts/update-github-secrets-local.sh
+
+update-cloudflare-dns: ## 🌐 Update Cloudflare DNS from local (no SSH needed)
+	@./scripts/update-cloudflare-dns-local.sh
+
+update-github-secrets-y: ## 🔑 Update GitHub secrets (auto-confirm)
+	@./scripts/update-github-secrets-local.sh <<< "y"
+
+update-cloudflare-dns-y: ## 🌐 Update Cloudflare DNS (auto-confirm)
+	@./scripts/update-cloudflare-dns-local.sh -y
+
 ##@ Security Operations
 
 security-ufw: check ## UFW firewall only

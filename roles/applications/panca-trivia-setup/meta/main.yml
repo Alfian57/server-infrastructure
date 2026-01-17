@@ -1,0 +1,15 @@
+---
+# Meta configuration for panca-trivia-setup role
+dependencies:
+  - role: docker-setup
+    tags: [infrastructure, docker-setup]
+  - role: mysql-setup
+    tags: [database, mysql-setup]
+  - role: nginx-proxy-setup
+    tags: [infrastructure, nginx-proxy-setup]
+
+galaxy_info:
+  author: alfiang
+  description: Role to deploy Panca-Trivia Laravel application
+  license: MIT
+  min_ansible_version: "2.12"

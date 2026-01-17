@@ -6,7 +6,6 @@ services:
     volumes:
       - ./.env:/var/www/.env:ro
       - tech_talk_storage:/var/www/storage
-      - tech_talk_bootstrap_cache:/var/www/bootstrap/cache
     healthcheck:
       test: ["CMD", "sh", "-c", "pidof nginx && pidof php-fpm"]
       interval: 30s
@@ -26,4 +25,3 @@ networks:
 
 volumes:
   tech_talk_storage:
-  tech_talk_bootstrap_cache:

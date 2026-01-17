@@ -56,13 +56,9 @@
       tags: [system, git-setup]
       when: setup_system | bool
 
-    - role: github-cli-setup
-      tags: [system, github-cli-setup]
-      when: setup_system | bool
-
-    - role: cloudflare-dns-setup
-      tags: [system, cloudflare-dns-setup]
-      when: setup_system | bool
+    # NOTE: github-cli-setup and cloudflare-dns-setup are now run locally via:
+    #   make update-github-secrets
+    #   make update-cloudflare-dns
 
     # ═══════════════════════════════════════════════════════════
     # SECURITY HARDENING
@@ -188,10 +184,32 @@
           - "  ✓ Server Setup Complete!"
           - "═══════════════════════════════════════════════════════════"
           - ""
+          - "  All roles have been executed successfully."
+          - "  Server will now reboot to apply all changes..."
+          - ""
+          - "═══════════════════════════════════════════════════════════"
+      tags: always
+
+    - name: Reboot server and wait for it to come back
+      ansible.builtin.reboot:
+        msg: "Rebooting server after Ansible setup completion"
+        reboot_timeout: 300
+        pre_reboot_delay: 5
+        post_reboot_delay: 30
+      tags: always
+
+    - name: Display post-reboot message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════════"
+          - "  ✓ Server Reboot Complete!"
+          - "═══════════════════════════════════════════════════════════"
+          - ""
           - "  Next Steps:"
           - "  1. Verify services: make status"
-          - "  2. Check security: sudo security-check"
-          - "  3. View logs: make logs"
+          - "  2. Check containers: make containers"
+          - "  3. Check security: sudo security-check"
+          - "  4. View logs: make logs"
           - ""
           - "═══════════════════════════════════════════════════════════"
       tags: always

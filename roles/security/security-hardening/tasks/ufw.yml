@@ -28,36 +28,21 @@
     direction: routed
     policy: deny
 
-# SSH Access (Priority: ALWAYS allow port 22 first to prevent lockout)
-- name: Always allow SSH on port 22 (prevent lockout)
-  community.general.ufw:
-    rule: allow
-    port: "22"
-    proto: tcp
-    comment: "SSH access (always enabled)"
-
-- name: Allow SSH on custom port if different from 22
-  community.general.ufw:
-    rule: allow
-    port: "{{ security_ssh_port }}"
-    proto: tcp
-    comment: "SSH access (custom port)"
-  when: security_ssh_port | int != 22
-
-# Rate limit SSH to prevent brute force
+# SSH Access (Rate limited to prevent brute force)
+# UFW 'limit' rule allows connections but rate-limits them (6 per 30 seconds)
 - name: Rate limit SSH connections on port 22
   community.general.ufw:
     rule: limit
     port: "22"
     proto: tcp
-    comment: "SSH rate limiting"
+    comment: "SSH access with rate limiting"
 
 - name: Rate limit SSH on custom port
   community.general.ufw:
     rule: limit
     port: "{{ security_ssh_port }}"
     proto: tcp
-    comment: "SSH rate limiting (custom port)"
+    comment: "SSH access with rate limiting (custom port)"
   when: security_ssh_port | int != 22
 
 # Web Traffic
