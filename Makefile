@@ -45,7 +45,7 @@ lint: ## Lint playbook
 
 ##@ Deployment
 
-full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy (for fresh server)
+full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy + Cloud Services (for fresh server)
 	@echo "═══════════════════════════════════════════════════════════════════"
 	@echo "  FULL SERVER SETUP - One Command Deployment"
 	@echo "═══════════════════════════════════════════════════════════════════"
@@ -54,26 +54,38 @@ full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy (for fresh server)
 	@echo "  1. Bootstrap SSH key authentication"
 	@echo "  2. Full server setup (Docker, databases, etc)"
 	@echo "  3. Deploy all applications with migrations & seeders"
+	@echo "  4. Update GitHub secrets for CI/CD"
+	@echo "  5. Update Cloudflare DNS records"
 	@echo ""
 	@echo "You will be prompted for the VPS root password."
 	@echo ""
 	@read -p "Press Enter to continue or Ctrl+C to cancel..."
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 1/3: Bootstrap SSH Key"
+	@echo "  Step 1/5: Bootstrap SSH Key"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 2/3: Switching to SSH Key Authentication"
+	@echo "  Step 2/5: Switching to SSH Key Authentication"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@./scripts/update-inventory-ssh.sh || true
 	@sleep 2
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 3/3: Full Deployment with Migrations & Seeders"
+	@echo "  Step 3/5: Full Deployment with Migrations & Seeders"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true"
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 4/5: Update GitHub Secrets"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@yes | ./scripts/update-github-secrets-local.sh
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 5/5: Update Cloudflare DNS"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@yes | ./scripts/update-cloudflare-dns-local.sh
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  ✅ FULL SETUP COMPLETE!"
@@ -85,6 +97,7 @@ full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy (for fresh server)
 	@echo "  make status     - Check server status"
 	@echo "  make containers - List running containers"
 	@echo "  make ssh        - SSH to server"
+	@echo "  make check-cloud - Verify cloud services"
 	@echo ""
 
 bootstrap: ## Bootstrap SSH key (first run with password)
