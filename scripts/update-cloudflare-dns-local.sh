@@ -6,32 +6,22 @@
 # This script can be run locally (without deploying to server) to update
 # Cloudflare DNS records for all domains.
 #
+# Configuration is loaded from group_vars/all/vars.yml
+#
 # Usage:
 #   ./scripts/update-cloudflare-dns-local.sh
-#   ./scripts/update-cloudflare-dns-local.sh --domain alfian-gading.site  # single domain
+#   ./scripts/update-cloudflare-dns-local.sh --domain alfian-gading.site
 # =============================================================================
 
-set -e
+# Don't use set -e as we want to continue on errors
+set +e
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;36m'
-NC='\033[0m'
-
+# Load shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/config.sh"
 
-# Get VPS IP from inventory
-get_vps_ip() {
-  grep -v "^#" "$PROJECT_DIR/inventory/hosts.ini" | grep -v "^\[" | grep -v "^$" | head -1 | awk '{print $1}'
-}
-
-# Get Cloudflare API token from vault
-get_cf_token() {
-  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | grep "vault_cloudflare_api_token:" | awk '{print $2}' | tr -d '"'
-}
+# Records that should NOT be proxied (wildcard)
+NON_PROXIED="*"
 
 print_header() {
   echo ""
@@ -40,15 +30,6 @@ print_header() {
   echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
   echo ""
 }
-
-# All domains and their records
-declare -A DOMAINS
-DOMAINS["alfian-gading.site"]="@ materi-ku panca-trivia ruang-istirahat tech-talk posyandu presensi-skansaba-web campus-project-hub-api campus-project-hub-web file-pod-api *"
-DOMAINS["solvo-tech.site"]="@"
-DOMAINS["ruang-tenang.site"]="@ api"
-
-# Records that should NOT be proxied
-NON_PROXIED="*"
 
 update_dns_record() {
   local zone_id=$1
@@ -197,8 +178,16 @@ fi
 echo -e "${GREEN}✓ Cloudflare API token verified${NC}"
 echo ""
 
+# Show loaded configuration
+echo -e "${BLUE}Domains loaded from vars.yml:${NC}"
+for domain in "${!DOMAINS_CONFIG[@]}"; do
+  echo "  - $domain"
+done
+echo ""
+
 # Parse arguments
 SINGLE_DOMAIN=""
+AUTO_CONFIRM=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --domain|-d)
@@ -217,17 +206,14 @@ done
 
 # Determine domains to update
 if [ -n "$SINGLE_DOMAIN" ]; then
-  if [ -z "${DOMAINS[$SINGLE_DOMAIN]}" ]; then
+  if [ -z "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" ]; then
     echo -e "${RED}✗ Unknown domain: $SINGLE_DOMAIN${NC}"
-    echo "Available domains: ${!DOMAINS[@]}"
+    echo "Available domains: ${!DOMAINS_CONFIG[@]}"
     exit 1
   fi
   echo -e "${BLUE}Updating single domain: $SINGLE_DOMAIN${NC}"
 else
-  echo -e "${BLUE}Updating all domains:${NC}"
-  for domain in "${!DOMAINS[@]}"; do
-    echo "  - $domain"
-  done
+  echo -e "${BLUE}Updating all domains...${NC}"
 fi
 echo ""
 
@@ -243,10 +229,10 @@ echo ""
 
 # Update domains
 if [ -n "$SINGLE_DOMAIN" ]; then
-  update_domain "$SINGLE_DOMAIN" "${DOMAINS[$SINGLE_DOMAIN]}" "$vps_ip" "$cf_token"
+  update_domain "$SINGLE_DOMAIN" "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" "$vps_ip" "$cf_token"
 else
-  for domain in "${!DOMAINS[@]}"; do
-    update_domain "$domain" "${DOMAINS[$domain]}" "$vps_ip" "$cf_token"
+  for domain in "${!DOMAINS_CONFIG[@]}"; do
+    update_domain "$domain" "${DOMAINS_CONFIG[$domain]}" "$vps_ip" "$cf_token"
   done
 fi
 

@@ -260,7 +260,43 @@
       ╚════════════════════════════════════════════════════════════════╝
   when: dns_propagation_check.results is defined
 
-- name: Request Let's Encrypt SSL certificate for each proxy host
+# ═══════════════════════════════════════════════════════════════════════════════
+# SSL Certificate Management
+# ═══════════════════════════════════════════════════════════════════════════════
+# For domains with cloudflare_flexible: true, we skip Let's Encrypt
+# because Cloudflare provides SSL at the edge (Flexible or Full mode).
+# Let's Encrypt HTTP-01 challenge will fail for Cloudflare-proxied domains.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+- name: Identify domains that need Let's Encrypt (not behind Cloudflare proxy)
+  ansible.builtin.set_fact:
+    letsencrypt_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+  when: proxy_hosts is defined
+
+- name: Identify domains using Cloudflare SSL (skip Let's Encrypt)
+  ansible.builtin.set_fact:
+    cloudflare_ssl_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
+  when: proxy_hosts is defined
+
+- name: Display SSL strategy for each domain
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║ SSL Certificate Strategy
+      ╠════════════════════════════════════════════════════════════════╣
+      ║ Let's Encrypt SSL ({{ letsencrypt_domains | default([]) | length }} domains):
+      {% for item in letsencrypt_domains | default([]) %}
+      ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
+      {% endfor %}
+      ║
+      ║ Cloudflare Flexible SSL ({{ cloudflare_ssl_domains | default([]) | length }} domains):
+      {% for item in cloudflare_ssl_domains | default([]) %}
+      ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %} (self-signed + CF edge)
+      {% endfor %}
+      ╚════════════════════════════════════════════════════════════════╝
+  when: proxy_hosts is defined
+
+- name: Request Let's Encrypt SSL certificate for non-Cloudflare domains
   ansible.builtin.uri:
     url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
     method: POST
@@ -278,12 +314,12 @@
     status_code: [200, 201]
   vars:
     target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    # Check if certificate already exists for this domain
     existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
   register: ssl_cert_request
-  loop: "{{ proxy_hosts }}"
+  loop: "{{ letsencrypt_domains | default([]) }}"
   when: 
-    - proxy_hosts is defined
+    - letsencrypt_domains is defined
+    - letsencrypt_domains | length > 0
     - existing_cert.id is not defined
   failed_when: false
   retries: 3
@@ -291,16 +327,57 @@
   until: ssl_cert_request.status in [200, 201] or ssl_cert_request.status == 400
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Fallback SSL for domains behind Cloudflare proxy (Let's Encrypt will fail)
+# Self-signed SSL for Cloudflare Flexible SSL domains
+# These domains use Cloudflare edge SSL, so we only need self-signed certs
+# for the origin server (NPM) to accept HTTPS from Cloudflare
 # ═══════════════════════════════════════════════════════════════════════════════
 - name: Create custom SSL directory for self-signed certificates
   ansible.builtin.file:
     path: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl"
     state: directory
     mode: "0755"
-  when: proxy_hosts is defined
+  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
 
-- name: Identify domains that failed Let's Encrypt (Cloudflare proxied domains)
+- name: Generate self-signed SSL certificates for Cloudflare domains
+  ansible.builtin.command:
+    cmd: >
+      openssl req -x509 -nodes -days 365 -newkey rsa:2048
+      -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
+      -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
+      -subj "/CN={{ target_domain }}"
+    creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+  loop: "{{ cloudflare_ssl_domains | default([]) }}"
+  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+  register: self_signed_certs
+
+- name: Get proxy host IDs for Cloudflare SSL domains
+  ansible.builtin.set_fact:
+    cloudflare_domain_proxy_hosts: "{{ cloudflare_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+    host_info: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+  loop: "{{ cloudflare_ssl_domains | default([]) }}"
+  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+
+- name: Display self-signed SSL generation results
+  ansible.builtin.debug:
+    msg: |
+      ╔════════════════════════════════════════════════════════════════╗
+      ║ Self-signed SSL Certificates Generated
+      ╠════════════════════════════════════════════════════════════════╣
+      {% for item in cloudflare_ssl_domains | default([]) %}
+      ║ ✅ {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
+      {% endfor %}
+      ║
+      ║ These domains use Cloudflare Edge SSL (Flexible/Full mode)
+      ║ Self-signed certs are only for NPM → App communication
+      ╚════════════════════════════════════════════════════════════════╝
+  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+
+# Legacy fallback for any Let's Encrypt failures (non-Cloudflare domains)
+- name: Identify domains that failed Let's Encrypt
   ansible.builtin.set_fact:
     failed_ssl_domains: "{{ failed_ssl_domains | default([]) + [item.item] }}"
   loop: "{{ ssl_cert_request.results | default([]) }}"
@@ -309,7 +386,7 @@
     - item.status not in [200, 201]
     - item.item is defined
 
-- name: Generate self-signed SSL certificates for failed domains (Cloudflare Flexible SSL)
+- name: Generate self-signed SSL for failed Let's Encrypt domains
   ansible.builtin.command:
     cmd: >
       openssl req -x509 -nodes -days 365 -newkey rsa:2048
@@ -321,7 +398,6 @@
     target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
   loop: "{{ failed_ssl_domains | default([]) }}"
   when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
-  register: self_signed_certs
 
 - name: Get proxy host IDs for failed SSL domains
   ansible.builtin.set_fact:
@@ -332,14 +408,37 @@
   loop: "{{ failed_ssl_domains | default([]) }}"
   when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
 
-- name: Generate custom nginx config for Cloudflare proxied domains with self-signed SSL
+# Apply custom nginx config for Cloudflare SSL domains
+- name: Generate custom nginx config for Cloudflare SSL domains
   ansible.builtin.template:
     src: cloudflare_proxy_host.conf.j2
     dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
     mode: "0644"
   vars:
     target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    host_id: "{{ failed_domain_proxy_hosts[target_domain].id }}"
+    host_id: "{{ cloudflare_domain_proxy_hosts[target_domain].id | default(0) }}"
+    forward_host: "{{ item.forward_host }}"
+    forward_port: "{{ item.forward_port }}"
+    caching_enabled: "{{ item.caching_enabled | default(false) }}"
+    ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+    ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
+  loop: "{{ cloudflare_ssl_domains | default([]) }}"
+  when:
+    - cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+    - cloudflare_domain_proxy_hosts is defined
+    - cloudflare_domain_proxy_hosts[target_domain] is defined
+    - cloudflare_domain_proxy_hosts[target_domain].id is defined
+  register: cloudflare_nginx_config
+
+# Apply custom nginx config for failed Let's Encrypt domains (fallback)
+- name: Generate custom nginx config for failed Let's Encrypt domains
+  ansible.builtin.template:
+    src: cloudflare_proxy_host.conf.j2
+    dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
+    mode: "0644"
+  vars:
+    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+    host_id: "{{ failed_domain_proxy_hosts[target_domain].id | default(0) }}"
     forward_host: "{{ item.forward_host }}"
     forward_port: "{{ item.forward_port }}"
     caching_enabled: "{{ item.caching_enabled | default(false) }}"
@@ -348,19 +447,22 @@
   loop: "{{ failed_ssl_domains | default([]) }}"
   when:
     - failed_ssl_domains is defined and failed_ssl_domains | length > 0
+    - failed_domain_proxy_hosts is defined
+    - failed_domain_proxy_hosts[target_domain] is defined
     - failed_domain_proxy_hosts[target_domain].id is defined
-  register: cloudflare_nginx_config
+  register: failed_nginx_config
 
 - name: Reload nginx in NPM container after custom SSL config
   ansible.builtin.command:
     cmd: docker exec nginx-proxy-manager nginx -s reload
-  when: cloudflare_nginx_config.changed | default(false)
+  when: cloudflare_nginx_config.changed | default(false) or failed_nginx_config.changed | default(false)
   changed_when: true
+  ignore_errors: true
 
 - name: Wait for SSL certificates to be issued
   ansible.builtin.pause:
-    seconds: 30
-  when: ssl_cert_request.changed
+    seconds: 10
+  when: ssl_cert_request.changed | default(false)
 
 - name: Get updated SSL certificates list
   ansible.builtin.uri:

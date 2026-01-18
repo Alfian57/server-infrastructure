@@ -139,6 +139,14 @@
   notify: Restart sshd
   when: security_ssh_harden_config | default(true)
 
+- name: Ensure SSH privilege separation directory exists
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 - name: Test SSH configuration
   ansible.builtin.command: sshd -t
   register: sshd_test

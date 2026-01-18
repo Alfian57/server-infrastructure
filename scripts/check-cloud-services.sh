@@ -5,6 +5,8 @@
 # =============================================================================
 # Verifies that GitHub secrets and Cloudflare DNS are properly configured
 #
+# Configuration is loaded from group_vars/all/vars.yml
+#
 # Usage:
 #   ./scripts/check-cloud-services.sh
 #
@@ -14,41 +16,22 @@
 
 set -e
 
+# Load shared configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+source "$SCRIPT_DIR/config.sh"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;36m'
-NC='\033[0m'
+# Disable strict mode for counting logic
+set +e
 
-# GitHub Owner
-GITHUB_OWNER="alfian57"
+# Expected secrets for each repository
+EXPECTED_SECRETS=("VPS_HOST" "VPS_USER" "VPS_SSH_PORT" "VPS_KEY" "DOCKER_TOKEN")
 
-# Repositories to check
-REPOS=(
+# Repositories to check (subset for quick check)
+CHECK_REPOS=(
   "materi-ku"
   "panca-trivia"
   "tech-talk"
 )
-
-# Expected secrets
-EXPECTED_SECRETS=("VPS_HOST" "VPS_USER" "VPS_SSH_PORT" "VPS_KEY" "DOCKER_TOKEN")
-
-# Domains to check
-DOMAINS=("alfian-gading.site" "solvo-tech.site" "ruang-tenang.site")
-
-# Get VPS IP
-get_vps_ip() {
-  grep -v "^#" "$PROJECT_DIR/inventory/hosts.ini" | grep -v "^\[" | grep -v "^$" | head -1 | awk '{print $1}'
-}
-
-# Get Cloudflare token
-get_cf_token() {
-  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | grep "vault_cloudflare_api_token:" | awk '{print $2}' | tr -d '"'
-}
 
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -57,22 +40,21 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 # Check requirements
-if ! command -v gh &> /dev/null; then
-  echo -e "${RED}✗ GitHub CLI (gh) not installed${NC}"
+if ! check_requirements; then
   exit 1
 fi
 
-if ! command -v jq &> /dev/null; then
-  echo -e "${RED}✗ jq not installed${NC}"
-  exit 1
-fi
-
-if ! gh auth status &> /dev/null; then
-  echo -e "${RED}✗ GitHub CLI not authenticated${NC}"
+if ! check_gh_auth; then
   exit 1
 fi
 
 echo -e "${GREEN}✓ Requirements met${NC}"
+echo ""
+
+# Show loaded configuration
+echo -e "${BLUE}Configuration loaded from vars.yml:${NC}"
+echo "  GitHub Owner: $GITHUB_OWNER"
+echo "  Primary Domain: $PRIMARY_DOMAIN"
 echo ""
 
 VPS_IP=$(get_vps_ip)
@@ -90,7 +72,7 @@ echo ""
 github_ok=0
 github_fail=0
 
-for repo in "${REPOS[@]}"; do
+for repo in "${CHECK_REPOS[@]}"; do
   full_repo="${GITHUB_OWNER}/${repo}"
   echo -e "${BLUE}Repository: ${full_repo}${NC}"
   
@@ -128,7 +110,7 @@ CF_TOKEN=$(get_cf_token)
 dns_ok=0
 dns_fail=0
 
-for domain in "${DOMAINS[@]}"; do
+for domain in "${!DOMAINS_CONFIG[@]}"; do
   echo -e "${BLUE}Domain: ${domain}${NC}"
   
   # Get zone ID

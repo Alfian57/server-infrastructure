@@ -14,10 +14,14 @@
   hosts: all
   gather_facts: false
   become: true
-
+  # Override user to root for fresh server bootstrap
+  # This ignores ansible_user from inventory (which may be 'deployer' that doesn't exist yet)
   vars:
-    ssh_public_key_path: "~/.ssh/server_ed25519.pub"
-    ssh_private_key_path: "~/.ssh/server_ed25519"
+    ansible_user: root
+    ssh_key_name: "server_ed25519"
+    ssh_public_key_path: "~/.ssh/{{ ssh_key_name }}.pub"
+    ssh_private_key_path: "~/.ssh/{{ ssh_key_name }}"
+    deploy_user: "deployer"
     
     # Users to configure SSH key for
     bootstrap_users:
@@ -78,9 +82,9 @@
     # =========================================================================
     # Create Additional Users (if not exist)
     # =========================================================================
-    - name: Ensure deployer user exists
+    - name: Ensure deploy user exists
       ansible.builtin.user:
-        name: deployer
+        name: "{{ deploy_user }}"
         comment: "Deploy User"
         groups: ["sudo"]
         shell: /bin/bash
@@ -97,14 +101,33 @@
         state: present
 
     # =========================================================================
+    # Configure Passwordless Sudo for Deploy User
+    # =========================================================================
+    - name: Configure passwordless sudo for deploy user
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/{{ deploy_user }}
+        line: "{{ deploy_user }} ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Configure passwordless sudo for alfiang user
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/alfiang
+        line: "alfiang ALL=(ALL) NOPASSWD: ALL"
+        create: true
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    # =========================================================================
     # Setup SSH Directory for All Users
     # =========================================================================
-    - name: Ensure .ssh directory exists for deployer
+    - name: Ensure .ssh directory exists for deploy user
       ansible.builtin.file:
-        path: /home/deployer/.ssh
+        path: "/home/{{ deploy_user }}/.ssh"
         state: directory
-        owner: deployer
-        group: deployer
+        owner: "{{ deploy_user }}"
+        group: "{{ deploy_user }}"
         mode: "0700"
 
     - name: Ensure .ssh directory exists for alfiang
@@ -115,9 +138,9 @@
         group: alfiang
         mode: "0700"
 
-    - name: Add SSH key to deployer authorized_keys
+    - name: Add SSH key to deploy user authorized_keys
       ansible.posix.authorized_key:
-        user: deployer
+        user: "{{ deploy_user }}"
         key: "{{ ssh_public_key }}"
         state: present
         exclusive: false
@@ -211,6 +234,22 @@
         state: restarted
 
   post_tasks:
+    # =========================================================================
+    # Test SSH Key Authentication for Deploy User
+    # =========================================================================
+    - name: Test SSH key authentication for deploy user
+      ansible.builtin.command:
+        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i {{ ssh_private_key_path }} {{ deploy_user }}@{{ inventory_hostname }} echo 'Deploy user SSH auth works'"
+      delegate_to: localhost
+      become: false
+      register: deployer_ssh_test
+      ignore_errors: true
+      changed_when: false
+
+    - name: Display deploy user SSH test result
+      ansible.builtin.debug:
+        msg: "{{ deploy_user }} SSH authentication: {{ '✓ SUCCESS' if deployer_ssh_test.rc == 0 else '✗ FAILED' }}"
+
     - name: Display completion message
       ansible.builtin.debug:
         msg:
@@ -220,14 +259,13 @@
           - ""
           - "  SSH Key configured for users:"
           - "    - root"
-          - "    - deployer" 
+          - "    - {{ deploy_user }} {{ '✓' if deployer_ssh_test.rc == 0 else '✗' }}" 
           - "    - alfiang"
           - ""
           - "  {{ 'Password authentication: DISABLED' if ssh_test.rc == 0 else 'Password authentication: STILL ENABLED (SSH key test failed)' }}"
           - ""
           - "  Next steps:"
-          - "  1. Update inventory to use SSH key:"
-          - "     ansible_ssh_private_key_file=~/.ssh/server_ed25519"
+          - "  1. Run: make switch-to-ssh (to update inventory)"
           - "  2. Run: make deploy"
           - ""
           - "═══════════════════════════════════════════════════════════"

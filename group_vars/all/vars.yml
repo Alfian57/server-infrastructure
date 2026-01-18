@@ -5,11 +5,50 @@
 # File ini berisi variabel yang tidak sensitive dan tidak perlu dienkripsi
 # Untuk credential dan secret, lihat vault.yml
 
-# GitHub Container Registry
+# ============================================================================
+# Global Configuration (Single Source of Truth)
+# ============================================================================
+# GitHub Configuration
 github_registry: "ghcr.io"
 github_username: "alfian57"
 
+# Primary Domain
+primary_domain: "alfian-gading.site"
+
+# All Managed Domains
+managed_domains:
+  - name: "alfian-gading.site"
+    records: "@ materi-ku panca-trivia ruang-istirahat tech-talk posyandu presensi-skansaba-web campus-project-hub-api campus-project-hub-web file-pod-api *"
+  - name: "solvo-tech.site"
+    records: "@"
+  - name: "ruang-tenang.site"
+    records: "@ api"
+
+# All Application Repositories (for GitHub secrets update)
+application_repositories:
+  - "materi-ku"
+  - "panca-trivia"
+  - "ruang-istirahat"
+  - "tech-talk"
+  - "posyandu"
+  - "solvo"
+  - "Presensi-Skansaba-Web"
+  - "campus-project-hub-api"
+  - "ruang-tenang-api"
+  - "campus-project-hub-web"
+  - "personal-portofolio"
+  - "ruang-tenang-web"
+  - "file-pod-api"
+
+# SSH Configuration
+ssh_key_name: "server_ed25519"
+ssh_key_path: "~/.ssh/{{ ssh_key_name }}"
+deploy_user: "deployer"
+ssh_port: 22
+
+# ============================================================================
 # Docker Configuration
+# ============================================================================
 docker_registry: "ghcr.io"
 docker_compose_version: "2.x"
 

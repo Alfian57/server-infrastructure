@@ -181,16 +181,13 @@ ruang-istirahat: check ## Ruang Istirahat app
 tech-talk: check ## Tech Talk app
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags tech-talk-setup
 
-##@ GitHub Actions
+##@ GitHub Actions (Local - No SSH to Server)
 
-trigger-actions: ## ⚡ Trigger all GitHub Actions workflows
-	@echo "═══════════════════════════════════════════════════════════════════"
-	@echo "  ⚡ Triggering GitHub Actions for all repositories"
-	@echo "═══════════════════════════════════════════════════════════════════"
-	@ansible-playbook playbooks/trigger-github-actions.yml $(OPTS)
+trigger-actions: ## ⚡ Trigger all GitHub Actions workflows (from local)
+	@./scripts/trigger-github-actions-local.sh
 
 trigger-actions-dry: ## Dry run trigger actions
-	@ansible-playbook playbooks/trigger-github-actions.yml $(OPTS) --check
+	@./scripts/trigger-github-actions-local.sh --dry-run
 
 ##@ Local Scripts (Run from local machine without server SSH)
 

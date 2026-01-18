@@ -49,9 +49,7 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
     ├── system/                    # 🖥️ System Configuration
     │   ├── update-apt/            # APT package updates
     │   ├── users-setup/           # User & SSH management
-    │   ├── git-setup/             # Git configuration
-    │   ├── github-cli-setup/      # GitHub CLI
-    │   └── cloudflare-dns-setup/  # Cloudflare DNS
+    │   └── git-setup/             # Git configuration
     │
     ├── security/                  # 🔒 Security Hardening
     │   └── security-hardening/    # UFW, Fail2ban, SSH, Docker security
@@ -74,7 +72,19 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
     │
     └── optimization/              # 💰 Optimization
         └── cost-optimization/     # Cleanup, monitoring, limits
+
+scripts/                           # 🖥️ Local Scripts (Run from dev machine)
+    ├── config.sh                  # Shared config loader
+    ├── update-github-secrets-local.sh  # Update GitHub secrets
+    ├── update-cloudflare-dns-local.sh  # Update Cloudflare DNS
+    ├── trigger-github-actions-local.sh # Trigger all workflows
+    ├── check-cloud-services.sh    # Verify cloud config
+    └── full-deploy.sh             # Interactive deployment
 ```
+
+> **Note**: GitHub CLI (`gh`) and Cloudflare operations now run **locally** from your 
+> development machine or CI runner, NOT from the server. This is more secure and 
+> doesn't require installing auth tokens on the server.
 
 ## 📦 Prerequisites
 
