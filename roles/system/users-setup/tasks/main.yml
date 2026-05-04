@@ -24,6 +24,7 @@
   ansible.builtin.user:
     name: "{{ item.name }}"
     password: "{{ item.password | default(omit) }}"
+    password_lock: "{{ item.password_lock | default(omit) }}"
     comment: "{{ item.comment | default(omit) }}"
     groups: "{{ item.groups | default([]) }}"
     shell: "{{ item.shell | default('/bin/bash') }}"
@@ -35,6 +36,7 @@
     label: "{{ item.name }}"
   register: users_created
   when: users_defined | default(false)
+  no_log: true
 
 - name: Configure SSH directory
   ansible.builtin.file:
@@ -49,6 +51,7 @@
     - item.ssh_key is defined
     - item.state | default('present') == 'present'
     - not item.system | default(false)
+  no_log: true
 
 - name: Add SSH authorized keys
   ansible.posix.authorized_key:
@@ -61,6 +64,33 @@
     - users_defined | default(false)
     - item.ssh_key is defined
     - item.state | default('present') == 'present'
+  no_log: true
+
+- name: Configure passwordless sudo for approved users
+  ansible.builtin.lineinfile:
+    path: "/etc/sudoers.d/{{ item.name }}"
+    line: "{{ item.name }} ALL=(ALL) NOPASSWD: ALL"
+    create: true
+    mode: "0440"
+    validate: "visudo -cf %s"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - users_defined | default(false)
+    - item.state | default('present') == 'present'
+    - item.sudo_nopasswd | default(false) | bool
+
+- name: Remove passwordless sudo for non-approved users
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item.name }}"
+    state: absent
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - users_defined | default(false)
+    - not (item.sudo_nopasswd | default(false) | bool)
 
 # NOTE: Reboot is NOT needed for user changes
 # Removed automatic reboot - it was causing unnecessary restarts

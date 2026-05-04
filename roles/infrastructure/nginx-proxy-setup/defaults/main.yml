@@ -14,136 +14,14 @@ npm_domain_name: "{{ vault_npm_domain_name }}"
 cloudflare_email: "{{ vault_cloudflare_email }}"
 cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
 
-# Docker image version
-npm_image_version: "2.12.3"
+# Docker image policy
+npm_image_version: "2.14.0"
+npm_image_override: ""
+npm_preserve_existing_image: true
+npm_manage_legacy_origin_ssl: false
+npm_cloudflare_forwarded_proto_config: |
+  set $x_forwarded_proto $http_x_forwarded_proto;
+  set $x_forwarded_scheme $http_x_forwarded_proto;
 
-# Proxy hosts configuration
-# Each proxy host will automatically get:
-# - Let's Encrypt SSL certificate
-# - Force SSL (HTTP → HTTPS redirect)
-# - HTTP/2 support
-# - HSTS security header
-# - Block exploits protection
-#
-# For subdomain-based hosts, use: subdomain: "app-name"
-# For custom domain hosts, use: domain: "custom-domain.com"
-proxy_hosts:
-  # ═══════════════════════════════════════════════════════════
-  # Laravel Applications
-  # ═══════════════════════════════════════════════════════════
-  - subdomain: "materi-ku"
-    scheme: "http"
-    forward_host: "materi-ku"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  - subdomain: "panca-trivia"
-    scheme: "http"
-    forward_host: "panca-trivia"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  - subdomain: "ruang-istirahat"
-    scheme: "http"
-    forward_host: "ruang-istirahat"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  - subdomain: "tech-talk"
-    scheme: "http"
-    forward_host: "tech-talk"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  - subdomain: "posyandu"
-    scheme: "http"
-    forward_host: "posyandu"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  - subdomain: "presensi-skansaba-web"
-    scheme: "http"
-    forward_host: "presensi-skansaba-web"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # Solvo - Custom Domain
-  - domain: "solvo-tech.site"
-    scheme: "http"
-    forward_host: "solvo"
-    forward_port: 80
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # ═══════════════════════════════════════════════════════════
-  # Go API Applications
-  # ═══════════════════════════════════════════════════════════
-  - subdomain: "campus-project-hub-api"
-    scheme: "http"
-    forward_host: "campus-project-hub-api"
-    forward_port: 8080
-    caching_enabled: false
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # Ruang Tenang API - Custom Domain
-  - domain: "api.ruang-tenang.site"
-    scheme: "http"
-    forward_host: "ruang-tenang-api"
-    forward_port: 8080
-    caching_enabled: false
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # ═══════════════════════════════════════════════════════════
-  # Next.js Applications
-  # ═══════════════════════════════════════════════════════════
-  - subdomain: "campus-project-hub-web"
-    scheme: "http"
-    forward_host: "campus-project-hub-web"
-    forward_port: 3000
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # Ruang Tenang Web - Custom Domain
-  - domain: "ruang-tenang.site"
-    scheme: "http"
-    forward_host: "ruang-tenang-web"
-    forward_port: 3000
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # Personal Portfolio - Root Domain
-  - domain: "alfian-gading.site"
-    scheme: "http"
-    forward_host: "personal-portofolio"
-    forward_port: 3000
-    caching_enabled: true
-    websocket_support: false
-    cloudflare_flexible: true
-
-  # ═══════════════════════════════════════════════════════════
-  # Node.js/Express Applications
-  # ═══════════════════════════════════════════════════════════
-  - subdomain: "file-pod-api"
-    scheme: "http"
-    forward_host: "file-pod-api"
-    forward_port: 8080
-    caching_enabled: false
-    websocket_support: false
-    cloudflare_flexible: true
+# Proxy hosts are derived from group_vars/all/apps.yml by default.
+proxy_hosts: "{{ portfolio_proxy_hosts | default([]) }}"

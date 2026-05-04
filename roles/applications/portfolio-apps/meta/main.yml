@@ -1,0 +1,15 @@
+---
+galaxy_info:
+  author: Alfian Gading Saputra
+  description: Generic portfolio application deployment from the central app catalog
+  license: MIT
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []
+
+collections:
+  - community.docker

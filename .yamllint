@@ -1,0 +1,27 @@
+---
+extends: default
+
+ignore: |
+  .ansible/
+  .codex/
+  venv/
+  group_vars/all/vault.yml
+
+rules:
+  line-length:
+    max: 140
+    level: warning
+  comments-indentation: false
+  comments:
+    min-spaces-from-content: 1
+  document-start:
+    present: true
+  trailing-spaces: disable
+  new-line-at-end-of-file: disable
+  empty-lines:
+    level: warning
+  braces:
+    max-spaces-inside: 1
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true

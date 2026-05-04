@@ -37,8 +37,8 @@
     path: "/var/log/docker-updates"
     state: directory
     mode: "0775"
-    owner: "deployer"
-    group: "deployer"
+    owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    group: "docker"
 
 - name: Create uploads directory (if needed)
   ansible.builtin.file:
@@ -68,8 +68,8 @@
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
     mode: "0755"
-    owner: "deployer"
-    group: "deployer"
+    owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    group: "docker"
 
 - name: Check if docker-compose.yml.j2 template exists
   ansible.builtin.stat:

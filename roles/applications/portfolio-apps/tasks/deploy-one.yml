@@ -1,0 +1,356 @@
+---
+- name: "{{ portfolio_app.name }} | Validate app definition"
+  ansible.builtin.assert:
+    that:
+      - portfolio_app.name is defined
+      - portfolio_app.stack is defined
+      - portfolio_app.stack in ['laravel', 'nextjs', 'golang', 'express', 'php']
+      - portfolio_app.seed_on | default('fresh') in ['fresh', 'always', 'manual']
+      - portfolio_app.mysql_seed_on | default('manual') in ['always', 'manual']
+    fail_msg: "Invalid app definition in portfolio_apps: {{ portfolio_app | to_nice_yaml }}"
+    quiet: true
+
+- name: "{{ portfolio_app.name }} | Block destructive database operations unless explicitly confirmed"
+  ansible.builtin.assert:
+    that:
+      - not (portfolio_app.run_fresh_migrate | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
+      - not (portfolio_app.run_mysql_seed | default(false) | bool and portfolio_app.mysql_seed_on | default('manual') == 'always' and portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
+    fail_msg: "Refusing destructive database operation for {{ portfolio_app.name }}. Re-run with confirm_destroy_data=yes only when data loss is intended."
+    quiet: true
+
+- name: "{{ portfolio_app.name }} | Set deployment facts"
+  ansible.builtin.set_fact:
+    app_name: "{{ portfolio_app.name }}"
+    app_stack: "{{ portfolio_app.stack }}"
+    app_port: "{{ portfolio_app.app_port | default(80 if portfolio_app.stack == 'laravel' else 3000) }}"
+    app_install_dir: "{{ docker_stack_applications }}/{{ portfolio_app.name }}"
+    app_image: >-
+      {{ portfolio_app.image | default((docker_registry | default('ghcr.io')) ~ '/' ~ (portfolio_app.repo_owner | default(github_username)) | lower ~ '/' ~ (portfolio_app.image_name | default(portfolio_app.repo | default(portfolio_app.name))) ~ ':' ~ (portfolio_app.image_tag | default(portfolio_default_image_tag))) }}
+    app_networks: "{{ portfolio_app.networks | default(['nginx_proxy_manager_network']) }}"
+    app_volumes: "{{ portfolio_app.volumes | default([]) }}"
+    app_health_endpoint: "{{ portfolio_app.health_endpoint | default('/health') }}"
+    app_env_template: "{{ portfolio_app.env_template | default('') }}"
+    app_use_env_file: "{{ portfolio_app.stack != 'laravel' and portfolio_app.env_template is defined }}"
+    app_env_mount_path: "{{ portfolio_app.env_mount_path | default('/var/www/.env') }}"
+    app_admin_user: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    app_ci_user: "{{ ci_deploy_user | default(deploy_user | default(ansible_user | default('root'))) }}"
+    app_runtime_group: "docker"
+    app_run_migrate: "{{ portfolio_app.run_migrate | default(portfolio_app.stack == 'laravel') | bool }}"
+    app_run_fresh_migrate: "{{ portfolio_app.run_fresh_migrate | default(false) | bool }}"
+    app_run_seeder: "{{ (portfolio_app.run_seeder | default(false) | bool) or (run_seeder_on_deploy | default(false) | bool) }}"
+    app_seed_on: "{{ portfolio_app.seed_on | default('fresh') }}"
+
+- name: "{{ app_name }} | Derive named Docker volumes"
+  ansible.builtin.set_fact:
+    app_named_volumes: "{{ app_volumes | map('regex_replace', '^([^:]+):.*$', '\\1') | list }}"
+
+- name: "{{ app_name }} | Create application directory"
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}"
+    state: directory
+    mode: "0750"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+
+- name: "{{ app_name }} | Create update log directory"
+  ansible.builtin.file:
+    path: "/var/log/docker-updates"
+    state: directory
+    mode: "0775"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+
+- name: "{{ app_name }} | Check update log file"
+  ansible.builtin.stat:
+    path: "/var/log/docker-updates/{{ app_name }}.log"
+  register: app_update_log_file
+
+- name: "{{ app_name }} | Create update log file"
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ app_name }}.log"
+    state: touch
+    mode: "0664"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: not app_update_log_file.stat.exists
+
+- name: "{{ app_name }} | Ensure update log file is group writable"
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ app_name }}.log"
+    mode: "0664"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: app_update_log_file.stat.exists
+
+- name: "{{ app_name }} | Create optional uploads directory"
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}/uploads"
+    state: directory
+    mode: "0775"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: portfolio_app.create_uploads_dir | default(false) | bool
+
+- name: "{{ app_name }} | Create optional data directory"
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}/data"
+    state: directory
+    mode: "0775"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: portfolio_app.create_data_dir | default(false) | bool
+
+- name: "{{ app_name }} | Log in to GitHub Container Registry"
+  community.docker.docker_login:
+    registry_url: "{{ docker_registry | default('ghcr.io') }}"
+    username: "{{ github_username }}"
+    password: "{{ github_token }}"
+    reauthorize: true
+  no_log: true
+
+- name: "{{ app_name }} | Validate image exists"
+  ansible.builtin.command: "docker manifest inspect {{ app_image }}"
+  register: ghcr_access_check
+  failed_when: ghcr_access_check.rc != 0
+  changed_when: false
+
+- name: "{{ app_name }} | Copy update helper"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../roles/common/files/update.sh"
+    dest: "{{ app_install_dir }}/update.sh"
+    mode: "0750"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+
+- name: "{{ app_name }} | Copy artisan helper"
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../roles/common/files/artisan-commands.sh"
+    dest: "{{ app_install_dir }}/artisan-commands.sh"
+    mode: "0750"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: app_stack == 'laravel'
+
+- name: "{{ app_name }} | Render application environment"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../{{ app_env_template }}"
+    dest: "{{ app_install_dir }}/.env"
+    mode: "0640"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when: app_env_template | length > 0
+  no_log: true
+
+- name: "{{ app_name }} | Render docker compose"
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ app_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+
+- name: "{{ app_name }} | Pull latest image"
+  community.docker.docker_image:
+    name: "{{ app_image }}"
+    source: pull
+    force_source: true
+    state: present
+
+- name: "{{ app_name }} | Ensure external networks exist"
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ app_networks }}"
+
+- name: "{{ app_name }} | Deploy container"
+  community.docker.docker_compose_v2:
+    project_src: "{{ app_install_dir }}"
+    pull: always
+    remove_orphans: true
+    recreate: auto
+    state: present
+  register: app_deployment
+
+- name: "{{ app_name }} | Wait for Laravel healthcheck"
+  community.docker.docker_container_info:
+    name: "{{ app_name }}"
+  register: laravel_container_info
+  until:
+    - laravel_container_info.container is defined
+    - laravel_container_info.container.State.Health.Status is defined
+    - laravel_container_info.container.State.Health.Status == 'healthy'
+  retries: 15
+  delay: 15
+  failed_when: false
+  when: app_stack == 'laravel'
+
+- name: "{{ app_name }} | Wait for container to run"
+  community.docker.docker_container_info:
+    name: "{{ app_name }}"
+  register: runtime_container_info
+  until:
+    - runtime_container_info.container is defined
+    - runtime_container_info.container.State is defined
+    - runtime_container_info.container.State.Running | bool
+  retries: 8
+  delay: 5
+  when: app_stack != 'laravel'
+
+- name: "{{ app_name }} | Select container info"
+  ansible.builtin.set_fact:
+    container_info: "{{ laravel_container_info if app_stack == 'laravel' else runtime_container_info }}"
+
+- name: "{{ app_name }} | Fail if Laravel is unhealthy"
+  ansible.builtin.fail:
+    msg: "Container {{ app_name }} failed to become healthy. Status: {{ container_info.container.State.Health.Status | default('unknown') }}"
+  when:
+    - app_stack == 'laravel'
+    - container_info.container is defined
+    - container_info.container.State.Health.Status | default('unknown') != 'healthy'
+
+- name: "{{ app_name }} | Check Laravel migration status"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan migrate:status
+  register: laravel_migration_status
+  failed_when: false
+  changed_when: false
+  when:
+    - app_stack == 'laravel'
+    - not app_run_fresh_migrate
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Detect fresh Laravel database"
+  ansible.builtin.set_fact:
+    app_is_fresh_database: >-
+      {{
+        laravel_migration_status.rc | default(1) != 0
+        or 'Migration table not found' in (laravel_migration_status.stdout | default('') ~ laravel_migration_status.stderr | default(''))
+        or 'No migrations found' in (laravel_migration_status.stdout | default('') ~ laravel_migration_status.stderr | default(''))
+      }}
+  when:
+    - app_stack == 'laravel'
+    - not app_run_fresh_migrate
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Clear Laravel bootstrap cache"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} rm -f /var/www/bootstrap/cache/*.php
+  changed_when: false
+  failed_when: false
+  when:
+    - app_stack == 'laravel'
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Run Laravel migrations"
+  ansible.builtin.command:
+    cmd: "docker exec {{ app_name }} php artisan {{ 'migrate:fresh' if app_run_fresh_migrate else 'migrate' }} --force"
+  register: laravel_migration_result
+  when:
+    - app_stack == 'laravel'
+    - app_run_migrate or app_run_fresh_migrate
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+  changed_when: "'Nothing to migrate' not in (laravel_migration_result.stdout | default(''))"
+
+- name: "{{ app_name }} | Run Laravel seeders when requested"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan db:seed --force
+  register: laravel_seeder_result
+  failed_when: false
+  when:
+    - app_stack == 'laravel'
+    - app_run_seeder
+    - app_seed_on == 'always' or app_run_fresh_migrate or (app_seed_on == 'fresh' and app_is_fresh_database | default(false) | bool)
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Refresh Laravel caches"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} php artisan {{ item }}
+  loop:
+    - config:clear
+    - config:cache
+    - route:clear
+    - route:cache
+    - view:clear
+    - view:cache
+  changed_when: false
+  failed_when: false
+  when:
+    - app_stack == 'laravel'
+    - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Run Prisma migrations when requested"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} npx prisma migrate deploy
+  register: prisma_migration_result
+  when:
+    - app_stack == 'express'
+    - portfolio_app.use_prisma | default(false) | bool
+    - app_run_migrate
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Run Go migrations when requested"
+  ansible.builtin.command:
+    cmd: "docker exec {{ app_name }} ./migrate {{ 'fresh' if app_run_fresh_migrate else 'up' }}"
+  register: golang_migration_result
+  when:
+    - app_stack == 'golang'
+    - app_run_migrate or app_run_fresh_migrate
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Run Go seeders when requested"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} ./seeder
+  register: golang_seeder_result
+  when:
+    - app_stack == 'golang'
+    - app_run_seeder
+    - app_seed_on == 'always' or app_run_fresh_migrate
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Render optional MySQL seed SQL"
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/../{{ portfolio_app.mysql_seed_template }}"
+    dest: "{{ app_install_dir }}/mysql-seed.sql"
+    mode: "0600"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_admin_user }}"
+  when:
+    - portfolio_app.mysql_seed_template is defined
+    - portfolio_app.run_mysql_seed | default(false) | bool
+    - portfolio_app.mysql_seed_on | default('manual') == 'always'
+  no_log: true
+
+- name: "{{ app_name }} | Run optional MySQL seed SQL"
+  ansible.builtin.shell:
+    cmd: >-
+      docker exec -i mysql-db {{ mysql_client_binary | default('mariadb') }} -u root -p'{{ vault_mysql_root_password }}'
+      < {{ app_install_dir }}/mysql-seed.sql
+  register: mysql_seed_result
+  changed_when: mysql_seed_result.rc == 0
+  when:
+    - portfolio_app.mysql_seed_template is defined
+    - portfolio_app.run_mysql_seed | default(false) | bool
+    - portfolio_app.mysql_seed_on | default('manual') == 'always'
+    - container_info.container.State.Running | default(false) | bool
+  no_log: true
+
+- name: "{{ app_name }} | Verify HTTP health endpoint"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ app_port }}{{ '' if app_stack == 'nextjs' else app_health_endpoint }}"
+    method: GET
+    status_code: [200, 204, 301, 302, 304]
+    timeout: 10
+  register: app_health
+  retries: 10
+  delay: 5
+  failed_when: false
+  when:
+    - portfolio_verify_health | bool
+    - app_stack != 'laravel'
+
+- name: "{{ app_name }} | Display deployment status"
+  ansible.builtin.debug:
+    msg: >-
+      {{ app_name }} deployed from {{ app_image }}.
+      Stack={{ app_stack }};
+      status={{ container_info.container.State.Health.Status | default(container_info.container.State.Status | default('unknown')) }}.

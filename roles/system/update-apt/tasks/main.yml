@@ -5,6 +5,7 @@
     cache_valid_time: 3600
   register: apt_update_result
   changed_when: apt_update_result.changed
+  when: ansible_os_family == 'Debian'
 
 - name: Upgrade apt packages
   ansible.builtin.apt:
@@ -13,8 +14,11 @@
     autoremove: true
     autoclean: true
   register: apt_upgrade_result
+  when: ansible_os_family == 'Debian'
 
 - name: Display upgrade results
   ansible.builtin.debug:
     msg: "{{ apt_upgrade_result.stdout_lines | default(['No packages upgraded']) }}"
-  when: apt_upgrade_result.changed
+  when:
+    - ansible_os_family == 'Debian'
+    - apt_upgrade_result.changed

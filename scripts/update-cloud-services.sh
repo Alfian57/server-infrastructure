@@ -29,7 +29,7 @@ NC='\033[0m'
 
 # Parse arguments
 AUTO_CONFIRM=""
-if [[ "$1" == "-y" ]] || [[ "$1" == "--yes" ]]; then
+if [[ "${1:-}" == "-y" ]] || [[ "${1:-}" == "--yes" ]]; then
   AUTO_CONFIRM="-y"
 fi
 

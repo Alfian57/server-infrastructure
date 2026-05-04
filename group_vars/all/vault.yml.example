@@ -3,7 +3,7 @@
 # Sensitive Variables Template (Copy to vault.yml and customize)
 # ============================================================================
 # This is an EXAMPLE file. DO NOT encrypt this file.
-# 
+#
 # To use:
 #   1. Copy this file: cp vault.yml.example vault.yml
 #   2. Edit vault.yml and replace all values
@@ -12,7 +12,7 @@
 # ============================================================================
 
 # GitHub Container Registry Credentials
-vault_github_token: "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+vault_github_token: "REPLACE_WITH_GITHUB_PAT"
 vault_docker_password: "your-github-personal-access-token"
 
 # User Management Secrets
@@ -40,5 +40,24 @@ vault_materi_ku:
   db_password: "change-this-db-password"
   redis_password: "change-this-redis-password"
   mail_password: "your-smtp-password"
+
+# Location Based Presence Web
+vault_location_based_presence_web_app_key: "base64:generate-with-php-artisan-key:generate"
+vault_location_based_presence_web_app_url: "https://location-based-presence.solvo-tech.site"
+vault_location_based_presence_web_db_host: "mysql-db"
+vault_location_based_presence_web_db_port: "3306"
+vault_location_based_presence_web_db_database: "location_based_presence"
+vault_location_based_presence_web_db_username: "location_based_presence"
+vault_location_based_presence_web_db_password: "change-this-db-password"
+
+# Location Based Presence Mobile
+vault_location_based_presence_mobile_api_base_url: "https://location-based-presence.solvo-tech.site/api/mobile"
+
+# Demo SQL Injection
+vault_demo_sql_injection_db_host: "mysql-db"
+vault_demo_sql_injection_db_port: "3306"
+vault_demo_sql_injection_db_database: "bank_lab"
+vault_demo_sql_injection_db_username: "demo_sql_injection"
+vault_demo_sql_injection_db_password: "change-this-db-password"
 
 # Add more as needed...

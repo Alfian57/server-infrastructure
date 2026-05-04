@@ -26,12 +26,8 @@ set +e
 # Expected secrets for each repository
 EXPECTED_SECRETS=("VPS_HOST" "VPS_USER" "VPS_SSH_PORT" "VPS_KEY" "DOCKER_TOKEN")
 
-# Repositories to check (subset for quick check)
-CHECK_REPOS=(
-  "materi-ku"
-  "panca-trivia"
-  "tech-talk"
-)
+# Repositories to check, loaded from the central app catalog.
+CHECK_REPOS=("${ALL_REPOS[@]}")
 
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -73,7 +69,7 @@ github_ok=0
 github_fail=0
 
 for repo in "${CHECK_REPOS[@]}"; do
-  full_repo="${GITHUB_OWNER}/${repo}"
+  full_repo="${repo}"
   echo -e "${BLUE}Repository: ${full_repo}${NC}"
   
   # Get secrets list
@@ -126,23 +122,31 @@ for domain in "${!DOMAINS_CONFIG[@]}"; do
   # Get A records
   records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A" \
     -H "Authorization: Bearer $CF_TOKEN")
-  
-  # Check root domain
-  root_ip=$(echo "$records" | jq -r --arg name "$domain" '.result[] | select(.name == $name) | .content')
-  
-  if [ "$root_ip" == "$VPS_IP" ]; then
-    echo -e "  ${GREEN}✓${NC} $domain → $root_ip"
-    ((dns_ok++))
-  elif [ -n "$root_ip" ]; then
-    echo -e "  ${RED}✗${NC} $domain → $root_ip (expected: $VPS_IP)"
-    ((dns_fail++))
-  else
-    echo -e "  ${YELLOW}⚠${NC} $domain (no A record)"
-  fi
-  
-  # Check subdomains count
-  subdomain_count=$(echo "$records" | jq '[.result[] | select(.name != "'"$domain"'")] | length')
-  echo -e "  ${GREEN}✓${NC} $subdomain_count subdomain records configured"
+
+  for record in ${DOMAINS_CONFIG[$domain]}; do
+    if [ "$record" = "@" ]; then
+      fqdn="$domain"
+    elif [ "$record" = "*" ]; then
+      fqdn="*.$domain"
+    else
+      fqdn="$record.$domain"
+    fi
+
+    record_info=$(echo "$records" | jq -r --arg name "$fqdn" '.result[] | select(.name == $name) | "\(.content)\t\(.proxied)"' | head -1)
+    record_ip=$(printf '%s' "$record_info" | awk -F '\t' '{print $1}')
+    record_proxied=$(printf '%s' "$record_info" | awk -F '\t' '{print $2}')
+
+    if [ "$record_ip" = "$VPS_IP" ]; then
+      echo -e "  ${GREEN}✓${NC} $fqdn → $record_ip (proxied: $record_proxied)"
+      ((dns_ok++))
+    elif [ -n "$record_ip" ]; then
+      echo -e "  ${RED}✗${NC} $fqdn → $record_ip (expected: $VPS_IP)"
+      ((dns_fail++))
+    else
+      echo -e "  ${RED}✗${NC} $fqdn (missing A record)"
+      ((dns_fail++))
+    fi
+  done
   
   echo ""
 done

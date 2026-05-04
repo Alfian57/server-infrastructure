@@ -1,0 +1,22 @@
+---
+# Host Profile defaults.
+
+host_profile_supported_os_families:
+  - Debian
+  - RedHat
+
+# Prefer MySQL on capable hosts, fall back to MariaDB for older x86_64 CPUs.
+mysql_engine: "auto"  # auto, mysql, mariadb
+mysql_prefer_mysql: true
+mysql_modern_image: "mysql:8.4"
+mysql_legacy_image: "mariadb:10.11"
+mysql_arm_image: "{{ mysql_modern_image }}"
+mysql_force_legacy_cpu: false
+
+# Prefer recent but conservative infra images. Override these vars for exact pins.
+postgres_preferred_image: "postgres:18-bookworm"
+redis_preferred_image: "redis:8"
+nginx_proxy_preferred_version: "2.14.0"
+nginx_proxy_armv7_version: "2.13.7"
+autoheal_preferred_image: "willfarrell/autoheal:latest"
+minio_preferred_image: "minio/minio:latest"

@@ -1,0 +1,36 @@
+---
+- name: Validate portfolio app catalog exists
+  ansible.builtin.assert:
+    that:
+      - portfolio_apps is defined
+      - portfolio_apps | length > 0
+    fail_msg: "portfolio_apps is empty. Define applications in group_vars/all/apps.yml."
+    quiet: true
+
+- name: Select enabled portfolio applications
+  ansible.builtin.set_fact:
+    portfolio_apps_selected: >-
+      {{
+        (portfolio_apps | selectattr('enabled', 'undefined') | list)
+        + (portfolio_apps | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list)
+      }}
+
+- name: Apply single app filter
+  ansible.builtin.set_fact:
+    portfolio_apps_selected: "{{ portfolio_apps_selected | selectattr('name', 'equalto', portfolio_app_filter) | list }}"
+  when: portfolio_app_filter | length > 0
+
+- name: Validate requested app exists
+  ansible.builtin.assert:
+    that:
+      - portfolio_apps_selected | length > 0
+    fail_msg: "No enabled app matched '{{ portfolio_app_filter }}'. Run `make app-list` to see known apps."
+    quiet: true
+  when: portfolio_app_filter | length > 0
+
+- name: Deploy selected portfolio applications
+  ansible.builtin.include_tasks: deploy-one.yml
+  loop: "{{ portfolio_apps_selected }}"
+  loop_control:
+    loop_var: portfolio_app
+    label: "{{ portfolio_app.name }}"

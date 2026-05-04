@@ -12,3 +12,5 @@ users: []
 #     ssh_key: "ssh-ed25519 AAAA... user@host"
 #     state: "present"
 #     system: false
+#     sudo_nopasswd: false
+#     password_lock: true

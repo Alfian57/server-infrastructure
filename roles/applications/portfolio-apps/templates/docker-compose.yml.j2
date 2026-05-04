@@ -1,0 +1,87 @@
+---
+services:
+  {{ app_name }}:
+    image: {{ app_image }}
+    container_name: {{ app_name }}
+{% if app_env_template | length > 0 and app_use_env_file | bool %}
+    env_file:
+      - .env
+{% endif %}
+{% if app_stack in ['golang', 'express'] %}
+    environment:
+      RUN_MIGRATE: "{{ portfolio_app.runtime_migrate | default(false) | string | lower }}"
+      RUN_MIGRATE_FRESH: "{{ portfolio_app.runtime_fresh_migrate | default(false) | string | lower }}"
+      RUN_SEEDER: "{{ portfolio_app.runtime_seeder | default(false) | string | lower }}"
+{% for key, value in (portfolio_app.extra_environment | default({})).items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% elif portfolio_app.extra_environment is defined %}
+    environment:
+{% for key, value in portfolio_app.extra_environment.items() %}
+      {{ key }}: "{{ value }}"
+{% endfor %}
+{% endif %}
+    restart: unless-stopped
+{% if app_volumes | length > 0 or (app_stack == 'laravel' and app_env_template | length > 0) %}
+    volumes:
+{% if app_stack == 'laravel' and app_env_template | length > 0 %}
+      - ./.env:{{ app_env_mount_path }}:ro
+{% endif %}
+{% for volume in app_volumes %}
+      - {{ volume }}
+{% endfor %}
+{% endif %}
+    networks:
+{% for network in app_networks %}
+      - {{ network }}
+{% endfor %}
+    healthcheck:
+{% if app_stack == 'laravel' %}
+      test: ["CMD", "sh", "-c", "pidof nginx && pidof php-fpm"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+{% elif app_stack == 'nextjs' %}
+      test:
+        - CMD
+        - node
+        - -e
+        - "const http = require('http'); const req = http.request({hostname: 'localhost', port: {{ app_port }}, path: '/', method: 'GET', timeout: 5000}, (res) => { process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.on('timeout', () => process.exit(1)); req.end();"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+{% elif app_stack == 'php' %}
+      test:
+        - CMD
+        - php
+        - -r
+        - "exit(@fsockopen('127.0.0.1', {{ app_port }}) ? 0 : 1);"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+{% else %}
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:{{ app_port }}{{ app_health_endpoint }}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+{% endif %}
+{% if portfolio_app.command is defined %}
+    command: sh -c "{{ portfolio_app.command }}"
+{% endif %}
+
+networks:
+{% for network in app_networks %}
+  {{ network }}:
+    external: true
+{% endfor %}
+{% if app_named_volumes | length > 0 %}
+
+volumes:
+{% for volume in app_named_volumes %}
+  {{ volume }}:
+{% endfor %}
+{% endif %}

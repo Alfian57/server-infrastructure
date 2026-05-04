@@ -5,9 +5,10 @@
 docker_stack_base: "/opt/docker-stack"
 docker_stack_databases: "{{ docker_stack_base }}/databases"
 
-# Docker image
-# Using bookworm (Debian) for x86-64-v1 CPU compatibility (older VPS/QEMU)
-redis_image: "redis:7-bookworm"
+# Docker image selection. host-profile sets redis_auto_image on new hosts.
+redis_preserve_existing_engine: true
+redis_image_override: ""
+redis_auto_image: "redis:8"
 
 # Network configuration
 redis_network: "redis_network"

@@ -1,0 +1,471 @@
+---
+# Central application catalog. Add/edit applications here first.
+
+env_contract_defaults:
+  path: ".env.example"
+  ref: ""
+  required: true
+  ignore_keys: []
+
+github_actions_defaults:
+  secrets:
+    VPS_HOST:
+      source: "runtime:vps_host"
+    VPS_USER:
+      source: "runtime:ci_deploy_user"
+    VPS_SSH_PORT:
+      source: "runtime:vps_ssh_port"
+    VPS_KEY:
+      source: "runtime:vps_key"
+    DOCKER_TOKEN:
+      source: "vault:vault_github_token"
+  variables: {}
+
+portfolio_apps:
+  - name: "materi-ku"
+    repo: "materi-ku"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/materi-ku-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "materi_ku_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      subdomain: "materi-ku"
+      scheme: "http"
+      forward_host: "materi-ku"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["materi-ku"]
+    databases:
+      mysql: ["materi_ku"]
+
+  - name: "panca-trivia"
+    repo: "panca-trivia"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/panca-trivia-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "panca_trivia_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      subdomain: "panca-trivia"
+      scheme: "http"
+      forward_host: "panca-trivia"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["panca-trivia"]
+    databases:
+      mysql: ["panca_trivia"]
+
+  - name: "ruang-istirahat"
+    repo: "ruang-istirahat"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/ruang-istirahat-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "ruang_istirahat_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      subdomain: "ruang-istirahat"
+      scheme: "http"
+      forward_host: "ruang-istirahat"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["ruang-istirahat"]
+    databases:
+      mysql: ["ruang_istirahat"]
+
+  - name: "tech-talk"
+    repo: "tech-talk"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "built-and-deploy.yml"
+    env_template: "roles/applications/tech-talk-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "tech_talk_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      subdomain: "tech-talk"
+      scheme: "http"
+      forward_host: "tech-talk"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["tech-talk"]
+    databases:
+      mysql: ["tech_talk"]
+
+  - name: "posyandu"
+    repo: "posyandu-digital"
+    image_name: "posyandu"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/posyandu-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network", "redis_network"]
+    volumes:
+      - "posyandu_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      subdomain: "posyandu"
+      scheme: "http"
+      forward_host: "posyandu"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["posyandu"]
+    databases:
+      mysql: ["posyandu"]
+
+  - name: "presensi-skansaba-web"
+    repo: "Presensi-Skansaba-Web"
+    image_name: "presensi-skansaba-web"
+    stack: "laravel"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/presensi-skansaba-web-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network", "redis_network"]
+    volumes:
+      - "presensi_skansaba_web_storage:/var/www/html/storage"
+    env_mount_path: "/var/www/html/.env"
+    proxy:
+      subdomain: "presensi-skansaba-web"
+      scheme: "http"
+      forward_host: "presensi-skansaba-web"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["presensi-skansaba-web"]
+    databases:
+      mysql: ["presensi_skansaba"]
+
+  - name: "solvo"
+    repo: "solvo"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_template: "roles/applications/solvo-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network", "redis_network"]
+    volumes:
+      - "solvo_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    proxy:
+      domain: "solvo-tech.site"
+      scheme: "http"
+      forward_host: "solvo"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "solvo-tech.site"
+      records: ["@"]
+    databases:
+      mysql: ["solvo"]
+
+  - name: "location-based-presence-web"
+    repo_owner: "SolvoTech"
+    repo: "location-based-presence-web"
+    image: "ghcr.io/solvotech/location-based-presence-web:latest"
+    stack: "laravel"
+    build:
+      dockerfile: "nginx/Dockerfile"
+      workflow: "web.yml"
+    env_template: "roles/applications/location-based-presence-web-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "location_based_presence_web_storage:/var/www/html/storage"
+    env_mount_path: "/var/www/html/.env"
+    run_seeder: true
+    seed_on: "fresh"
+    proxy:
+      domain: "location-based-presence.solvo-tech.site"
+      scheme: "http"
+      forward_host: "location-based-presence-web"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "solvo-tech.site"
+      records: ["location-based-presence"]
+    databases:
+      mysql: ["location_based_presence"]
+
+  - name: "demo-sql-injection"
+    repo_owner: "Alfian57"
+    repo: "demo-sql-injection"
+    image: "ghcr.io/alfian57/demo-sql-injection:latest"
+    stack: "php"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 80
+    health_endpoint: "/"
+    env_template: "roles/applications/demo-sql-injection-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    run_mysql_seed: true
+    mysql_seed_on: "always"
+    mysql_seed_destructive: true
+    mysql_seed_template: "roles/applications/demo-sql-injection-setup/templates/mysql-seed.sql.j2"
+    proxy:
+      subdomain: "demo-sql-injection"
+      scheme: "http"
+      forward_host: "demo-sql-injection"
+      forward_port: 80
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["demo-sql-injection"]
+    databases:
+      mysql: ["bank_lab"]
+
+  - name: "campus-project-hub-api"
+    repo: "campus-project-hub-api"
+    stack: "golang"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "docker-build.yml"
+    app_port: 8000
+    health_endpoint: "/api/v1/health"
+    env_template: "roles/applications/campus-project-hub-api-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "postgres_network"]
+    volumes:
+      - "campus_project_hub_api_uploads:/app/uploads"
+    create_data_dir: true
+    run_migrate: false
+    run_fresh_migrate: false
+    run_seeder: false
+    proxy:
+      subdomain: "campus-project-hub-api"
+      scheme: "http"
+      forward_host: "campus-project-hub-api"
+      forward_port: 8000
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["campus-project-hub-api"]
+    databases:
+      postgres: ["campus_project_hub"]
+
+  - name: "ruang-tenang-api"
+    repo: "ruang-tenang-api"
+    stack: "golang"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 8080
+    health_endpoint: "/health"
+    env_template: "roles/applications/ruang-tenang-api-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "postgres_network", "redis_network"]
+    volumes:
+      - "ruang_tenang_api_uploads:/app/uploads"
+    run_migrate: false
+    run_fresh_migrate: false
+    run_seeder: false
+    extra_environment:
+      HTTP_PROXY: "http://172.17.0.1:40001"
+      HTTPS_PROXY: "http://172.17.0.1:40001"
+    proxy:
+      domain: "api.ruang-tenang.site"
+      scheme: "http"
+      forward_host: "ruang-tenang-api"
+      forward_port: 8080
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "ruang-tenang.site"
+      records: ["api"]
+    databases:
+      postgres: ["ruang_tenang"]
+
+  - name: "campus-project-hub-web"
+    repo: "campus-project-hub-web"
+    stack: "nextjs"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "docker-build.yml"
+    app_port: 3000
+    env_template: "roles/applications/campus-project-hub-web-setup/templates/.env.j2"
+    ci:
+      secrets:
+        MIDTRANS_CLIENT_KEY:
+          source: "vault:vault_campus_project_hub_web_midtrans_client_key"
+      variables:
+        NEXT_PUBLIC_API_URL:
+          source: "vault:vault_campus_project_hub_web_api_url"
+    networks: ["nginx_proxy_manager_network"]
+    proxy:
+      subdomain: "campus-project-hub-web"
+      scheme: "http"
+      forward_host: "campus-project-hub-web"
+      forward_port: 3000
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["campus-project-hub-web"]
+
+  - name: "personal-portofolio"
+    repo: "personal-portofolio"
+    stack: "nextjs"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 3000
+    env_contract:
+      required: false
+    networks: ["nginx_proxy_manager_network"]
+    proxy:
+      domain: "alfian-gading.my.id"
+      scheme: "http"
+      forward_host: "personal-portofolio"
+      forward_port: 3000
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["@", "*"]
+
+  - name: "ruang-tenang-web"
+    repo: "ruang-tenang-web"
+    stack: "nextjs"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 3000
+    env_template: "roles/applications/ruang-tenang-web-setup/templates/.env.j2"
+    ci:
+      variables:
+        NEXT_PUBLIC_API_BASE_URL:
+          source: "vault:vault_ruang_tenang_web_api_url"
+        NEXT_PUBLIC_API_URL:
+          source: "vault:vault_ruang_tenang_web_api_url"
+        NEXT_PUBLIC_APP_TIMEZONE:
+          value: "Asia/Jakarta"
+        NEXT_PUBLIC_ALLOWED_IMAGE_HOSTS:
+          value: "api.ruang-tenang.site"
+        NEXT_PUBLIC_MIDTRANS_ENV:
+          value: "production"
+    networks: ["nginx_proxy_manager_network"]
+    proxy:
+      domain: "ruang-tenang.site"
+      scheme: "http"
+      forward_host: "ruang-tenang-web"
+      forward_port: 3000
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "ruang-tenang.site"
+      records: ["@"]
+
+  - name: "file-pod-api"
+    repo: "file-pod-api"
+    stack: "express"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 8080
+    health_endpoint: "/health"
+    env_template: "roles/applications/file-pod-api-setup/templates/.env.j2"
+    env_contract:
+      required: false
+    networks: ["nginx_proxy_manager_network", "postgres_network", "minio_network"]
+    volumes:
+      - "file_pod_api_uploads:/app/uploads"
+    create_uploads_dir: true
+    use_prisma: true
+    run_migrate: true
+    run_fresh_migrate: false
+    run_seeder: false
+    proxy:
+      subdomain: "file-pod-api"
+      scheme: "http"
+      forward_host: "file-pod-api"
+      forward_port: 8080
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["file-pod-api"]
+    databases:
+      postgres: ["file_pod"]
+
+mobile_repositories:
+  - name: "file-pod-mobile"
+    variables:
+      BASE_URL: "https://file-pod-api.alfian-gading.my.id"
+    ci:
+      variables:
+        BASE_URL:
+          source: "vault:vault_file_pod_mobile_base_url"
+
+  - name: "location-based-presence-mobile"
+    repo_owner: "SolvoTech"
+    variables:
+      MOBILE_API_BASE_URL: "https://location-based-presence.solvo-tech.site/api/mobile"
+    ci:
+      variables:
+        MOBILE_API_BASE_URL:
+          source: "vault:vault_location_based_presence_mobile_api_base_url"
+
+mysql_databases: >-
+  {{ portfolio_apps | map(attribute='databases') | select('defined')
+  | map(attribute='mysql') | select('defined') | flatten | unique | list }}
+mysql_database_users:
+  - database: "location_based_presence"
+    username: "{{ vault_location_based_presence_web_db_username }}"
+    password: "{{ vault_location_based_presence_web_db_password }}"
+  - database: "bank_lab"
+    username: "{{ vault_demo_sql_injection_db_username }}"
+    password: "{{ vault_demo_sql_injection_db_password }}"
+postgres_databases: >-
+  {{ portfolio_apps | map(attribute='databases') | select('defined')
+  | map(attribute='postgres') | select('defined') | flatten | unique | list }}
+portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
+portfolio_proxy_hosts: "{{ portfolio_apps | map(attribute='proxy') | select('defined') | list }}"

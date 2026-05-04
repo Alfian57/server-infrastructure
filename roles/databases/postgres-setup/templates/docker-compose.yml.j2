@@ -4,7 +4,7 @@
 services:
   postgres-db:
     container_name: postgres-db
-    image: {{ postgres_image | default('postgres:14-alpine') }}
+    image: {{ postgres_effective_image | default(postgres_auto_image | default('postgres:18-bookworm')) }}
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -38,7 +38,7 @@ services:
 {% if postgres_enable_pgadmin | default(true) %}
   pgadmin:
     container_name: pgadmin
-    image: dpage/pgadmin4:{{ pgadmin_version | default('8.4') }}
+    image: dpage/pgadmin4:{{ pgadmin_version | default('9.14.0') }}
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}

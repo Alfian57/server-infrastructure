@@ -3,6 +3,11 @@
 docker_install: true # Set to false to skip Docker installation
 docker_edition: "ce"
 docker_package_state: present
-docker_users: ["alfiang", "deployer"]
+docker_users: "{{ users | default([]) | selectattr('groups', 'defined') | selectattr('groups', 'contains', 'docker') | map(attribute='name') | list }}"
 docker_compose_version: "v2"
 docker_compose_package_state: present
+docker_supported_os_families:
+  - Debian
+  - RedHat
+docker_apt_distribution: "{{ 'debian' if ansible_distribution == 'Debian' else 'ubuntu' }}"
+docker_apt_codename: "{{ ansible_distribution_release }}"

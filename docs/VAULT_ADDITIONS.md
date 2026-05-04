@@ -1,145 +1,70 @@
-# ============================================================================
-# Additional Vault Variables for New Applications
-# ============================================================================
-# These variables need to be added to group_vars/all/vault.yml
-# Run: make vault-main (or ansible-vault edit --vault-password-file .vault_pass group_vars/all/vault.yml)
-# Then copy and paste these sections at the end of the file
-# ============================================================================
+# Additional Vault Variables
 
-# ============================================================================
-# MySQL Databases for New Applications
-# ============================================================================
-vault_mysql_posyandu_database: "posyandu"
-vault_mysql_posyandu_username: "root"
-vault_mysql_posyandu_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+This file is a checklist for variables that must exist in `group_vars/all/vault.yml`.
+Keep real values only in the encrypted vault. Do not put real passwords, API keys, or
+tokens in tracked documentation.
 
-vault_mysql_solvo_database: "solvo"
-vault_mysql_solvo_username: "root"
-vault_mysql_solvo_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+Edit the encrypted vault with:
 
-vault_mysql_presensi_skansaba_web_database: "presensi_skansaba"
-vault_mysql_presensi_skansaba_web_username: "root"
-vault_mysql_presensi_skansaba_web_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+```bash
+make vault-edit
+```
 
-# ============================================================================
-# PostgreSQL Databases for New Applications
-# ============================================================================
-vault_postgres_campus_project_hub_api_database: "campus_project_hub"
-vault_postgres_campus_project_hub_api_username: "root"
-vault_postgres_campus_project_hub_api_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+## Shared Credentials
 
-vault_postgres_file_pod_api_database: "file_pod"
-vault_postgres_file_pod_api_username: "root"
-vault_postgres_file_pod_api_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+```yaml
+vault_github_username: "your-github-username"
+vault_github_token: "REPLACE_WITH_GITHUB_PAT"
+vault_docker_password: "{{ vault_github_token }}"
 
-vault_postgres_ruang_tenang_api_database: "ruang_tenang"
-vault_postgres_ruang_tenang_api_username: "root"
-vault_postgres_ruang_tenang_api_password: "sJgJgT1PueVL23XL2~3cS4Sfz"
+vault_cloudflare_email: "you@example.com"
+vault_cloudflare_api_token: "REPLACE_WITH_CLOUDFLARE_TOKEN"
 
-# ============================================================================
-# Application: Posyandu (Laravel + Inertia React)
-# ============================================================================
-vault_posyandu_app_name: "Posyandu"
-vault_posyandu_app_key: "base64:GENERATE_NEW_KEY_WITH_php_artisan_key:generate"
-vault_posyandu_app_url: "https://posyandu.alfian-gading.site"
-vault_posyandu_db_host: "mysql-db"
-vault_posyandu_db_port: "3306"
-vault_posyandu_db_database: "{{ vault_mysql_posyandu_database }}"
-vault_posyandu_db_username: "{{ vault_mysql_posyandu_username }}"
-vault_posyandu_db_password: "{{ vault_mysql_posyandu_password }}"
+vault_npm_admin_email: "admin@example.com"
+vault_npm_admin_password: "REPLACE_WITH_STRONG_PASSWORD"
+vault_npm_admin_nickname: "Admin"
+vault_npm_domain_name: "alfian-gading.my.id"
 
-# ============================================================================
-# Application: Solvo (Laravel + Filament)
-# ============================================================================
-vault_solvo_app_name: "Solvo"
-vault_solvo_app_key: "base64:GENERATE_NEW_KEY_WITH_php_artisan_key:generate"
-vault_solvo_app_url: "https://solvo.alfian-gading.site"
-vault_solvo_db_host: "mysql-db"
-vault_solvo_db_port: "3306"
-vault_solvo_db_database: "{{ vault_mysql_solvo_database }}"
-vault_solvo_db_username: "{{ vault_mysql_solvo_username }}"
-vault_solvo_db_password: "{{ vault_mysql_solvo_password }}"
+vault_minio_root_user: "minioadmin"
+vault_minio_root_password: "REPLACE_WITH_STRONG_PASSWORD"
+```
 
-# Midtrans Payment Gateway (Sandbox)
-vault_solvo_midtrans_server_key: "SB-Mid-server-REPLACE_WITH_YOUR_KEY"
-vault_solvo_midtrans_client_key: "SB-Mid-client-REPLACE_WITH_YOUR_KEY"
+## Databases
 
-# ============================================================================
-# Application: Presensi Skansaba Web (Laravel)
-# ============================================================================
-vault_presensi_skansaba_web_app_name: "Presensi Skansaba"
-vault_presensi_skansaba_web_app_key: "base64:GENERATE_NEW_KEY_WITH_php_artisan_key:generate"
-vault_presensi_skansaba_web_app_url: "https://presensi-skansaba.alfian-gading.site"
-vault_presensi_skansaba_web_db_host: "mysql-db"
-vault_presensi_skansaba_web_db_port: "3306"
-vault_presensi_skansaba_web_db_database: "{{ vault_mysql_presensi_skansaba_web_database }}"
-vault_presensi_skansaba_web_db_username: "{{ vault_mysql_presensi_skansaba_web_username }}"
-vault_presensi_skansaba_web_db_password: "{{ vault_mysql_presensi_skansaba_web_password }}"
+Use unique strong passwords per database user.
 
-# ============================================================================
-# Application: Campus Project Hub API (Go Gin)
-# ============================================================================
-vault_campus_project_hub_api_base_url: "https://campus-project-hub-api.alfian-gading.site"
-vault_campus_project_hub_api_db_host: "postgres-db"
-vault_campus_project_hub_api_db_port: "5432"
-vault_campus_project_hub_api_db_name: "{{ vault_postgres_campus_project_hub_api_database }}"
-vault_campus_project_hub_api_db_user: "{{ vault_postgres_campus_project_hub_api_username }}"
-vault_campus_project_hub_api_db_password: "{{ vault_postgres_campus_project_hub_api_password }}"
-vault_campus_project_hub_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
-# OAuth - Google
-vault_campus_project_hub_api_google_redirect_url: "https://campus-project-hub-api.alfian-gading.site/api/v1/auth/google/callback"
-# OAuth - GitHub
-vault_campus_project_hub_api_github_client_id: "your-github-client-id"
-vault_campus_project_hub_api_github_client_secret: "your-github-client-secret"
-vault_campus_project_hub_api_github_redirect_url: "https://campus-project-hub-api.alfian-gading.site/api/v1/auth/github/callback"
-# Midtrans
-vault_campus_project_hub_api_midtrans_server_key: ""
-vault_campus_project_hub_api_midtrans_client_key: ""
-vault_campus_project_hub_api_midtrans_is_production: false
-# Frontend URL
-vault_campus_project_hub_api_frontend_url: "https://campus-project-hub-web.alfian-gading.site"
+```yaml
+vault_mysql_root_password: "REPLACE_WITH_STRONG_PASSWORD"
+vault_postgres_password: "REPLACE_WITH_STRONG_PASSWORD"
+vault_redis_password: "REPLACE_WITH_STRONG_PASSWORD"
+```
 
-# ============================================================================
-# Application: Campus Project Hub Web (Next.js)
-# ============================================================================
-vault_campus_project_hub_web_api_url: "https://campus-project-hub-api.alfian-gading.site/api"
+Application database names are now defined in `group_vars/all/apps.yml` and consumed
+by the database roles as `mysql_databases` and `postgres_databases`.
 
-# ============================================================================
-# Application: File Pod API (Node.js Express + Prisma)
-# ============================================================================
-vault_file_pod_api_app_url: "https://file-pod-api.alfian-gading.site"
-vault_file_pod_api_cors_origin: "https://file-pod-api.alfian-gading.site"
-vault_file_pod_api_database_url: "postgresql://{{ vault_postgres_file_pod_api_username }}:{{ vault_postgres_file_pod_api_password }}@postgres-db:5432/{{ vault_postgres_file_pod_api_database }}"
-vault_file_pod_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
-# OAuth Configuration
-vault_file_pod_api_google_client_id: "your-google-client-id"
-vault_file_pod_api_github_client_id: "your-github-client-id"
-vault_file_pod_api_github_client_secret: "your-github-client-secret"
+## Application Variables
 
-# ============================================================================
-# Application: Personal Portofolio (Next.js)
-# ============================================================================
-# No specific environment variables needed - static site
+Each app keeps its required env shape in its own `.env.j2` template under
+`roles/applications/<app>-setup/templates/.env.j2`. Add the corresponding
+`vault_<app>_*` variables to the encrypted vault.
 
-# ============================================================================
-# Application: Ruang Tenang API (Go Gin)
-# ============================================================================
-vault_ruang_tenang_api_db_host: "postgres-db"
-vault_ruang_tenang_api_db_port: "5432"
-vault_ruang_tenang_api_db_name: "{{ vault_postgres_ruang_tenang_api_database }}"
-vault_ruang_tenang_api_db_user: "{{ vault_postgres_ruang_tenang_api_username }}"
-vault_ruang_tenang_api_db_password: "{{ vault_postgres_ruang_tenang_api_password }}"
-vault_ruang_tenang_api_jwt_secret: "your-super-secret-jwt-key-change-in-production-at-least-32-chars"
-# AI Chat (Gemini API)
-vault_ruang_tenang_api_gemini_api_key: "your-gemini-api-key"
+Examples:
 
-# ============================================================================
-# Application: Ruang Tenang Web (Next.js)
-# ============================================================================
-vault_ruang_tenang_web_api_url: "https://ruang-tenang-api.alfian-gading.site/api"
+```yaml
+vault_example_app_name: "Example"
+vault_example_app_key: "base64:REPLACE_WITH_GENERATED_KEY"
+vault_example_app_url: "https://example.alfian-gading.my.id"
+vault_example_db_host: "mysql-db"
+vault_example_db_port: "3306"
+vault_example_db_database: "example"
+vault_example_db_username: "example_user"
+vault_example_db_password: "REPLACE_WITH_STRONG_PASSWORD"
+```
 
-# ============================================================================
-# Application: File Pod Mobile (Flutter)
-# ============================================================================
-# GitHub repository variable for CI/CD build
-vault_file_pod_mobile_base_url: "https://file-pod-api.alfian-gading.site"
+## Validation
+
+```bash
+make app-env-check
+make doctor
+make vault-status
+```

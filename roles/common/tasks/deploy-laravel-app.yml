@@ -31,8 +31,8 @@
     path: "/var/log/docker-updates"
     state: directory
     mode: "0775"
-    owner: "deployer"
-    group: "deployer"
+    owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    group: "docker"
 
 - name: Log in to GitHub Container Registry
   community.docker.docker_login:
@@ -53,16 +53,16 @@
     src: ../../common/files/update.sh
     dest: "{{ app_install_dir }}/update.sh"
     mode: "0755"
-    owner: "deployer"
-    group: "deployer"
+    owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    group: "docker"
 
 - name: Copy artisan-commands.sh helper script to server
   ansible.builtin.copy:
     src: ../../common/files/artisan-commands.sh
     dest: "{{ app_install_dir }}/artisan-commands.sh"
     mode: "0755"
-    owner: "deployer"
-    group: "deployer"
+    owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    group: "docker"
 
 - name: Copy docker-compose file to server
   ansible.builtin.copy:

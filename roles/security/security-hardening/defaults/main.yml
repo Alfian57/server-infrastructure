@@ -70,8 +70,9 @@ security_fail2ban_sender: "fail2ban@{{ ansible_fqdn }}"
 security_ssh_harden_config: true
 
 # Authentication
-# prohibit-password = allow SSH key auth for root, deny password
-security_ssh_permit_root_login: "prohibit-password"
+# no = disable all direct root SSH. Bootstrap may temporarily add a root key,
+# but production access should use a named sudo user.
+security_ssh_permit_root_login: "no"
 security_ssh_password_authentication: "no"   # Use key-based only
 security_ssh_max_auth_tries: 3
 security_ssh_max_sessions: 10
@@ -83,8 +84,17 @@ security_ssh_client_alive_count_max: 2       # 2 * 5 = 10 minutes total
 # Logging
 security_ssh_log_level: "VERBOSE"            # QUIET, FATAL, ERROR, INFO, VERBOSE, DEBUG
 
-# Allowed users (leave empty to allow all)
-security_ssh_allowed_users: []
+# Allowed SSH users. Defaults to all managed non-system users.
+security_ssh_allowed_users: >-
+  {{
+    (
+      (users | default([]) | selectattr('state', 'undefined') | list)
+      + (users | default([]) | selectattr('state', 'defined') | rejectattr('state', 'equalto', 'absent') | list)
+    )
+    | rejectattr('system', 'equalto', true)
+    | map(attribute='name')
+    | list
+  }}
 # Example:
 # security_ssh_allowed_users:
 #   - deployer

@@ -1,7 +1,7 @@
 services:
     app:
         container_name: nginx-proxy-manager
-        image: "jc21/nginx-proxy-manager:{{ npm_image_version }}"
+        image: "{{ npm_effective_image | default('jc21/nginx-proxy-manager:' ~ npm_image_version) }}"
         restart: unless-stopped
         ports:
             - "80:80"

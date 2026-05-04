@@ -4,7 +4,7 @@
 services:
   redis-server:
     container_name: redis-server
-    image: {{ redis_image | default('redis:7-alpine') }}
+    image: {{ redis_effective_image | default(redis_auto_image | default('redis:8')) }}
     restart: unless-stopped
     networks:
       - {{ redis_network }}
@@ -41,7 +41,7 @@ services:
     environment:
       REDIS_HOSTS: local:redis-server:6379:0:${REDIS_PASSWORD}
       HTTP_USER: ${REDIS_COMMANDER_USER:-admin}
-      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-adminpassword}
     networks:
       - {{ redis_network }}
     ports:

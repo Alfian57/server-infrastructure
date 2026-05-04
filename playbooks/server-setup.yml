@@ -3,6 +3,11 @@
   hosts: all
   gather_facts: true
   become: true
+
+  vars_files:
+    - ../group_vars/all/vars.yml
+    - ../group_vars/all/apps.yml
+    - ../group_vars/all/vault.yml
   
   vars:
     # Control which role categories to run
@@ -12,6 +17,7 @@
     setup_databases: true
     setup_applications: true
     setup_optimization: true
+    reboot_at_end: false
 
   pre_tasks:
     - name: Validate minimum Ansible version
@@ -44,9 +50,14 @@
     # SYSTEM SETUP
     # Basic system configuration and tools
     # ═══════════════════════════════════════════════════════════
+    - role: host-profile
+      tags: [always, system, host-profile]
+
     - role: update-apt
       tags: [system, update-apt]
-      when: setup_system | bool
+      when:
+        - setup_system | bool
+        - ansible_os_family == 'Debian'
 
     - role: users-setup
       tags: [system, users-setup]
@@ -66,7 +77,9 @@
     # ═══════════════════════════════════════════════════════════
     - role: security-hardening
       tags: [security, security-hardening]
-      when: setup_security | bool
+      when:
+        - setup_security | bool
+        - ansible_os_family == 'Debian'
 
     # ═══════════════════════════════════════════════════════════
     # INFRASTRUCTURE
@@ -90,7 +103,9 @@
 
     - role: cloudflare-warp-setup
       tags: [infrastructure, cloudflare-warp-setup]
-      when: setup_infrastructure | bool
+      when:
+        - setup_infrastructure | bool
+        - ansible_os_family == 'Debian'
 
     # ═══════════════════════════════════════════════════════════
     # DATABASES
@@ -110,62 +125,11 @@
 
     # ═══════════════════════════════════════════════════════════
     # APPLICATIONS
-    # Application deployments
+    # Generic catalog-driven application deployments.
+    # Edit group_vars/all/apps.yml to add/change apps.
     # ═══════════════════════════════════════════════════════════
-    # Laravel Applications
-    - role: materi-ku-setup
-      tags: [application, materi-ku-setup]
-      when: setup_applications | bool
-
-    - role: panca-trivia-setup
-      tags: [application, panca-trivia-setup]
-      when: setup_applications | bool
-
-    - role: ruang-istirahat-setup
-      tags: [application, ruang-istirahat-setup]
-      when: setup_applications | bool
-
-    - role: tech-talk-setup
-      tags: [application, tech-talk-setup]
-      when: setup_applications | bool
-
-    - role: posyandu-setup
-      tags: [application, posyandu-setup]
-      when: setup_applications | bool
-
-    - role: solvo-setup
-      tags: [application, solvo-setup]
-      when: setup_applications | bool
-
-    - role: presensi-skansaba-web-setup
-      tags: [application, presensi-skansaba-web-setup]
-      when: setup_applications | bool
-
-    # Go Applications
-    - role: campus-project-hub-api-setup
-      tags: [application, campus-project-hub-api-setup]
-      when: setup_applications | bool
-
-    - role: ruang-tenang-api-setup
-      tags: [application, ruang-tenang-api-setup]
-      when: setup_applications | bool
-
-    # Next.js Applications
-    - role: campus-project-hub-web-setup
-      tags: [application, campus-project-hub-web-setup]
-      when: setup_applications | bool
-
-    - role: personal-portofolio-setup
-      tags: [application, personal-portofolio-setup]
-      when: setup_applications | bool
-
-    - role: ruang-tenang-web-setup
-      tags: [application, ruang-tenang-web-setup]
-      when: setup_applications | bool
-
-    # Node.js/Express Applications
-    - role: file-pod-api-setup
-      tags: [application, file-pod-api-setup]
+    - role: portfolio-apps
+      tags: [application, portfolio-apps]
       when: setup_applications | bool
 
     # ═══════════════════════════════════════════════════════════
@@ -174,7 +138,9 @@
     # ═══════════════════════════════════════════════════════════
     - role: cost-optimization
       tags: [optimization, cost-optimization]
-      when: setup_optimization | bool
+      when:
+        - setup_optimization | bool
+        - ansible_os_family == 'Debian'
 
   post_tasks:
     - name: Display completion message
@@ -185,7 +151,7 @@
           - "═══════════════════════════════════════════════════════════"
           - ""
           - "  All roles have been executed successfully."
-          - "  Server will now reboot to apply all changes..."
+          - "  Reboot is disabled by default. Run `make reboot-if-required` when needed."
           - ""
           - "═══════════════════════════════════════════════════════════"
       tags: always
@@ -196,6 +162,7 @@
         reboot_timeout: 300
         pre_reboot_delay: 5
         post_reboot_delay: 30
+      when: reboot_at_end | bool
       tags: always
 
     - name: Display post-reboot message
@@ -212,4 +179,5 @@
           - "  4. View logs: make logs"
           - ""
           - "═══════════════════════════════════════════════════════════"
+      when: reboot_at_end | bool
       tags: always

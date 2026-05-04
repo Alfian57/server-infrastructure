@@ -3,7 +3,7 @@
 
 services:
   mysql-db:
-    image: {{ mysql_image | default('mariadb:10.11') }}
+    image: {{ mysql_effective_image | default(mysql_auto_image | default('mariadb:10.11')) }}
     container_name: mysql-db
     restart: unless-stopped
     environment:
@@ -14,7 +14,7 @@ services:
       - ./my.cnf:/etc/mysql/conf.d/custom.cnf:ro
 {% endif %}
     healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "{{ mysql_admin_binary | default('mariadb-admin') }}", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10

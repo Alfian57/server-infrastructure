@@ -38,11 +38,7 @@ get_var_list() {
 
 # Read domain records from vars.yml
 get_domains_config() {
-  # Returns associative array style: domain:records
-  awk '/^managed_domains:$/,/^[a-z_]+:/' "$PROJECT_DIR/group_vars/all/vars.yml" | \
-    grep -E "^\s+-\s+name:|^\s+records:" | \
-    paste - - | \
-    sed 's/.*name:\s*"\([^"]*\)".*records:\s*"\([^"]*\)".*/\1:\2/'
+  "$PROJECT_DIR/scripts/app-catalog.py" domains-shell
 }
 
 # =============================================================================
@@ -52,10 +48,25 @@ get_domains_config() {
 # GitHub Configuration
 GITHUB_OWNER=$(get_var "github_username")
 
+load_local_github_token() {
+  [ -f "$PROJECT_DIR/.env" ] || return 0
+  [ -z "${GH_TOKEN:-}" ] || return 0
+
+  local token
+  token=$(grep -E '^(GH_TOKEN|GITHUB_TOKEN|GITHUB_PAT_TOKEN)=' "$PROJECT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")
+  if [ -n "$token" ]; then
+    export GH_TOKEN="$token"
+    export GH_TOKEN_SOURCE=".env"
+  fi
+}
+
+load_local_github_token
+
 # SSH Configuration  
 SSH_KEY_NAME=$(get_var "ssh_key_name")
 SSH_KEY_PATH="${HOME}/.ssh/${SSH_KEY_NAME}"
 DEPLOY_USER=$(get_var "deploy_user")
+CI_DEPLOY_USER=$(get_var "ci_deploy_user")
 SSH_PORT=$(get_var "ssh_port")
 
 # Primary Domain
@@ -89,26 +100,9 @@ get_cf_token() {
 # Load repositories into array
 load_repositories() {
   ALL_REPOS=()
-  local in_repos=false
-  while IFS= read -r line; do
-    # Start of application_repositories section
-    if [[ "$line" =~ ^application_repositories: ]]; then
-      in_repos=true
-      continue
-    fi
-    # End of section (new top-level key)
-    if $in_repos && [[ "$line" =~ ^[a-z_]+: ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
-      break
-    fi
-    # Parse list item
-    if $in_repos && [[ "$line" =~ ^[[:space:]]*-[[:space:]]*[\"\']?([^\"\']+)[\"\']?$ ]]; then
-      repo="${BASH_REMATCH[1]}"
-      repo=$(echo "$repo" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      if [ -n "$repo" ]; then
-        ALL_REPOS+=("$repo")
-      fi
-    fi
-  done < "$PROJECT_DIR/group_vars/all/vars.yml"
+  while IFS= read -r repo; do
+    [ -n "$repo" ] && ALL_REPOS+=("$repo")
+  done < <("$PROJECT_DIR/scripts/app-catalog.py" repo-refs)
 }
 
 # =============================================================================
@@ -119,28 +113,9 @@ load_repositories() {
 declare -A DOMAINS_CONFIG
 
 load_domains() {
-  local current_domain=""
-  local in_domains=false
-  while IFS= read -r line; do
-    # Start of managed_domains section
-    if [[ "$line" =~ ^managed_domains: ]]; then
-      in_domains=true
-      continue
-    fi
-    # End of section (new top-level key)
-    if $in_domains && [[ "$line" =~ ^[a-z_]+: ]] && [[ ! "$line" =~ ^[[:space:]] ]]; then
-      break
-    fi
-    # Parse domain name
-    if $in_domains && [[ "$line" =~ name:[[:space:]]*[\"\']([^\"\']+)[\"\'] ]]; then
-      current_domain="${BASH_REMATCH[1]}"
-    fi
-    # Parse records
-    if $in_domains && [[ "$line" =~ records:[[:space:]]*[\"\']([^\"\']+)[\"\'] ]] && [ -n "$current_domain" ]; then
-      DOMAINS_CONFIG["$current_domain"]="${BASH_REMATCH[1]}"
-      current_domain=""
-    fi
-  done < "$PROJECT_DIR/group_vars/all/vars.yml"
+  while IFS=: read -r domain records; do
+    [ -n "$domain" ] && DOMAINS_CONFIG["$domain"]="$records"
+  done < <(get_domains_config)
 }
 
 # =============================================================================
@@ -200,11 +175,36 @@ check_files() {
 }
 
 check_gh_auth() {
-  if ! gh auth status &> /dev/null; then
-    echo -e "${RED}✗ GitHub CLI not authenticated. Run: gh auth login${NC}"
-    return 1
+  load_local_github_token
+  if [ -n "${GH_TOKEN:-}" ]; then
+    if gh api user &> /dev/null; then
+      return 0
+    fi
+    if [ "${GH_TOKEN_SOURCE:-}" = ".env" ]; then
+      unset GH_TOKEN
+      unset GH_TOKEN_SOURCE
+    else
+      echo -e "${RED}✗ GH_TOKEN is not accepted by gh api${NC}"
+      return 1
+    fi
   fi
-  return 0
+
+  if gh auth status &> /dev/null; then
+    return 0
+  fi
+
+  local vault_token
+  vault_token=$(get_github_token)
+  if [ -n "$vault_token" ]; then
+    export GH_TOKEN="$vault_token"
+    export GH_TOKEN_SOURCE="vault"
+    if gh api user &> /dev/null; then
+      return 0
+    fi
+  fi
+
+  echo -e "${RED}✗ GitHub CLI not authenticated. Run: gh auth login or update vault_github_token/.env${NC}"
+  return 1
 }
 
 # =============================================================================

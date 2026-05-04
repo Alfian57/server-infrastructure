@@ -6,6 +6,14 @@
   ansible.builtin.debug:
     msg: "Docker installation is {{ 'enabled' if docker_install else 'disabled' }}"
 
+- name: Validate Docker-supported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in docker_supported_os_families
+    fail_msg: "Docker setup currently supports Debian/Ubuntu and RedHat-family hosts, got {{ ansible_os_family }}."
+    quiet: true
+  when: docker_install | bool
+
 - name: Docker installation tasks
   when: docker_install | bool
   block:
@@ -19,7 +27,7 @@
           - runc
         state: absent
 
-    - name: Install required system packages for Docker
+    - name: Install required Debian packages for Docker
       ansible.builtin.package:
         name:
           - ca-certificates
@@ -28,30 +36,55 @@
           - lsb-release
           - apt-transport-https
         state: present
+      when: ansible_os_family == 'Debian'
 
-    - name: Create directory for Docker GPG key
+    - name: Install required RedHat packages for Docker
+      ansible.builtin.package:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg2
+          - yum-utils
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Create directory for Docker GPG key on Debian
       ansible.builtin.file:
         path: /etc/apt/keyrings
         state: directory
         mode: "0755"
+      when: ansible_os_family == 'Debian'
 
-    - name: Add Docker's official GPG key (modern method)
+    - name: Add Docker's official Debian/Ubuntu GPG key
       ansible.builtin.get_url:
-        url: https://download.docker.com/linux/ubuntu/gpg
+        url: "https://download.docker.com/linux/{{ docker_apt_distribution }}/gpg"
         dest: /etc/apt/keyrings/docker.asc
         mode: "0644"
+      when: ansible_os_family == 'Debian'
 
-    - name: Get system architecture
+    - name: Get Debian package architecture
       ansible.builtin.command: dpkg --print-architecture
       register: dpkg_architecture
       changed_when: false
       check_mode: false
+      when: ansible_os_family == 'Debian'
 
-    - name: Add Docker repository
+    - name: Add Docker Debian/Ubuntu repository
       ansible.builtin.apt_repository:
-        repo: "deb [arch={{ dpkg_architecture.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        repo: "deb [arch={{ dpkg_architecture.stdout }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ docker_apt_distribution }} {{ docker_apt_codename }} stable"
         state: present
         filename: docker
+      when: ansible_os_family == 'Debian'
+
+    - name: Add Docker RedHat repository
+      ansible.builtin.yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable - $basearch
+        baseurl: "https://download.docker.com/linux/centos/$releasever/$basearch/stable"
+        enabled: true
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/centos/gpg
+      when: ansible_os_family == 'RedHat'
 
     - name: Install Docker Engine
       ansible.builtin.package:
@@ -121,17 +154,18 @@
       ansible.builtin.file:
         path: "/opt/docker-stack"
         state: directory
-        mode: "0755"
-        owner: "{{ ansible_user | default('root') }}"
-        group: "{{ ansible_user | default('root') }}"
+        mode: "0750"
+        owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
+        group: "docker"
 
     - name: Copy docker-password.txt file to server
       ansible.builtin.template:
         src: docker-password.txt.j2
         dest: "/opt/docker-stack/docker-password.txt"
-        mode: "0640"  # Readable by docker group members (deployer)
-        owner: "{{ ansible_user | default('root') }}"
+        mode: "0640"
+        owner: "{{ deploy_user | default(ansible_user | default('root')) }}"
         group: "docker"
+      no_log: true
 
     - name: Notify users to re-login if added to docker group
       ansible.builtin.debug:

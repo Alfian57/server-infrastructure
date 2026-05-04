@@ -21,14 +21,17 @@ NC='\033[0m' # No Color
 log() {
     local level=$1
     shift
-    local message="$@"
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local message="$*"
+    local timestamp
+    local log_dir
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    log_dir=$(dirname "${LOG_FILE}")
     
     # Print to stdout
     echo "[${timestamp}] [${level}] ${message}"
     
-    # Try to log to file if directory is writable
-    if [[ -w "$(dirname "${LOG_FILE}")" ]] || [[ -w "${LOG_FILE}" ]]; then
+    # Append only when the target file is writable, or when it can be created.
+    if { [[ -e "${LOG_FILE}" ]] && [[ -w "${LOG_FILE}" ]]; } || { [[ ! -e "${LOG_FILE}" ]] && [[ -w "${log_dir}" ]]; }; then
         echo "[${timestamp}] [${level}] ${message}" >> "${LOG_FILE}" 2>/dev/null || true
     fi
 }
@@ -48,8 +51,12 @@ fi
 
 # Make log directory writable if possible
 if [[ -d "$(dirname "${LOG_FILE}")" ]] && [[ ! -w "$(dirname "${LOG_FILE}")" ]]; then
-    sudo chown -R $(whoami):$(whoami) "$(dirname "${LOG_FILE}")" 2>/dev/null || \
+    sudo chown -R "$(whoami):$(whoami)" "$(dirname "${LOG_FILE}")" 2>/dev/null || \
     log "WARN" "Could not set log directory permissions"
+fi
+
+if [[ -e "${LOG_FILE}" ]] && [[ ! -w "${LOG_FILE}" ]]; then
+    sudo chown "$(whoami):$(whoami)" "${LOG_FILE}" 2>/dev/null || true
 fi
 
 log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
@@ -66,7 +73,7 @@ LOGIN_SUCCESS=false
 
 # Try direct read first
 if [[ -r "${PASSWORD_FILE}" ]]; then
-    if cat "${PASSWORD_FILE}" | docker login "${REGISTRY}" --username "${REGISTRY_USER}" --password-stdin > /dev/null 2>&1; then
+    if docker login "${REGISTRY}" --username "${REGISTRY_USER}" --password-stdin < "${PASSWORD_FILE}" > /dev/null 2>&1; then
         LOGIN_SUCCESS=true
     fi
 fi
@@ -108,7 +115,7 @@ docker logout "${REGISTRY}" > /dev/null 2>&1 || log "WARN" "Logout failed, but c
 log "INFO" "Starting image cleanup"
 
 # Get images defined in this compose file
-USED_IMAGES=$(docker compose -f "${COMPOSE_FILE}" config | grep 'image:' | awk '{print $2}' | sort | uniq)
+USED_IMAGES=$(docker compose -f "${COMPOSE_FILE}" config | awk '/^[[:space:]]+image:/ {print $2}' | sort | uniq)
 
 # Get all images currently in use by any container
 ALL_USED_IMAGES=$(docker ps -a --format '{{.Image}}' | sort | uniq)
@@ -125,7 +132,7 @@ for IMAGE in ${USED_IMAGES}; do
     # Try to remove unused image
     if docker rmi "${IMAGE}" 2>/dev/null; then
         log "INFO" "Removed unused image: ${IMAGE}"
-        ((REMOVED_COUNT++))
+        ((REMOVED_COUNT+=1))
     else
         log "WARN" "Could not remove image: ${IMAGE}"
     fi

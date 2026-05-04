@@ -13,37 +13,16 @@ github_registry: "ghcr.io"
 github_username: "alfian57"
 
 # Primary Domain
-primary_domain: "alfian-gading.site"
+primary_domain: "alfian-gading.my.id"
 
-# All Managed Domains
-managed_domains:
-  - name: "alfian-gading.site"
-    records: "@ materi-ku panca-trivia ruang-istirahat tech-talk posyandu presensi-skansaba-web campus-project-hub-api campus-project-hub-web file-pod-api *"
-  - name: "solvo-tech.site"
-    records: "@"
-  - name: "ruang-tenang.site"
-    records: "@ api"
-
-# All Application Repositories (for GitHub secrets update)
-application_repositories:
-  - "materi-ku"
-  - "panca-trivia"
-  - "ruang-istirahat"
-  - "tech-talk"
-  - "posyandu"
-  - "solvo"
-  - "Presensi-Skansaba-Web"
-  - "campus-project-hub-api"
-  - "ruang-tenang-api"
-  - "campus-project-hub-web"
-  - "personal-portofolio"
-  - "ruang-tenang-web"
-  - "file-pod-api"
+# Managed domains, DNS records, repositories, proxy hosts, and app databases are
+# now defined in group_vars/all/apps.yml.
 
 # SSH Configuration
 ssh_key_name: "server_ed25519"
 ssh_key_path: "~/.ssh/{{ ssh_key_name }}"
 deploy_user: "deployer"
+ci_deploy_user: "app-deployer"
 ssh_port: 22
 
 # ============================================================================
@@ -68,25 +47,41 @@ docker_stack_infrastructure: "{{ docker_stack_base }}/infrastructure"
 docker_stack_databases: "{{ docker_stack_base }}/databases"
 docker_stack_applications: "{{ docker_stack_base }}/applications"
 
-# Docker Images (non-sensitive) - using x86-64-v1 compatible images for older CPUs
-mysql_image: "mariadb:10.11"
-postgres_image: "postgres:15-bookworm"
-redis_image: "redis:7-bookworm"
-nginx_proxy_image: "jc21/nginx-proxy-manager:latest"
-autoheal_image: "willfarrell/autoheal:latest"
+# Image preferences. The host-profile role selects the effective images per VPS.
+mysql_engine: "auto"
+mysql_prefer_mysql: true
+mysql_modern_image: "mysql:8.4"
+mysql_legacy_image: "mariadb:10.11"
+postgres_preferred_image: "postgres:18-bookworm"
+redis_preferred_image: "redis:8"
+nginx_proxy_preferred_version: "2.14.0"
+nginx_proxy_armv7_version: "2.13.7"
+autoheal_preferred_image: "willfarrell/autoheal:latest"
+minio_preferred_image: "minio/minio:latest"
 
 # ============================================================================
 # User Configuration
 # ============================================================================
 users:
   - name: "deployer"
-    comment: "Deploy User"
+    comment: "Ansible Automation User"
     groups: ["sudo", "docker"]
     shell: "/bin/bash"
     password: "{{ vault_user_deployer_password }}"
     ssh_key: "{{ vault_server_ssh_public_key }}"
     state: "present"
     system: false
+    sudo_nopasswd: true
+
+  - name: "app-deployer"
+    comment: "GitHub Actions Application Deploy User"
+    groups: ["docker"]
+    shell: "/bin/bash"
+    ssh_key: "{{ vault_server_ssh_public_key }}"
+    state: "present"
+    system: false
+    password_lock: true
+    sudo_nopasswd: false
 
   - name: "alfiang"
     comment: "Alfian Gading"
@@ -96,3 +91,4 @@ users:
     ssh_key: "{{ vault_server_ssh_public_key }}"
     state: "present"
     system: false
+    sudo_nopasswd: true

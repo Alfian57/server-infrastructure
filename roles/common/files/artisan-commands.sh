@@ -15,7 +15,7 @@
 #   ./artisan-commands.sh optimize          # Optimize application
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -49,15 +49,21 @@ print_error() {
 }
 
 run_artisan() {
-  local cmd="$1"
-  echo -e "${BLUE}▶ Running: php artisan $cmd${NC}"
-  docker exec "$APP_NAME" php artisan $cmd
+  echo -e "${BLUE}▶ Running: php artisan $*${NC}"
+  docker exec "$APP_NAME" php artisan "$@"
 }
 
-case "$1" in
+COMMAND="${1:-}"
+
+if [[ -n "$COMMAND" && "$COMMAND" != "help" && "$COMMAND" != "--help" ]] && ! docker container inspect "$APP_NAME" >/dev/null 2>&1; then
+  print_error "Container not found: $APP_NAME"
+  exit 1
+fi
+
+case "$COMMAND" in
   migrate)
     print_header
-    run_artisan "migrate --force"
+    run_artisan migrate --force
     print_success "Migrations completed"
     ;;
   fresh)
@@ -66,7 +72,7 @@ case "$1" in
     read -p "Are you sure? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-      run_artisan "migrate:fresh --force"
+      run_artisan migrate:fresh --force
       print_success "Database reset completed"
     else
       echo "Cancelled."
@@ -74,7 +80,7 @@ case "$1" in
     ;;
   seed)
     print_header
-    run_artisan "db:seed --force"
+    run_artisan db:seed --force
     print_success "Seeding completed"
     ;;
   all)
@@ -83,7 +89,7 @@ case "$1" in
     read -p "Are you sure? [y/N] " -n 1 -r
     echo
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-      run_artisan "migrate:fresh --force --seed"
+      run_artisan migrate:fresh --force --seed
       print_success "Database reset and seeded"
     else
       echo "Cancelled."
@@ -91,24 +97,24 @@ case "$1" in
     ;;
   status)
     print_header
-    run_artisan "migrate:status"
+    run_artisan migrate:status
     ;;
   cache-clear)
     print_header
-    run_artisan "config:clear"
-    run_artisan "route:clear"
-    run_artisan "view:clear"
-    run_artisan "cache:clear"
+    run_artisan config:clear
+    run_artisan route:clear
+    run_artisan view:clear
+    run_artisan cache:clear
     print_success "All caches cleared"
     ;;
   optimize)
     print_header
-    run_artisan "config:cache"
-    run_artisan "route:cache"
-    run_artisan "view:cache"
+    run_artisan config:cache
+    run_artisan route:cache
+    run_artisan view:cache
     print_success "Application optimized"
     ;;
-  *)
+  help|--help)
     print_header
     echo "Usage: $0 <command>"
     echo ""
@@ -121,6 +127,26 @@ case "$1" in
     echo "  cache-clear  Clear all caches"
     echo "  optimize     Optimize application (cache config/routes/views)"
     echo ""
+    exit 0
+    ;;
+  "")
+    print_header
+    echo "Usage: $0 <command>"
+    echo ""
+    echo "Commands:"
+    echo "  migrate      Run database migrations"
+    echo "  fresh        Run migrate:fresh (WARNING: destroys data)"
+    echo "  seed         Run database seeders"
+    echo "  all          Run migrate:fresh + seed"
+    echo "  status       Show migration status"
+    echo "  cache-clear  Clear all caches"
+    echo "  optimize     Optimize application (cache config/routes/views)"
+    echo ""
+    exit 1
+    ;;
+  *)
+    print_error "Unknown command: $COMMAND"
+    echo "Run: $0 --help"
     exit 1
     ;;
 esac

@@ -1,4 +1,33 @@
 ---
+- name: Inspect existing MinIO container
+  community.docker.docker_container_info:
+    name: minio
+  register: minio_existing_container
+  failed_when: false
+
+- name: Select effective MinIO image
+  ansible.builtin.set_fact:
+    minio_existing_image: "{{ minio_existing_container.container.Config.Image | default('') }}"
+    minio_effective_image: >-
+      {{
+        minio_image_override
+        if minio_image_override | default('') | length > 0
+        else (
+          minio_existing_container.container.Config.Image
+          if minio_preserve_existing_image | bool
+          and minio_existing_container.exists | default(false)
+          and minio_existing_container.container.Config.Image | default('') | length > 0
+          else minio_image | default('minio/minio:latest')
+        )
+      }}
+
+- name: Display MinIO image selection
+  ansible.builtin.debug:
+    msg:
+      - "Requested auto image: {{ minio_image | default('unset') }}"
+      - "Existing image: {{ minio_existing_image | default('none') }}"
+      - "Effective image: {{ minio_effective_image }}"
+
 - name: Create MinIO directory
   ansible.builtin.file:
     path: /opt/docker-stack/infrastructure/minio

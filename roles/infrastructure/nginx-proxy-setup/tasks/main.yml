@@ -1,4 +1,34 @@
 ---
+- name: Inspect existing nginx-proxy-manager container
+  community.docker.docker_container_info:
+    name: nginx-proxy-manager
+  register: npm_existing_container
+  failed_when: false
+
+- name: Select effective nginx-proxy-manager image
+  ansible.builtin.set_fact:
+    npm_requested_image: "jc21/nginx-proxy-manager:{{ npm_image_version }}"
+    npm_existing_image: "{{ npm_existing_container.container.Config.Image | default('') }}"
+    npm_effective_image: >-
+      {{
+        npm_image_override
+        if npm_image_override | default('') | length > 0
+        else (
+          npm_existing_container.container.Config.Image
+          if npm_preserve_existing_image | bool
+          and npm_existing_container.exists | default(false)
+          and npm_existing_container.container.Config.Image | default('') | length > 0
+          else 'jc21/nginx-proxy-manager:' ~ npm_image_version
+        )
+      }}
+
+- name: Display nginx-proxy-manager image selection
+  ansible.builtin.debug:
+    msg:
+      - "Requested image: {{ npm_requested_image }}"
+      - "Existing image: {{ npm_existing_image | default('none') }}"
+      - "Effective image: {{ npm_effective_image }}"
+
 - name: Create nginx-proxy-manager directory
   ansible.builtin.file:
     path: "{{ npm_install_dir }}"
@@ -16,102 +46,176 @@
   community.docker.docker_compose_v2:
     project_src: "{{ npm_install_dir }}"
     state: present
-    pull: always
+    pull: "{{ 'always' if docker_compose_file.changed else 'policy' }}"
+  when: not (ansible_check_mode and docker_compose_file.changed)
   register: npm_container
 
-- name: Wait for nginx-proxy-manager web interface to be ready
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81"
-    method: GET
-    status_code: [200, 302]
-    timeout: 5
-  register: npm_health_check
-  until: npm_health_check.status in [200, 302]
-  retries: 60
-  delay: 10
-  failed_when: false
-
-- name: Fail if nginx-proxy-manager is not ready
-  ansible.builtin.fail:
-    msg: "Nginx Proxy Manager failed to start after 10 minutes"
-  when: npm_health_check.status not in [200, 302]
-
-- name: Wait for API to be fully ready
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/schema"
-    method: GET
-    status_code: 200
-    timeout: 5
-  register: npm_api_check
-  until: npm_api_check.status == 200
-  retries: 12
-  delay: 5
-  failed_when: false
-
-- name: Check if admin credentials are already updated
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
-    method: POST
-    body_format: json
-    body:
-      identity: "{{ npm_admin_email }}"
-      secret: "{{ npm_admin_password }}"
-    status_code: [200, 401]
-    timeout: 10
-  register: current_auth_check
-  failed_when: false
-  no_log: true
-
-- name: Handle initial setup if admin credentials not updated
-  when: current_auth_check.status != 200
+- name: Configure nginx-proxy-manager runtime
+  when: not ansible_check_mode
   block:
-    - name: Get initial auth token with default credentials
+    - name: Wait for nginx-proxy-manager web interface to be ready
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81"
+        method: GET
+        status_code: [200, 302]
+        timeout: 5
+      register: npm_health_check
+      until: npm_health_check.status in [200, 302]
+      retries: 60
+      delay: 10
+      failed_when: false
+
+    - name: Fail if nginx-proxy-manager is not ready
+      ansible.builtin.fail:
+        msg: "Nginx Proxy Manager failed to start after 10 minutes"
+      when: npm_health_check.status not in [200, 302]
+
+    - name: Wait for API to be fully ready
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/schema"
+        method: GET
+        status_code: 200
+        timeout: 5
+      register: npm_api_check
+      until: npm_api_check.status == 200
+      retries: 12
+      delay: 5
+      failed_when: false
+
+    - name: Check if admin credentials are already updated
       ansible.builtin.uri:
         url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
         method: POST
         body_format: json
         body:
-          identity: "admin@example.com"
-          secret: "changeme"
-        status_code: 200
-        timeout: 10
-      register: initial_auth_response
-      retries: 5
-      delay: 10
-      until: initial_auth_response.status == 200
-      no_log: true
-
-    - name: Update admin user credentials
-      ansible.builtin.uri:
-        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1"
-        method: PUT
-        headers:
-          Authorization: "Bearer {{ initial_auth_response.json.token }}"
-        body_format: json
-        body:
-          email: "{{ npm_admin_email }}"
-          nickname: "{{ npm_admin_nickname | default('Admin') }}"
-          is_disabled: false
-        status_code: 200
-        timeout: 10
-      no_log: true
-
-    - name: Update admin password
-      ansible.builtin.uri:
-        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1/auth"
-        method: PUT
-        headers:
-          Authorization: "Bearer {{ initial_auth_response.json.token }}"
-        body_format: json
-        body:
-          type: "password"
-          current: "changeme"
+          identity: "{{ npm_admin_email }}"
           secret: "{{ npm_admin_password }}"
-        status_code: [200, 201]
+        status_code: [200, 401]
         timeout: 10
+      register: current_auth_check
+      failed_when: false
       no_log: true
 
-    - name: Verify credential update by getting new token
+    - name: Handle initial setup if admin credentials not updated
+      when: current_auth_check.status != 200
+      block:
+        - name: Get initial auth token with default credentials
+          ansible.builtin.uri:
+            url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+            method: POST
+            body_format: json
+            body:
+              identity: "admin@example.com"
+              secret: "changeme"
+            status_code: [200, 401]
+            timeout: 10
+          register: initial_auth_response
+          retries: 5
+          delay: 10
+          until: initial_auth_response.status in [200, 401]
+          failed_when: false
+          no_log: true
+
+        - name: Update admin user credentials
+          ansible.builtin.uri:
+            url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1"
+            method: PUT
+            headers:
+              Authorization: "Bearer {{ initial_auth_response.json.token }}"
+            body_format: json
+            body:
+              email: "{{ npm_admin_email }}"
+              nickname: "{{ npm_admin_nickname | default('Admin') }}"
+              is_disabled: false
+            status_code: 200
+            timeout: 10
+          no_log: true
+          when: initial_auth_response.status == 200
+
+        - name: Update admin password
+          ansible.builtin.uri:
+            url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1/auth"
+            method: PUT
+            headers:
+              Authorization: "Bearer {{ initial_auth_response.json.token }}"
+            body_format: json
+            body:
+              type: "password"
+              current: "changeme"
+              secret: "{{ npm_admin_password }}"
+            status_code: [200, 201]
+            timeout: 10
+          no_log: true
+          when: initial_auth_response.status == 200
+
+        - name: Reset admin credentials through NPM models
+          ansible.builtin.command:
+            argv:
+              - docker
+              - exec
+              - -e
+              - "NPM_ADMIN_EMAIL={{ npm_admin_email }}"
+              - -e
+              - "NPM_ADMIN_PASSWORD={{ npm_admin_password }}"
+              - -e
+              - "NPM_ADMIN_NICKNAME={{ npm_admin_nickname | default('Admin') }}"
+              - nginx-proxy-manager
+              - node
+              - -e
+              - |
+                const db = require('/app/db');
+                const bcrypt = require('bcrypt');
+                const User = require('/app/models/user');
+                const Auth = require('/app/models/auth');
+                (async () => {
+                  const hash = await bcrypt.hash(process.env.NPM_ADMIN_PASSWORD, 13);
+                  const user = await User.query()
+                    .where('is_deleted', 0)
+                    .orderBy('id', 'asc')
+                    .first();
+                  if (!user) {
+                    throw new Error('No active NPM admin user was found');
+                  }
+                  await User.query()
+                    .patch({
+                      email: process.env.NPM_ADMIN_EMAIL,
+                      nickname: process.env.NPM_ADMIN_NICKNAME || 'Admin',
+                      is_disabled: 0
+                    })
+                    .where('id', user.id);
+                  const updated = await Auth.query()
+                    .patch({
+                      secret: hash,
+                      is_deleted: 0
+                    })
+                    .where({ user_id: user.id, type: 'password' });
+                  await db.destroy();
+                  if (!updated) {
+                    throw new Error('No admin password auth row was updated');
+                  }
+                })().catch(async (error) => {
+                  console.error(error.message);
+                  try { await db.destroy(); } catch (e) {}
+                  process.exit(1);
+                });
+          changed_when: true
+          when: initial_auth_response.status != 200
+          no_log: true
+
+        - name: Verify credential update by getting new token
+          ansible.builtin.uri:
+            url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+            method: POST
+            body_format: json
+            body:
+              identity: "{{ npm_admin_email }}"
+              secret: "{{ npm_admin_password }}"
+            status_code: 200
+            timeout: 10
+          register: current_auth_check
+          no_log: true
+
+    - name: Get authentication token
       ansible.builtin.uri:
         url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
         method: POST
@@ -121,444 +225,502 @@
           secret: "{{ npm_admin_password }}"
         status_code: 200
         timeout: 10
-      register: current_auth_check
+      register: auth_response
       no_log: true
 
-- name: Get authentication token
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
-    method: POST
-    body_format: json
-    body:
-      identity: "{{ npm_admin_email }}"
-      secret: "{{ npm_admin_password }}"
-    status_code: 200
-    timeout: 10
-  register: auth_response
-  no_log: true
+    - name: Set authentication token fact
+      ansible.builtin.set_fact:
+        npm_auth_token: "{{ auth_response.json.token }}"
+      when: auth_response is defined and auth_response.json is defined
+      no_log: true
 
-- name: Set authentication token fact
-  ansible.builtin.set_fact:
-    npm_auth_token: "{{ auth_response.json.token }}"
-  when: auth_response is defined and auth_response.json is defined
-  no_log: true
+    - name: Detect running nginx-proxy-manager version
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - nginx-proxy-manager
+          - node
+          - -p
+          - "require('/app/package.json').version"
+      register: npm_running_version_command
+      changed_when: false
+      failed_when: false
 
-- name: Get existing proxy hosts
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    status_code: 200
-  register: existing_proxy_hosts
-  when: proxy_hosts is defined
+    - name: Select nginx-proxy-manager API feature flags
+      ansible.builtin.set_fact:
+        npm_running_version: >-
+          {{
+            npm_running_version_raw
+            if npm_running_version_raw is match('^[0-9]+[.][0-9]+[.][0-9]+')
+            else '0.0.0'
+          }}
+        npm_supports_trust_forwarded_proto: >-
+          {{
+            (
+              npm_running_version_raw
+              if npm_running_version_raw is match('^[0-9]+[.][0-9]+[.][0-9]+')
+              else '0.0.0'
+            )
+            is version('2.14.0', '>=')
+          }}
+      vars:
+        npm_running_version_raw: "{{ npm_running_version_command.stdout | default('') | trim }}"
 
-- name: Get existing SSL certificates
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    status_code: 200
-  register: existing_certificates
-  when: proxy_hosts is defined
+    - name: Get existing proxy hosts
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        status_code: 200
+      register: existing_proxy_hosts
+      when: proxy_hosts is defined
 
-- name: Create or update proxy hosts (without SSL first)
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts{% if existing_host_id %}/{{ existing_host_id }}{% endif %}"
-    method: "{% if existing_host_id %}PUT{% else %}POST{% endif %}"
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    body_format: json
-    body:
-      domain_names:
-        - "{{ target_domain }}"
-      forward_scheme: "{{ item.scheme }}"
-      forward_host: "{{ item.forward_host }}"
-      forward_port: "{{ item.forward_port }}"
-      certificate_id: 0
-      ssl_forced: 0
-      caching_enabled: "{{ item.caching_enabled | default(false) | int }}"
-      block_exploits: 1
-      advanced_config: ""
-      meta:
-        letsencrypt_agree: false
-        dns_challenge: false
-      access_list_id: 0
-      allow_websocket_upgrade: "{{ item.websocket_support | default(false) | int }}"
-      http2_support: 0
-      hsts_enabled: 0
-      hsts_subdomains: 0
-    status_code: [200, 201]
-  vars:
-    target_domain: "{{ item.domain if item.domain is defined else (item.subdomain + '.' + npm_domain_name) }}"
-    existing_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-    existing_host_id: "{{ existing_host.id | default('') }}"
-  register: proxy_host_created
-  loop: "{{ proxy_hosts }}"
-  when: proxy_hosts is defined
+    - name: Get existing SSL certificates
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        status_code: 200
+      register: existing_certificates
+      when: proxy_hosts is defined
 
-- name: Wait for proxy hosts to be accessible (for Let's Encrypt validation)
-  ansible.builtin.wait_for:
-    host: "{{ ansible_default_ipv4.address }}"
-    port: 80
-    delay: 5
-    timeout: 30
-  when: proxy_host_created.changed
+    - name: Create or update proxy hosts (without SSL first)
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts{% if existing_host_id %}/{{ existing_host_id }}{% endif %}"
+        method: "{% if existing_host_id %}PUT{% else %}POST{% endif %}"
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        body_format: json
+        body: "{{ npm_proxy_host_body }}"
+        status_code: [200, 201]
+      vars:
+        target_domain: "{{ item.domain if item.domain is defined else (item.subdomain + '.' + npm_domain_name) }}"
+        existing_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+        existing_host_id: "{{ existing_host.id | default('') }}"
+        cloudflare_edge: "{{ item.cloudflare_flexible | default(false) | bool }}"
+        npm_proxy_host_base_body:
+          domain_names:
+            - "{{ target_domain }}"
+          forward_scheme: "{{ item.scheme }}"
+          forward_host: "{{ item.forward_host }}"
+          forward_port: "{{ item.forward_port | int }}"
+          certificate_id: 0
+          ssl_forced: false
+          caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
+          block_exploits: true
+          advanced_config: "{{ npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '' }}"
+          meta: {}
+          access_list_id: 0
+          allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
+          http2_support: false
+          hsts_enabled: false
+          hsts_subdomains: false
+          enabled: true
+          locations: []
+        npm_proxy_host_body: >-
+          {{
+            npm_proxy_host_base_body
+            | combine(
+              {'trust_forwarded_proto': cloudflare_edge | bool}
+              if npm_supports_trust_forwarded_proto | bool
+              else {}
+            )
+          }}
+      register: proxy_host_created
+      loop: "{{ proxy_hosts }}"
+      when: proxy_hosts is defined
 
-- name: Check DNS propagation for each subdomain
-  ansible.builtin.command:
-    cmd: "dig +short {{ target_domain }} @8.8.8.8"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-  register: dns_check
-  loop: "{{ proxy_hosts }}"
-  changed_when: false
-  failed_when: false
-  when: proxy_hosts is defined
+    - name: Wait for proxy hosts to be accessible (for Let's Encrypt validation)
+      ansible.builtin.wait_for:
+        host: "{{ ansible_default_ipv4.address }}"
+        port: 80
+        delay: 5
+        timeout: 30
+      when: proxy_host_created.changed
 
-- name: Display DNS propagation status
-  ansible.builtin.debug:
-    msg: |
-      DNS Check for {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
-      {% if item.stdout is defined and item.stdout %}
-      ✅ Resolved to: {{ item.stdout_lines | join(', ') }}
-      {% elif item.failed is defined and item.failed %}
-      ❌ Failed: {{ item.msg | default('Unknown error') }}
-      {% else %}
-      ⚠️  Not resolved yet - will retry
-      {% endif %}
-  loop: "{{ dns_check.results }}"
-  when: dns_check.results is defined and item.item is defined
+    - name: Check DNS propagation for each subdomain
+      ansible.builtin.command:
+        cmd: "dig +short {{ target_domain }} @8.8.8.8"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+      register: dns_check
+      loop: "{{ proxy_hosts }}"
+      changed_when: false
+      failed_when: false
+      when: proxy_hosts is defined
 
-- name: Wait for DNS propagation (retry until all domains resolve)
-  ansible.builtin.command:
-    cmd: "dig +short {{ target_domain }} @8.8.8.8"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-  register: dns_propagation_check
-  until: dns_propagation_check.stdout != ""
-  retries: 30
-  delay: 10
-  loop: "{{ proxy_hosts }}"
-  changed_when: false
-  when: proxy_hosts is defined
-  ignore_errors: true
+    - name: Display DNS propagation status
+      ansible.builtin.debug:
+        msg: |
+          DNS Check for {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
+          {% if item.stdout is defined and item.stdout %}
+          ✅ Resolved to: {{ item.stdout_lines | join(', ') }}
+          {% elif item.failed is defined and item.failed %}
+          ❌ Failed: {{ item.msg | default('Unknown error') }}
+          {% else %}
+          ⚠️  Not resolved yet - will retry
+          {% endif %}
+      loop: "{{ dns_check.results }}"
+      when: dns_check.results is defined and item.item is defined
 
-- name: Display DNS propagation wait results
-  ansible.builtin.debug:
-    msg: |
-      ╔════════════════════════════════════════════════════════════════╗
-      ║ DNS Propagation Check Complete
-      ╠════════════════════════════════════════════════════════════════╣
-      {% for result in dns_propagation_check.results %}
-      {% if result.item is defined %}
-      ║ {% if result.item.domain is defined %}{{ result.item.domain }}{% else %}{{ result.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
-      ║   {% if result.stdout is defined and result.stdout %}✅ Resolved: {{ result.stdout }}{% else %}⚠️  Not resolved (may affect SSL){% endif %}
-      {% endif %}
-      {% endfor %}
-      ╚════════════════════════════════════════════════════════════════╝
-  when: dns_propagation_check.results is defined
+    - name: Wait for DNS propagation (retry until all domains resolve)
+      ansible.builtin.command:
+        cmd: "dig +short {{ target_domain }} @8.8.8.8"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+      register: dns_propagation_check
+      until: dns_propagation_check.stdout != ""
+      retries: 30
+      delay: 10
+      loop: "{{ proxy_hosts }}"
+      changed_when: false
+      when: proxy_hosts is defined
+      ignore_errors: true
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# SSL Certificate Management
-# ═══════════════════════════════════════════════════════════════════════════════
-# For domains with cloudflare_flexible: true, we skip Let's Encrypt
-# because Cloudflare provides SSL at the edge (Flexible or Full mode).
-# Let's Encrypt HTTP-01 challenge will fail for Cloudflare-proxied domains.
-# ═══════════════════════════════════════════════════════════════════════════════
+    - name: Display DNS propagation wait results
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║ DNS Propagation Check Complete
+          ╠════════════════════════════════════════════════════════════════╣
+          {% for result in dns_propagation_check.results %}
+          {% if result.item is defined %}
+          ║ {% if result.item.domain is defined %}{{ result.item.domain }}{% else %}{{ result.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}:
+          ║   {% if result.stdout is defined and result.stdout %}✅ Resolved: {{ result.stdout }}{% else %}⚠️  Not resolved (may affect SSL){% endif %}
+          {% endif %}
+          {% endfor %}
+          ╚════════════════════════════════════════════════════════════════╝
+      when: dns_propagation_check.results is defined
 
-- name: Identify domains that need Let's Encrypt (not behind Cloudflare proxy)
-  ansible.builtin.set_fact:
-    letsencrypt_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
-  when: proxy_hosts is defined
+    - name: Refresh proxy hosts after base sync
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        status_code: 200
+      register: current_proxy_hosts
+      when: proxy_hosts is defined
 
-- name: Identify domains using Cloudflare SSL (skip Let's Encrypt)
-  ansible.builtin.set_fact:
-    cloudflare_ssl_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
-  when: proxy_hosts is defined
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # SSL Certificate Management
+    # ═══════════════════════════════════════════════════════════════════════════════
+    # For domains with cloudflare_flexible: true, we skip Let's Encrypt
+    # because Cloudflare provides SSL at the edge (Flexible or Full mode).
+    # Let's Encrypt HTTP-01 challenge will fail for Cloudflare-proxied domains.
+    # ═══════════════════════════════════════════════════════════════════════════════
 
-- name: Display SSL strategy for each domain
-  ansible.builtin.debug:
-    msg: |
-      ╔════════════════════════════════════════════════════════════════╗
-      ║ SSL Certificate Strategy
-      ╠════════════════════════════════════════════════════════════════╣
-      ║ Let's Encrypt SSL ({{ letsencrypt_domains | default([]) | length }} domains):
-      {% for item in letsencrypt_domains | default([]) %}
-      ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
-      {% endfor %}
-      ║
-      ║ Cloudflare Flexible SSL ({{ cloudflare_ssl_domains | default([]) | length }} domains):
-      {% for item in cloudflare_ssl_domains | default([]) %}
-      ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %} (self-signed + CF edge)
-      {% endfor %}
-      ╚════════════════════════════════════════════════════════════════╝
-  when: proxy_hosts is defined
+    - name: Identify domains that need Let's Encrypt (not behind Cloudflare proxy)
+      ansible.builtin.set_fact:
+        letsencrypt_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+      when: proxy_hosts is defined
 
-- name: Request Let's Encrypt SSL certificate for non-Cloudflare domains
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
-    method: POST
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    body_format: json
-    body:
-      domain_names:
-        - "{{ target_domain }}"
-      meta:
-        letsencrypt_email: "{{ npm_admin_email }}"
-        letsencrypt_agree: true
-        dns_challenge: false
-      provider: "letsencrypt"
-    status_code: [200, 201]
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-  register: ssl_cert_request
-  loop: "{{ letsencrypt_domains | default([]) }}"
-  when: 
-    - letsencrypt_domains is defined
-    - letsencrypt_domains | length > 0
-    - existing_cert.id is not defined
-  failed_when: false
-  retries: 3
-  delay: 10
-  until: ssl_cert_request.status in [200, 201] or ssl_cert_request.status == 400
+    - name: Identify domains using Cloudflare SSL (skip Let's Encrypt)
+      ansible.builtin.set_fact:
+        cloudflare_ssl_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
+      when: proxy_hosts is defined
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Self-signed SSL for Cloudflare Flexible SSL domains
-# These domains use Cloudflare edge SSL, so we only need self-signed certs
-# for the origin server (NPM) to accept HTTPS from Cloudflare
-# ═══════════════════════════════════════════════════════════════════════════════
-- name: Create custom SSL directory for self-signed certificates
-  ansible.builtin.file:
-    path: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl"
-    state: directory
-    mode: "0755"
-  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+    - name: Display SSL strategy for each domain
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║ SSL Certificate Strategy
+          ╠════════════════════════════════════════════════════════════════╣
+          ║ Let's Encrypt SSL ({{ letsencrypt_domains | default([]) | length }} domains):
+          {% for item in letsencrypt_domains | default([]) %}
+          ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
+          {% endfor %}
+          ║
+          ║ Cloudflare Flexible SSL ({{ cloudflare_ssl_domains | default([]) | length }} domains):
+          {% for item in cloudflare_ssl_domains | default([]) %}
+          ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %} (self-signed + CF edge)
+          {% endfor %}
+          ╚════════════════════════════════════════════════════════════════╝
+      when: proxy_hosts is defined
 
-- name: Generate self-signed SSL certificates for Cloudflare domains
-  ansible.builtin.command:
-    cmd: >
-      openssl req -x509 -nodes -days 365 -newkey rsa:2048
-      -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
-      -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
-      -subj "/CN={{ target_domain }}"
-    creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-  loop: "{{ cloudflare_ssl_domains | default([]) }}"
-  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
-  register: self_signed_certs
+    - name: Request Let's Encrypt SSL certificate for non-Cloudflare domains
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        body_format: json
+        body:
+          domain_names:
+            - "{{ target_domain }}"
+          meta:
+            letsencrypt_email: "{{ npm_admin_email }}"
+            letsencrypt_agree: true
+            dns_challenge: false
+            key_type: "rsa"
+          provider: "letsencrypt"
+        status_code: [200, 201]
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+      register: ssl_cert_request
+      loop: "{{ letsencrypt_domains | default([]) }}"
+      when:
+        - letsencrypt_domains is defined
+        - letsencrypt_domains | length > 0
+        - existing_cert.id is not defined
+      failed_when: ssl_cert_request.status not in [200, 201]
+      retries: 3
+      delay: 10
+      until: ssl_cert_request.status in [200, 201]
 
-- name: Get proxy host IDs for Cloudflare SSL domains
-  ansible.builtin.set_fact:
-    cloudflare_domain_proxy_hosts: "{{ cloudflare_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    host_info: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-  loop: "{{ cloudflare_ssl_domains | default([]) }}"
-  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+    # Legacy origin SSL is disabled by default. Cloudflare Flexible/edge SSL hosts
+    # are managed through the NPM API as HTTP origin proxy hosts.
+    - name: Create custom SSL directory for self-signed certificates
+      ansible.builtin.file:
+        path: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl"
+        state: directory
+        mode: "0755"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - cloudflare_ssl_domains is defined
+        - cloudflare_ssl_domains | length > 0
 
-- name: Display self-signed SSL generation results
-  ansible.builtin.debug:
-    msg: |
-      ╔════════════════════════════════════════════════════════════════╗
-      ║ Self-signed SSL Certificates Generated
-      ╠════════════════════════════════════════════════════════════════╣
-      {% for item in cloudflare_ssl_domains | default([]) %}
-      ║ ✅ {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
-      {% endfor %}
-      ║
-      ║ These domains use Cloudflare Edge SSL (Flexible/Full mode)
-      ║ Self-signed certs are only for NPM → App communication
-      ╚════════════════════════════════════════════════════════════════╝
-  when: cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+    - name: Generate self-signed SSL certificates for Cloudflare domains
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048
+          -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
+          -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
+          -subj "/CN={{ target_domain }}"
+        creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+      loop: "{{ cloudflare_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - cloudflare_ssl_domains is defined
+        - cloudflare_ssl_domains | length > 0
+      register: self_signed_certs
 
-# Legacy fallback for any Let's Encrypt failures (non-Cloudflare domains)
-- name: Identify domains that failed Let's Encrypt
-  ansible.builtin.set_fact:
-    failed_ssl_domains: "{{ failed_ssl_domains | default([]) + [item.item] }}"
-  loop: "{{ ssl_cert_request.results | default([]) }}"
-  when:
-    - item.status is defined
-    - item.status not in [200, 201]
-    - item.item is defined
+    - name: Get proxy host IDs for Cloudflare SSL domains
+      ansible.builtin.set_fact:
+        cloudflare_domain_proxy_hosts: "{{ cloudflare_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        host_info: "{{ current_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+      loop: "{{ cloudflare_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - cloudflare_ssl_domains is defined
+        - cloudflare_ssl_domains | length > 0
 
-- name: Generate self-signed SSL for failed Let's Encrypt domains
-  ansible.builtin.command:
-    cmd: >
-      openssl req -x509 -nodes -days 365 -newkey rsa:2048
-      -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
-      -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
-      -subj "/CN={{ target_domain }}"
-    creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-  loop: "{{ failed_ssl_domains | default([]) }}"
-  when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
+    - name: Display self-signed SSL generation results
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║ Self-signed SSL Certificates Generated
+          ╠════════════════════════════════════════════════════════════════╣
+          {% for item in cloudflare_ssl_domains | default([]) %}
+          ║ ✅ {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
+          {% endfor %}
+          ║
+          ║ These domains use Cloudflare Edge SSL (Flexible/Full mode)
+          ║ Self-signed certs are only for NPM → App communication
+          ╚════════════════════════════════════════════════════════════════╝
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - cloudflare_ssl_domains is defined
+        - cloudflare_ssl_domains | length > 0
 
-- name: Get proxy host IDs for failed SSL domains
-  ansible.builtin.set_fact:
-    failed_domain_proxy_hosts: "{{ failed_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    host_info: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-  loop: "{{ failed_ssl_domains | default([]) }}"
-  when: failed_ssl_domains is defined and failed_ssl_domains | length > 0
+    # Legacy fallback for any Let's Encrypt failures (non-Cloudflare domains)
+    - name: Identify domains that failed Let's Encrypt
+      ansible.builtin.set_fact:
+        failed_ssl_domains: "{{ failed_ssl_domains | default([]) + [item.item] }}"
+      loop: "{{ ssl_cert_request.results | default([]) }}"
+      when:
+        - item.status is defined
+        - item.status not in [200, 201]
+        - item.item is defined
 
-# Apply custom nginx config for Cloudflare SSL domains
-- name: Generate custom nginx config for Cloudflare SSL domains
-  ansible.builtin.template:
-    src: cloudflare_proxy_host.conf.j2
-    dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
-    mode: "0644"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    host_id: "{{ cloudflare_domain_proxy_hosts[target_domain].id | default(0) }}"
-    forward_host: "{{ item.forward_host }}"
-    forward_port: "{{ item.forward_port }}"
-    caching_enabled: "{{ item.caching_enabled | default(false) }}"
-    ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
-    ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
-  loop: "{{ cloudflare_ssl_domains | default([]) }}"
-  when:
-    - cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
-    - cloudflare_domain_proxy_hosts is defined
-    - cloudflare_domain_proxy_hosts[target_domain] is defined
-    - cloudflare_domain_proxy_hosts[target_domain].id is defined
-  register: cloudflare_nginx_config
+    - name: Generate self-signed SSL for failed Let's Encrypt domains
+      ansible.builtin.command:
+        cmd: >
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048
+          -keyout /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.key
+          -out /var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt
+          -subj "/CN={{ target_domain }}"
+        creates: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+      loop: "{{ failed_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - failed_ssl_domains is defined
+        - failed_ssl_domains | length > 0
 
-# Apply custom nginx config for failed Let's Encrypt domains (fallback)
-- name: Generate custom nginx config for failed Let's Encrypt domains
-  ansible.builtin.template:
-    src: cloudflare_proxy_host.conf.j2
-    dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
-    mode: "0644"
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    host_id: "{{ failed_domain_proxy_hosts[target_domain].id | default(0) }}"
-    forward_host: "{{ item.forward_host }}"
-    forward_port: "{{ item.forward_port }}"
-    caching_enabled: "{{ item.caching_enabled | default(false) }}"
-    ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
-    ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
-  loop: "{{ failed_ssl_domains | default([]) }}"
-  when:
-    - failed_ssl_domains is defined and failed_ssl_domains | length > 0
-    - failed_domain_proxy_hosts is defined
-    - failed_domain_proxy_hosts[target_domain] is defined
-    - failed_domain_proxy_hosts[target_domain].id is defined
-  register: failed_nginx_config
+    - name: Get proxy host IDs for failed SSL domains
+      ansible.builtin.set_fact:
+        failed_domain_proxy_hosts: "{{ failed_domain_proxy_hosts | default({}) | combine({target_domain: host_info}) }}"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        host_info: "{{ current_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+      loop: "{{ failed_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - failed_ssl_domains is defined
+        - failed_ssl_domains | length > 0
 
-- name: Reload nginx in NPM container after custom SSL config
-  ansible.builtin.command:
-    cmd: docker exec nginx-proxy-manager nginx -s reload
-  when: cloudflare_nginx_config.changed | default(false) or failed_nginx_config.changed | default(false)
-  changed_when: true
-  ignore_errors: true
+    # Apply custom nginx config for Cloudflare SSL domains
+    - name: Generate custom nginx config for Cloudflare SSL domains
+      ansible.builtin.template:
+        src: cloudflare_proxy_host.conf.j2
+        dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
+        mode: "0644"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        host_id: "{{ cloudflare_domain_proxy_hosts[target_domain].id | default(0) }}"
+        forward_host: "{{ item.forward_host }}"
+        forward_port: "{{ item.forward_port }}"
+        caching_enabled: "{{ item.caching_enabled | default(false) }}"
+        ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+        ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
+      loop: "{{ cloudflare_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - cloudflare_ssl_domains is defined and cloudflare_ssl_domains | length > 0
+        - cloudflare_domain_proxy_hosts is defined
+        - cloudflare_domain_proxy_hosts[target_domain] is defined
+        - cloudflare_domain_proxy_hosts[target_domain].id is defined
+      register: cloudflare_nginx_config
 
-- name: Wait for SSL certificates to be issued
-  ansible.builtin.pause:
-    seconds: 10
-  when: ssl_cert_request.changed | default(false)
+    # Apply custom nginx config for failed Let's Encrypt domains (fallback)
+    - name: Generate custom nginx config for failed Let's Encrypt domains
+      ansible.builtin.template:
+        src: cloudflare_proxy_host.conf.j2
+        dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
+        mode: "0644"
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        host_id: "{{ failed_domain_proxy_hosts[target_domain].id | default(0) }}"
+        forward_host: "{{ item.forward_host }}"
+        forward_port: "{{ item.forward_port }}"
+        caching_enabled: "{{ item.caching_enabled | default(false) }}"
+        ssl_cert_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.crt"
+        ssl_key_path: "/data/custom_ssl/{{ target_domain | replace('.', '-') }}.key"
+      loop: "{{ failed_ssl_domains | default([]) }}"
+      when:
+        - npm_manage_legacy_origin_ssl | bool
+        - failed_ssl_domains is defined and failed_ssl_domains | length > 0
+        - failed_domain_proxy_hosts is defined
+        - failed_domain_proxy_hosts[target_domain] is defined
+        - failed_domain_proxy_hosts[target_domain].id is defined
+      register: failed_nginx_config
 
-- name: Get updated SSL certificates list
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
-    method: GET
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    status_code: 200
-  register: updated_certificates
-  when: proxy_hosts is defined
+    - name: Reload nginx in NPM container after custom SSL config
+      ansible.builtin.command:
+        cmd: docker exec nginx-proxy-manager nginx -s reload
+      when: cloudflare_nginx_config.changed | default(false) or failed_nginx_config.changed | default(false)
+      changed_when: true
+      ignore_errors: true
 
-- name: Update proxy hosts with SSL enabled
-  ansible.builtin.uri:
-    url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts/{{ proxy_host_id }}"
-    method: PUT
-    headers:
-      Authorization: "Bearer {{ npm_auth_token }}"
-    body_format: json
-    body:
-      domain_names:
-        - "{{ target_domain }}"
-      forward_scheme: "{{ item.scheme }}"
-      forward_host: "{{ item.forward_host }}"
-      forward_port: "{{ item.forward_port }}"
-      certificate_id: "{{ certificate_id }}"
-      ssl_forced: "{{ 0 if item.cloudflare_flexible | default(false) else 1 }}"
-      caching_enabled: "{{ item.caching_enabled | default(false) | int }}"
-      block_exploits: 1
-      advanced_config: ""
-      meta:
-        letsencrypt_agree: false
-        dns_challenge: false
-      access_list_id: 0
-      allow_websocket_upgrade: "{{ item.websocket_support | default(false) | int }}"
-      http2_support: 1
-      hsts_enabled: "{{ 0 if item.cloudflare_flexible | default(false) else 1 }}"
-      hsts_subdomains: 0
-    status_code: [200, 201]
-  vars:
-    target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-    # Get the proxy host ID
-    current_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-    proxy_host_id: "{{ current_host.id | default('') }}"
-    # Get the certificate ID for this domain
-    cert_for_domain: "{{ updated_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
-    certificate_id: "{{ cert_for_domain.id | default(0) }}"
-  register: proxy_host_ssl_update
-  loop: "{{ proxy_hosts }}"
-  when:
-    - proxy_hosts is defined
-    - certificate_id | int > 0
-    - proxy_host_id != ''
-  failed_when: false
+    - name: Wait for SSL certificates to be issued
+      ansible.builtin.pause:
+        seconds: 10
+      when: ssl_cert_request.changed | default(false)
 
-- name: Display proxy host configuration results
-  ansible.builtin.debug:
-    msg: |
-      ╔════════════════════════════════════════════════════════════════╗
-      ║ Proxy Host: {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}
+    - name: Get updated SSL certificates list
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        status_code: 200
+      register: updated_certificates
+      when: proxy_hosts is defined
 
-      ╠════════════════════════════════════════════════════════════════╣
-      {% if item.skipped | default(false) %}
-      ║ Status: ⚠️  Created without SSL (DNS via Cloudflare proxy)
-      ║ Note: SSL handled by Cloudflare. NPM has HTTP backend only.
-      {% elif item.status | default(0) in [200, 201] %}
-      ║ Status: ✅ SSL Enabled & Configured
-      ║ Certificate: Let's Encrypt
-      ║ SSL Forced: Yes (HTTP → HTTPS redirect)
-      ║ HTTP/2: Enabled
-      ║ HSTS: Enabled
-      ║ Block Exploits: Enabled
-      ║ Websocket: {{ item.item.websocket_support | default(false) }}
-      ║ Caching: {{ item.item.caching_enabled | default(false) }}
-      {% else %}
-      ║ Status: ⚠️  Created without SSL (manual SSL setup needed)
-      {% endif %}
-      ╚════════════════════════════════════════════════════════════════╝
-  loop: "{{ proxy_host_ssl_update.results }}"
-  when: 
-    - proxy_host_ssl_update.results is defined
-    - not ansible_check_mode
+    - name: Update proxy hosts with SSL enabled
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts/{{ proxy_host_id }}"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        body_format: json
+        body: "{{ npm_proxy_host_ssl_body }}"
+        status_code: [200, 201]
+      vars:
+        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        current_host: "{{ current_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+        proxy_host_id: "{{ current_host.id | default('') }}"
+        cert_for_domain: "{{ updated_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+        certificate_id: "{{ cert_for_domain.id | default(0) }}"
+        npm_proxy_host_ssl_body:
+          domain_names:
+            - "{{ target_domain }}"
+          forward_scheme: "{{ item.scheme }}"
+          forward_host: "{{ item.forward_host }}"
+          forward_port: "{{ item.forward_port | int }}"
+          certificate_id: "{{ certificate_id | int }}"
+          ssl_forced: true
+          caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
+          block_exploits: true
+          advanced_config: ""
+          meta: {}
+          access_list_id: 0
+          allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
+          http2_support: true
+          hsts_enabled: true
+          hsts_subdomains: false
+          enabled: true
+          locations: []
+      register: proxy_host_ssl_update
+      loop: "{{ proxy_hosts }}"
+      when:
+        - proxy_hosts is defined
+        - not (item.cloudflare_flexible | default(false) | bool)
+        - certificate_id | int > 0
+        - proxy_host_id != ''
 
-- name: Display summary
-  ansible.builtin.debug:
-    msg: |
-      
-      ╔════════════════════════════════════════════════════════════════╗
-      ║           Nginx Proxy Manager Setup Complete                  ║
-      ╠════════════════════════════════════════════════════════════════╣
-      ║ Admin Panel: http://{{ ansible_default_ipv4.address }}:81
-      ║ Username: {{ npm_admin_email }}
-      ║ 
-      ║ Proxy Hosts Configured: {{ proxy_hosts | length }}
-      ║ 
-      ║ Next Steps:
-      ║ 1. Access admin panel and verify SSL certificates
-      ║ 2. Check that all proxy hosts are accessible via HTTPS
-      ║ 3. Verify HTTP → HTTPS redirect is working
-      ╚════════════════════════════════════════════════════════════════╝
+    - name: Display proxy host configuration results
+      ansible.builtin.debug:
+        msg: |
+          ╔════════════════════════════════════════════════════════════════╗
+          ║ Proxy Host: {% if item.item.domain is defined %}{{ item.item.domain }}{% else %}{{ item.item.subdomain | default('unknown') }}.{{ npm_domain_name }}{% endif %}
+
+          ╠════════════════════════════════════════════════════════════════╣
+          {% if item.skipped | default(false) %}
+          ║ Status: ⚠️  Created without SSL (DNS via Cloudflare proxy)
+          ║ Note: SSL handled by Cloudflare. NPM has HTTP backend only.
+          {% elif item.status | default(0) in [200, 201] %}
+          ║ Status: ✅ SSL Enabled & Configured
+          ║ Certificate: Let's Encrypt
+          ║ SSL Forced: Yes (HTTP → HTTPS redirect)
+          ║ HTTP/2: Enabled
+          ║ HSTS: Enabled
+          ║ Block Exploits: Enabled
+          ║ Websocket: {{ item.item.websocket_support | default(false) }}
+          ║ Caching: {{ item.item.caching_enabled | default(false) }}
+          {% else %}
+          ║ Status: ⚠️  Created without SSL (manual SSL setup needed)
+          {% endif %}
+          ╚════════════════════════════════════════════════════════════════╝
+      loop: "{{ proxy_host_ssl_update.results }}"
+      when:
+        - proxy_host_ssl_update.results is defined
+        - not ansible_check_mode
+
+    - name: Display summary
+      ansible.builtin.debug:
+        msg: |
+
+          ╔════════════════════════════════════════════════════════════════╗
+          ║           Nginx Proxy Manager Setup Complete                  ║
+          ╠════════════════════════════════════════════════════════════════╣
+          ║ Admin Panel: http://{{ ansible_default_ipv4.address }}:81
+          ║ Username: {{ npm_admin_email }}
+          ║
+          ║ Proxy Hosts Configured: {{ proxy_hosts | length }}
+          ║
+          ║ Next Steps:
+          ║ 1. Access admin panel and verify SSL certificates
+          ║ 2. Check that all proxy hosts are accessible via HTTPS
+          ║ 3. Verify HTTP → HTTPS redirect is working
+          ╚════════════════════════════════════════════════════════════════╝

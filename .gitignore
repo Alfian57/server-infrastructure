@@ -11,6 +11,12 @@ vault_pass.txt
 vault.yml.decrypted
 *_unencrypted*
 *password*.txt
+.env
+.env.*
+!.env.example
+
+# Codex local state and credentials
+.codex/
 
 # SSH keys (in case accidentally placed here)
 *.pem

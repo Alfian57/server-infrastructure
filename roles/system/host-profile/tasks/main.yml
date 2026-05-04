@@ -1,0 +1,113 @@
+---
+- name: Validate supported operating system family
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family in host_profile_supported_os_families
+    fail_msg: >-
+      Unsupported OS family '{{ ansible_os_family }}'. This project currently supports
+      Debian/Ubuntu and RedHat-family hosts for base detection. Add package-manager
+      tasks before using this distro.
+    quiet: true
+
+- name: Read CPU feature flags
+  ansible.builtin.shell: |
+    set -o pipefail
+    awk -F: '/flags|Features/ {print $2; exit}' /proc/cpuinfo | xargs
+  args:
+    executable: /bin/bash
+  register: host_cpu_flags_command
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Normalize host architecture facts
+  ansible.builtin.set_fact:
+    host_cpu_flags: "{{ host_cpu_flags_command.stdout | default('') }}"
+    host_container_arch: >-
+      {{
+        {
+          'x86_64': 'amd64',
+          'amd64': 'amd64',
+          'aarch64': 'arm64',
+          'arm64': 'arm64',
+          'armv7l': 'arm/v7',
+          'armhf': 'arm/v7',
+        }.get(ansible_architecture, ansible_architecture)
+      }}
+
+- name: Detect x86_64-v2 CPU support
+  ansible.builtin.set_fact:
+    host_supports_x86_64_v2: >-
+      {{
+        ansible_architecture not in ['x86_64', 'amd64']
+        or (
+          not mysql_force_legacy_cpu | bool
+          and 'pni' in host_cpu_flags.split()
+          and 'ssse3' in host_cpu_flags.split()
+          and 'sse4_1' in host_cpu_flags.split()
+          and 'sse4_2' in host_cpu_flags.split()
+          and 'popcnt' in host_cpu_flags.split()
+          and 'lahf_lm' in host_cpu_flags.split()
+          and 'cx16' in host_cpu_flags.split()
+        )
+      }}
+
+- name: Select database and infrastructure images for this host
+  ansible.builtin.set_fact:
+    mysql_auto_engine: >-
+      {{
+        mysql_engine
+        if mysql_engine in ['mysql', 'mariadb']
+        else (
+          'mysql'
+          if mysql_prefer_mysql | bool
+          and (
+            host_container_arch in ['arm64', 'arm/v7']
+            or host_supports_x86_64_v2 | bool
+          )
+          else 'mariadb'
+        )
+      }}
+    mysql_auto_image: >-
+      {{
+        mysql_modern_image
+        if mysql_engine == 'mysql'
+        else (
+          mysql_legacy_image
+          if mysql_engine == 'mariadb'
+          else (
+            mysql_arm_image
+            if mysql_prefer_mysql | bool and host_container_arch in ['arm64', 'arm/v7']
+            else (
+              mysql_modern_image
+              if mysql_prefer_mysql | bool and host_supports_x86_64_v2 | bool
+              else mysql_legacy_image
+            )
+          )
+        )
+      }}
+    postgres_auto_image: "{{ postgres_image_override if (postgres_image_override | default('') | length > 0) else postgres_preferred_image }}"
+    redis_auto_image: "{{ redis_image_override if (redis_image_override | default('') | length > 0) else redis_preferred_image }}"
+    npm_image_version: >-
+      {{
+        npm_image_version_override
+        if npm_image_version_override | default('') | length > 0
+        else (
+          nginx_proxy_armv7_version
+          if host_container_arch == 'arm/v7'
+          else nginx_proxy_preferred_version
+        )
+      }}
+    autoheal_image: "{{ autoheal_image_override if (autoheal_image_override | default('') | length > 0) else autoheal_preferred_image }}"
+    minio_image: "{{ minio_image_override if (minio_image_override | default('') | length > 0) else minio_preferred_image }}"
+
+- name: Display host profile selection
+  ansible.builtin.debug:
+    msg:
+      - "Host profile:"
+      - "  OS: {{ ansible_distribution }} {{ ansible_distribution_version }} ({{ ansible_os_family }})"
+      - "  Architecture: {{ ansible_architecture }} -> linux/{{ host_container_arch }}"
+      - "  x86_64-v2 CPU support: {{ host_supports_x86_64_v2 }}"
+      - "  MySQL-compatible engine: {{ mysql_auto_engine }} ({{ mysql_auto_image }})"
+      - "  PostgreSQL auto image: {{ postgres_auto_image }}"
+      - "  Redis auto image: {{ redis_auto_image }}"

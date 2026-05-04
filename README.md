@@ -37,6 +37,7 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
 │   └── hosts.ini              # Daftar host server
 ├── group_vars/
 │   └── all/
+│       ├── apps.yml           # App catalog, env contracts, CI mappings
 │       ├── vars.yml           # Non-sensitive variables
 │       └── vault.yml          # Encrypted credentials (Ansible Vault)
 ├── playbooks/
@@ -75,6 +76,8 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
 
 scripts/                           # 🖥️ Local Scripts (Run from dev machine)
     ├── config.sh                  # Shared config loader
+    ├── app-catalog.py             # App catalog helper
+    ├── env-contracts.py           # Remote .env.example contract checker/sync
     ├── update-github-secrets-local.sh  # Update GitHub secrets
     ├── update-cloudflare-dns-local.sh  # Update Cloudflare DNS
     ├── trigger-github-actions-local.sh # Trigger all workflows
@@ -204,19 +207,50 @@ make panca-trivia    # Deploy Panca Trivia app
 # ... dan lainnya
 ```
 
+## Environment Contract Workflow
+
+Setiap aplikasi dikelola dari `group_vars/all/apps.yml`. Untuk menjaga infra tetap mengikuti perubahan aplikasi, jalankan contract check setelah `.env.example` di repository aplikasi berubah:
+
+```bash
+make env-contract-check
+make env-contract-show APP=ruang-tenang-api
+```
+
+Alurnya:
+
+1. Update `.env.example` di repository aplikasi.
+2. Jalankan `make env-contract-check` di repository infra ini.
+3. Jika ada key baru, tambahkan ke `roles/applications/<app>-setup/templates/.env.j2`.
+4. Jika key butuh nilai sensitif, simpan nilainya di `group_vars/all/vault.yml` dengan `make vault-edit`, lalu referensikan sebagai `{{ vault_* }}` di template.
+5. Jika key dibutuhkan GitHub Actions saat build/deploy, tambahkan mapping `ci.secrets` atau `ci.variables` di `group_vars/all/apps.yml`.
+6. Sinkronkan GitHub secrets/variables dengan:
+
+```bash
+make github-sync-env-dry
+make github-sync-env
+```
+
+Repository yang belum punya `.env.example` bisa diberi `env_contract.required: false`; script akan memberi warning, bukan menggagalkan validasi.
+
 ## 🔐 Untuk Server Baru (Fresh VPS)
 
-### Bootstrap SSH Key (Fresh VPS dengan Password)
+### Bootstrap SSH Key (Fresh VPS)
 ```bash
-# Jika VPS masih menggunakan password authentication
-# Jalankan bootstrap untuk setup SSH key
-make bootstrap
+# Siapkan inventory untuk koneksi pertama.
+# Pilih password jika provider memberi root/user password.
+# Pilih private key jika provider sudah memasang public key saat provisioning VPS.
+make prepare-bootstrap
 
-# Saat diminta, masukkan password VPS
-# Script akan:
-# - Setup SSH key untuk semua users (root, deployer, alfiang)
-# - Disable password authentication setelah SSH key berhasil
-# - Test koneksi dengan SSH key
+# Jika koneksi pertama memakai password:
+make bootstrap-password
+
+# Jika koneksi pertama memakai private key:
+make bootstrap-key
+
+# Bootstrap akan:
+# - Setup project SSH key untuk root, deployer, app-deployer, dan alfiang
+# - Disable password authentication hanya setelah SSH key berhasil dites
+# - Tidak memaksa user awal harus root; user awal mengikuti inventory
 
 # Setelah berhasil, switch inventory ke SSH key
 make switch-to-ssh

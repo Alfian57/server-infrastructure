@@ -3,8 +3,18 @@
 minio_root_user: "{{ vault_minio_root_user }}"
 minio_root_password: "{{ vault_minio_root_password }}"
 
+# MinIO server image. host-profile sets minio_image on new hosts.
+minio_preserve_existing_image: true
+minio_image_override: ""
+minio_image: "minio/minio:latest"
+
 # MinIO Client (mc) download URL
-minio_client_url: "https://dl.min.io/client/mc/release/linux-amd64/mc"
+minio_client_arch_map:
+  amd64: amd64
+  arm64: arm64
+  arm/v7: arm
+minio_client_arch: "{{ minio_client_arch_map[host_container_arch | default('amd64')] | default('amd64') }}"
+minio_client_url: "https://dl.min.io/client/mc/release/linux-{{ minio_client_arch }}/mc"
 
 # Buckets to create automatically
 # Each item should have:

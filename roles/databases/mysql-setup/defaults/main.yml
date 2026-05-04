@@ -5,9 +5,10 @@
 docker_stack_base: "/opt/docker-stack"
 docker_stack_databases: "{{ docker_stack_base }}/databases"
 
-# Docker image
-# Using MariaDB for x86-64-v1 CPU compatibility (older VPS/QEMU)
-mysql_image: "mariadb:10.11"
+# Docker image selection. host-profile sets mysql_auto_image on new hosts.
+mysql_preserve_existing_engine: true
+mysql_image_override: ""
+mysql_auto_image: "mariadb:10.11"
 
 # Network configuration
 mysql_network: "mysql_network"

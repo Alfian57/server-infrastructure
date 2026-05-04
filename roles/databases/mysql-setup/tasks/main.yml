@@ -7,6 +7,42 @@
     fail_msg: "vault_mysql_root_password must be defined and at least 16 characters"
     quiet: true
 
+- name: Inspect existing MySQL/MariaDB container
+  community.docker.docker_container_info:
+    name: mysql-db
+  register: mysql_existing_container
+  failed_when: false
+
+- name: Select effective MySQL-compatible image
+  ansible.builtin.set_fact:
+    mysql_existing_image: "{{ mysql_existing_container.container.Config.Image | default('') }}"
+    mysql_effective_image: >-
+      {{
+        mysql_image_override
+        if mysql_image_override | default('') | length > 0
+        else (
+          mysql_existing_container.container.Config.Image
+          if mysql_preserve_existing_engine | bool
+          and mysql_existing_container.exists | default(false)
+          and mysql_existing_container.container.Config.Image | default('') | length > 0
+          else mysql_auto_image | default('mariadb:10.11')
+        )
+      }}
+
+- name: Select MySQL-compatible client binaries
+  ansible.builtin.set_fact:
+    mysql_is_mariadb: "{{ 'mariadb' in (mysql_effective_image | lower) }}"
+    mysql_client_binary: "{{ 'mariadb' if 'mariadb' in (mysql_effective_image | lower) else 'mysql' }}"
+    mysql_admin_binary: "{{ 'mariadb-admin' if 'mariadb' in (mysql_effective_image | lower) else 'mysqladmin' }}"
+
+- name: Display MySQL-compatible engine selection
+  ansible.builtin.debug:
+    msg:
+      - "Requested auto image: {{ mysql_auto_image | default('unset') }}"
+      - "Existing image: {{ mysql_existing_image | default('none') }}"
+      - "Effective image: {{ mysql_effective_image }}"
+      - "Client binary: {{ mysql_client_binary }}"
+
 - name: Create mysql directory
   ansible.builtin.file:
     path: "{{ docker_stack_databases }}/mysql"
@@ -40,6 +76,7 @@
     env_files: "{{ docker_stack_databases }}/mysql/.env"
     state: present
     pull: "{{ 'always' if mysql_compose_changed.changed else 'policy' }}"
+  when: not (ansible_check_mode and (mysql_compose_changed.changed or mysql_env_changed.changed))
   register: mysql_container
 
 - name: Wait for MySQL container to be healthy
@@ -48,18 +85,50 @@
   register: container_info
   until: >
     container_info.container.State.Health.Status is defined and
-    (container_info.container.State.Health.Status == "healthy" or
-     container_info.container.State.Health.Status == "starting")
+    container_info.container.State.Health.Status == "healthy"
   retries: 12
   delay: 10
 
 - name: Create application databases
   ansible.builtin.command:
-    cmd: >-
-      docker exec mysql-db mariadb -u root -p'{{ vault_mysql_root_password }}'
-      -e "CREATE DATABASE IF NOT EXISTS {{ item }} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "MYSQL_PWD={{ vault_mysql_root_password }}"
+      - mysql-db
+      - "{{ mysql_client_binary }}"
+      - -u
+      - root
+    stdin: >-
+      CREATE DATABASE IF NOT EXISTS `{{ item | replace('`', '``') }}`
+      CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   loop: "{{ mysql_databases | default([]) }}"
   register: db_creation
-  changed_when: "'Query OK' in db_creation.stdout or db_creation.rc == 0"
-  failed_when: false
+  changed_when: db_creation.rc == 0
+  failed_when: db_creation.rc != 0
+  no_log: true
+
+- name: Create application database users
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "MYSQL_PWD={{ vault_mysql_root_password }}"
+      - mysql-db
+      - "{{ mysql_client_binary }}"
+      - -u
+      - root
+    stdin: |
+      CREATE USER IF NOT EXISTS '{{ item.username | replace("'", "''") }}'@'%' IDENTIFIED BY '{{ item.password | replace("'", "''") }}';
+      ALTER USER '{{ item.username | replace("'", "''") }}'@'%' IDENTIFIED BY '{{ item.password | replace("'", "''") }}';
+      GRANT ALL PRIVILEGES ON `{{ item.database | replace('`', '``') }}`.* TO '{{ item.username | replace("'", "''") }}'@'%';
+      FLUSH PRIVILEGES;
+  loop: "{{ mysql_database_users | default([]) }}"
+  register: db_user_creation
+  changed_when: db_user_creation.rc == 0
+  failed_when: db_user_creation.rc != 0
   no_log: true

@@ -7,6 +7,35 @@
     fail_msg: "vault_postgres_password must be defined and at least 16 characters"
     quiet: true
 
+- name: Inspect existing PostgreSQL container
+  community.docker.docker_container_info:
+    name: postgres-db
+  register: postgres_existing_container
+  failed_when: false
+
+- name: Select effective PostgreSQL image
+  ansible.builtin.set_fact:
+    postgres_existing_image: "{{ postgres_existing_container.container.Config.Image | default('') }}"
+    postgres_effective_image: >-
+      {{
+        postgres_image_override
+        if postgres_image_override | default('') | length > 0
+        else (
+          postgres_existing_container.container.Config.Image
+          if postgres_preserve_existing_engine | bool
+          and postgres_existing_container.exists | default(false)
+          and postgres_existing_container.container.Config.Image | default('') | length > 0
+          else postgres_auto_image | default('postgres:18-bookworm')
+        )
+      }}
+
+- name: Display PostgreSQL image selection
+  ansible.builtin.debug:
+    msg:
+      - "Requested auto image: {{ postgres_auto_image | default('unset') }}"
+      - "Existing image: {{ postgres_existing_image | default('none') }}"
+      - "Effective image: {{ postgres_effective_image }}"
+
 - name: Create postgres directory
   ansible.builtin.file:
     path: "{{ docker_stack_databases }}/postgres"
@@ -40,6 +69,7 @@
     env_files: "{{ docker_stack_databases }}/postgres/.env"
     state: present
     pull: "{{ 'always' if postgres_compose_changed.changed else 'policy' }}"
+  when: not (ansible_check_mode and (postgres_compose_changed.changed or postgres_env_changed.changed))
   register: postgres_container
 
 - name: Wait for PostgreSQL container to be healthy
@@ -48,8 +78,7 @@
   register: container_info
   until: >
     container_info.container.State.Health.Status is defined and
-    (container_info.container.State.Health.Status == "healthy" or
-     container_info.container.State.Health.Status == "starting")
+    container_info.container.State.Health.Status == "healthy"
   retries: 12
   delay: 10
 

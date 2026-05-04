@@ -1,4 +1,4 @@
-.PHONY: help setup ping check lint install clean
+.PHONY: help setup ping check lint shell-check install clean
 
 .DEFAULT_GOAL := help
 
@@ -9,18 +9,23 @@
 PLAYBOOK := playbooks/server-setup.yml
 INVENTORY := inventory/hosts.ini
 VAULT_PASS := .vault_pass
+ANSIBLE_LOCAL_TEMP ?= $(CURDIR)/.ansible/tmp
+export ANSIBLE_LOCAL_TEMP
 
 # Ansible options
 ifneq (,$(wildcard $(VAULT_PASS)))
-	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS) -e @group_vars/all/vault.yml
+	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS)
+	LINT_ENV := ANSIBLE_VAULT_PASSWORD_FILE=$(VAULT_PASS)
 else
 	OPTS := -i $(INVENTORY)
+	LINT_ENV :=
 endif
 
 # SSH helper
-SSH_PORT = $(shell grep '^ansible_port' ansible.cfg 2>/dev/null | awk -F'=' '{print $$2}' | tr -d ' ' || echo '22')
+SSH_PORT = $(shell awk 'NF && $$1 !~ /^\\[/ {for (i=1;i<=NF;i++) if ($$i ~ /^ansible_port=/) {split($$i,a,"="); print a[2]; found=1}} END {if (!found) print "22"}' $(INVENTORY))
+SSH_USER = $(shell awk 'NF && $$1 !~ /^\\[/ {for (i=1;i<=NF;i++) if ($$i ~ /^ansible_user=/) {split($$i,a,"="); print a[2]; found=1}} END {if (!found) print "deployer"}' $(INVENTORY))
 SSH_HOST = $(shell grep -v '^#' $(INVENTORY) | grep -v '^\[' | grep -v '^$$' | head -1 | awk '{print $$1}')
-SSH = ssh -p $(SSH_PORT) deployer@$(SSH_HOST)
+SSH = ssh -p $(SSH_PORT) $(SSH_USER)@$(SSH_HOST)
 
 # Helper to run playbook with tag
 run = @ansible-playbook $(PLAYBOOK) $(OPTS) --tags $(1)
@@ -41,7 +46,10 @@ check: ## Check syntax
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --syntax-check && echo "✓ OK"
 
 lint: ## Lint playbook
-	@ansible-lint $(PLAYBOOK) 2>/dev/null || echo "Install: pip install ansible-lint"
+	@$(LINT_ENV) ansible-lint $(PLAYBOOK)
+
+shell-check: ## Check shell scripts syntax
+	@find scripts roles group_vars -name "*.sh" -print0 | xargs -0 -n1 bash -n
 
 ##@ Deployment
 
@@ -57,14 +65,15 @@ full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy + Cloud Services (for
 	@echo "  4. Update GitHub secrets for CI/CD"
 	@echo "  5. Update Cloudflare DNS records"
 	@echo ""
-	@echo "You will be prompted for the VPS root password."
+	@echo "Prepare inventory first with: make prepare-bootstrap"
+	@echo "Use make bootstrap-password for password auth or make bootstrap-key for key auth."
 	@echo ""
 	@read -p "Press Enter to continue or Ctrl+C to cancel..."
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Step 1/5: Bootstrap SSH Key"
 	@echo "════════════════════════════════════════════════════════════════════"
-	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
+	@$(MAKE) bootstrap-password
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  Step 2/5: Switching to SSH Key Authentication"
@@ -100,14 +109,29 @@ full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy + Cloud Services (for
 	@echo "  make check-cloud - Verify cloud services"
 	@echo ""
 
-bootstrap: ## Bootstrap SSH key (first run with password)
+prepare-bootstrap: ## Prepare inventory for first VPS login (password or key)
+	@./scripts/prepare-bootstrap-inventory.sh
+
+bootstrap: bootstrap-password ## Bootstrap SSH key using password auth
+
+bootstrap-password: ## Bootstrap SSH key using initial password auth
 	@echo "═══════════════════════════════════════════"
-	@echo "  SSH Key Bootstrap"
+	@echo "  SSH Key Bootstrap - Password Login"
 	@echo "═══════════════════════════════════════════"
 	@echo "This will setup SSH key authentication on fresh VPS"
-	@echo "You will be prompted for the VPS password"
+	@echo "You will be prompted for the initial SSH password"
 	@echo ""
 	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
+	@echo ""
+	@echo "If successful, run: make switch-to-ssh"
+
+bootstrap-key: ## Bootstrap SSH key using existing private key auth
+	@echo "═══════════════════════════════════════════"
+	@echo "  SSH Key Bootstrap - Private Key Login"
+	@echo "═══════════════════════════════════════════"
+	@echo "This will setup the project SSH key on a VPS that already accepts key auth"
+	@echo ""
+	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY)
 	@echo ""
 	@echo "If successful, run: make switch-to-ssh"
 
@@ -155,6 +179,30 @@ database: check ## Databases only
 application: check ## Applications only
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application
 
+app-list: ## List catalog applications
+	@./scripts/app-catalog.py list
+
+app-env-check: ## Check app env templates (APP=name optional)
+	@./scripts/app-catalog.py env-check $(if $(APP),--app $(APP),)
+
+env-contract-check: ## Check remote .env.example contracts (APP=name optional)
+	@./scripts/env-contracts.py check $(if $(APP),--app $(APP),)
+
+env-contract-show: ## Show env contract drift for one app (APP=name)
+	@[ -n "$(APP)" ] || (echo "Usage: make env-contract-show APP=<name>" && exit 1)
+	@./scripts/env-contracts.py show --app $(APP)
+
+repo-audit: ## Audit remote repo Dockerfile/workflow/image settings (APP=name optional)
+	@./scripts/repo-audit.py check $(if $(APP),--app $(APP),)
+
+app: check app-env-check ## Deploy one app (APP=name)
+	@[ -n "$(APP)" ] || (echo "Usage: make app APP=<name>" && exit 1)
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application -e "app=$(APP)"
+
+app-dry-run: check app-env-check ## Dry-run one app (APP=name)
+	@[ -n "$(APP)" ] || (echo "Usage: make app-dry-run APP=<name>" && exit 1)
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application -e "app=$(APP)" --check --diff
+
 optimization: check ## Cost optimization only
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags optimization
 
@@ -183,16 +231,43 @@ redis: check ## Redis setup
 ##@ Individual Roles - Applications
 
 materi-ku: check ## Materi-Ku app
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags materi-ku-setup
+	@$(MAKE) app APP=materi-ku
 
 panca-trivia: check ## Panca Trivia app
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags panca-trivia-setup
+	@$(MAKE) app APP=panca-trivia
 
 ruang-istirahat: check ## Ruang Istirahat app
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags ruang-istirahat-setup
+	@$(MAKE) app APP=ruang-istirahat
 
 tech-talk: check ## Tech Talk app
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags tech-talk-setup
+	@$(MAKE) app APP=tech-talk
+
+posyandu: check ## Posyandu app
+	@$(MAKE) app APP=posyandu
+
+solvo: check ## Solvo app
+	@$(MAKE) app APP=solvo
+
+presensi-skansaba-web: check ## Presensi Skansaba Web app
+	@$(MAKE) app APP=presensi-skansaba-web
+
+campus-project-hub-api: check ## Campus Project Hub API
+	@$(MAKE) app APP=campus-project-hub-api
+
+ruang-tenang-api: check ## Ruang Tenang API
+	@$(MAKE) app APP=ruang-tenang-api
+
+campus-project-hub-web: check ## Campus Project Hub Web
+	@$(MAKE) app APP=campus-project-hub-web
+
+personal-portofolio: check ## Personal Portfolio
+	@$(MAKE) app APP=personal-portofolio
+
+ruang-tenang-web: check ## Ruang Tenang Web
+	@$(MAKE) app APP=ruang-tenang-web
+
+file-pod-api: check ## File Pod API
+	@$(MAKE) app APP=file-pod-api
 
 ##@ GitHub Actions (Local - No SSH to Server)
 
@@ -215,6 +290,12 @@ check-cloud: ## ✅ Verify GitHub secrets and Cloudflare DNS are configured
 
 update-github-secrets: ## 🔑 Update GitHub secrets from local (no SSH needed)
 	@./scripts/update-github-secrets-local.sh
+
+github-sync-env-dry: ## 🔑 Dry-run GitHub secrets/variables sync from catalog
+	@./scripts/env-contracts.py github-sync --dry-run
+
+github-sync-env: ## 🔑 Sync GitHub secrets/variables from catalog mappings
+	@./scripts/env-contracts.py github-sync
 
 update-cloudflare-dns: ## 🌐 Update Cloudflare DNS from local (no SSH needed)
 	@./scripts/update-cloudflare-dns-local.sh
@@ -309,6 +390,9 @@ reboot: ## Reboot server
 	@echo "⚠️  Rebooting server..."
 	@ansible all $(OPTS) -m reboot -a "reboot_timeout=300"
 
+reboot-if-required: ## Reboot only when /var/run/reboot-required exists
+	@ansible all $(OPTS) -m shell -a 'if test -f /var/run/reboot-required; then shutdown -r +1 "Ansible reboot required"; else echo "No reboot required"; fi' -b -o
+
 status: ## Show server status
 	@echo "═══════════════════════════════════════════"
 	@echo "  Server Status"
@@ -359,7 +443,13 @@ clean: ## Clean temporary files
 	@rm -rf /tmp/ansible_facts_cache/ 2>/dev/null || true
 	@echo "✓ Clean complete"
 
-validate: check lint ## Full validation (syntax + lint)
+validate: check lint shell-check ## Full validation (syntax + lint + shell syntax)
+
+doctor: ## Validate catalog and local project health
+	@./scripts/app-catalog.py doctor
+	@./scripts/env-contracts.py check
+	@./scripts/repo-audit.py check
+	@$(MAKE) validate
 
 version: ## Show versions
 	@echo "═══════════════════════════════════════════"
@@ -367,4 +457,3 @@ version: ## Show versions
 	@echo "═══════════════════════════════════════════"
 	@ansible --version | head -1
 	@ansible-lint --version 2>/dev/null || echo "ansible-lint: not installed"
-

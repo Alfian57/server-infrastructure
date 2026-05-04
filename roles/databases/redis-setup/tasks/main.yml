@@ -7,6 +7,35 @@
     fail_msg: "vault_redis_password must be defined and at least 16 characters"
     quiet: true
 
+- name: Inspect existing Redis container
+  community.docker.docker_container_info:
+    name: redis-server
+  register: redis_existing_container
+  failed_when: false
+
+- name: Select effective Redis image
+  ansible.builtin.set_fact:
+    redis_existing_image: "{{ redis_existing_container.container.Config.Image | default('') }}"
+    redis_effective_image: >-
+      {{
+        redis_image_override
+        if redis_image_override | default('') | length > 0
+        else (
+          redis_existing_container.container.Config.Image
+          if redis_preserve_existing_engine | bool
+          and redis_existing_container.exists | default(false)
+          and redis_existing_container.container.Config.Image | default('') | length > 0
+          else redis_auto_image | default('redis:8')
+        )
+      }}
+
+- name: Display Redis image selection
+  ansible.builtin.debug:
+    msg:
+      - "Requested auto image: {{ redis_auto_image | default('unset') }}"
+      - "Existing image: {{ redis_existing_image | default('none') }}"
+      - "Effective image: {{ redis_effective_image }}"
+
 - name: Create directory for Redis
   ansible.builtin.file:
     path: "{{ docker_stack_databases }}/redis"
@@ -41,6 +70,7 @@
     recreate: "{{ 'always' if redis_env_changed.changed else 'auto' }}"
     remove_orphans: true
     state: present
+  when: not (ansible_check_mode and (redis_compose_changed.changed or redis_env_changed.changed))
   register: redis_container
 
 - name: Wait for Redis container to be ready

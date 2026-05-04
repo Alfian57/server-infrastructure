@@ -10,7 +10,7 @@
 #
 # Usage:
 #   ./scripts/update-cloudflare-dns-local.sh
-#   ./scripts/update-cloudflare-dns-local.sh --domain alfian-gading.site
+#   ./scripts/update-cloudflare-dns-local.sh --domain alfian-gading.my.id
 # =============================================================================
 
 # Don't use set -e as we want to continue on errors
@@ -37,6 +37,8 @@ update_dns_record() {
   local name=$3
   local vps_ip=$4
   local cf_token=$5
+  local full_name
+  local api_name
   
   # Build full name
   if [ "$name" == "@" ]; then
@@ -57,15 +59,24 @@ update_dns_record() {
   fi
   
   # Check if record exists
-  local existing=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_name}&type=A" \
+  local existing
+  existing=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_name}&type=A" \
     -H "Authorization: Bearer $cf_token" | jq -r '.result[0].id // empty')
+  local payload
+  payload=$(jq -cn \
+    --arg name "$api_name" \
+    --arg content "$vps_ip" \
+    --arg comment "Managed by server-infra-with-ansible" \
+    --argjson proxied "$proxied" \
+    '{type:"A",name:$name,content:$content,proxied:$proxied,ttl:1,comment:$comment}')
   
   if [ -n "$existing" ]; then
     # Update existing record
-    local result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${existing}" \
+    local result
+    result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${existing}" \
       -H "Authorization: Bearer $cf_token" \
       -H "Content-Type: application/json" \
-      --data "{\"type\":\"A\",\"name\":\"$api_name\",\"content\":\"$vps_ip\",\"proxied\":$proxied,\"comment\":\"Updated by local script\"}")
+      --data "$payload")
     
     if [ "$(echo "$result" | jq -r '.success')" == "true" ]; then
       echo -e "${GREEN}✓${NC} Updated: $full_name → $vps_ip (proxied: $proxied)"
@@ -76,10 +87,11 @@ update_dns_record() {
     fi
   else
     # Create new record
-    local result=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
+    local result
+    result=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
       -H "Authorization: Bearer $cf_token" \
       -H "Content-Type: application/json" \
-      --data "{\"type\":\"A\",\"name\":\"$api_name\",\"content\":\"$vps_ip\",\"proxied\":$proxied,\"comment\":\"Created by local script\"}")
+      --data "$payload")
     
     if [ "$(echo "$result" | jq -r '.success')" == "true" ]; then
       echo -e "${GREEN}✓${NC} Created: $full_name → $vps_ip (proxied: $proxied)"
@@ -104,7 +116,8 @@ update_domain() {
   echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   
   # Get zone ID
-  local zone_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
+  local zone_id
+  zone_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
     -H "Authorization: Bearer $cf_token" | jq -r '.result[0].id // empty')
   
   if [ -z "$zone_id" ]; then
@@ -131,6 +144,10 @@ update_domain() {
   echo "  Records: $success success, $failed failed"
   echo ""
   
+  if [ "$failed" -gt 0 ]; then
+    return 1
+  fi
+
   return 0
 }
 
@@ -228,11 +245,12 @@ fi
 echo ""
 
 # Update domains
+overall_failed=0
 if [ -n "$SINGLE_DOMAIN" ]; then
-  update_domain "$SINGLE_DOMAIN" "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" "$vps_ip" "$cf_token"
+  update_domain "$SINGLE_DOMAIN" "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" "$vps_ip" "$cf_token" || overall_failed=1
 else
   for domain in "${!DOMAINS_CONFIG[@]}"; do
-    update_domain "$domain" "${DOMAINS_CONFIG[$domain]}" "$vps_ip" "$cf_token"
+    update_domain "$domain" "${DOMAINS_CONFIG[$domain]}" "$vps_ip" "$cf_token" || overall_failed=1
   done
 fi
 
@@ -243,3 +261,8 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 echo "DNS propagation may take a few minutes."
 echo "Verify at: https://dash.cloudflare.com/"
+
+if [ "$overall_failed" -ne 0 ]; then
+  echo -e "${RED}✗ One or more DNS records failed to update${NC}"
+  exit 1
+fi

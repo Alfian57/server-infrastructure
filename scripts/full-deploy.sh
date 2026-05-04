@@ -10,7 +10,8 @@
 #   --verbose     : Mode verbose (-vvv)
 #   --skip-apt    : Skip apt update
 #   --apps-only   : Deploy aplikasi saja
-#   --fresh       : Fresh install (termasuk seeders)
+#   --app NAME    : Deploy satu aplikasi dari catalog
+#   --fresh       : Run seeders on fresh deployments (non-destructive)
 #   --help        : Tampilkan bantuan
 # =============================================================================
 
@@ -36,6 +37,8 @@ VERBOSE=""
 SKIP_TAGS=""
 EXTRA_VARS=""
 LIMIT_TAGS=""
+APP_FILTER=""
+export ANSIBLE_LOCAL_TEMP="${ANSIBLE_LOCAL_TEMP:-$PROJECT_DIR/.ansible/tmp}"
 
 # Functions
 print_header() {
@@ -70,16 +73,17 @@ show_help() {
     echo "  --verbose     Mode verbose (-vvv)"
     echo "  --skip-apt    Skip apt update"
     echo "  --apps-only   Deploy aplikasi saja"
+    echo "  --app NAME    Deploy satu aplikasi dari catalog"
     echo "  --infra-only  Deploy infrastructure saja"
     echo "  --db-only     Deploy databases saja"
-    echo "  --fresh       Fresh install (termasuk seeders untuk semua apps)"
+    echo "  --fresh       Run seeders on fresh deployments (non-destructive)"
     echo "  --help        Tampilkan bantuan ini"
     echo ""
     echo "Examples:"
     echo "  $0                    # Full deployment"
     echo "  $0 --dry-run          # Preview perubahan"
     echo "  $0 --apps-only        # Deploy aplikasi saja"
-    echo "  $0 --fresh            # Fresh install dengan seeders"
+    echo "  $0 --fresh            # Run seeders for fresh app deployments"
     exit 0
 }
 
@@ -147,20 +151,29 @@ run_deployment() {
     print_step "Starting deployment..."
     echo ""
     
-    # Build command
-    CMD="ansible-playbook $PLAYBOOK -i $INVENTORY $VAULT_OPTS"
+    # Build command without eval so paths and vars are passed safely.
+    CMD=(ansible-playbook "$PLAYBOOK" -i "$INVENTORY")
+
+    if [ "$VAULT_OPTS" = "--ask-vault-pass" ]; then
+        CMD+=(--ask-vault-pass)
+    elif [ -n "$VAULT_OPTS" ]; then
+        CMD+=("$VAULT_OPTS")
+    fi
     
     # Add options
-    [ -n "$DRY_RUN" ] && CMD="$CMD --check --diff"
-    [ -n "$VERBOSE" ] && CMD="$CMD -vvv"
-    [ -n "$SKIP_TAGS" ] && CMD="$CMD --skip-tags $SKIP_TAGS"
-    [ -n "$LIMIT_TAGS" ] && CMD="$CMD --tags $LIMIT_TAGS"
-    [ -n "$EXTRA_VARS" ] && CMD="$CMD -e '$EXTRA_VARS'"
+    [ -n "$DRY_RUN" ] && CMD+=(--check --diff)
+    [ -n "$VERBOSE" ] && CMD+=(-vvv)
+    [ -n "$SKIP_TAGS" ] && CMD+=(--skip-tags "$SKIP_TAGS")
+    [ -n "$LIMIT_TAGS" ] && CMD+=(--tags "$LIMIT_TAGS")
+    [ -n "$EXTRA_VARS" ] && CMD+=(-e "$EXTRA_VARS")
+    [ -n "$APP_FILTER" ] && CMD+=(--tags application -e "app=$APP_FILTER")
     
     # Run
-    echo "Command: $CMD"
+    printf "Command:"
+    printf " %q" "${CMD[@]}"
     echo ""
-    eval $CMD
+    echo ""
+    "${CMD[@]}"
 }
 
 # Parse arguments
@@ -181,6 +194,10 @@ while [[ $# -gt 0 ]]; do
         --apps-only)
             LIMIT_TAGS="application"
             shift
+            ;;
+        --app)
+            APP_FILTER="$2"
+            shift 2
             ;;
         --infra-only)
             LIMIT_TAGS="infrastructure"
@@ -215,6 +232,7 @@ echo "  Inventory: $INVENTORY"
 [ -n "$VERBOSE" ] && echo "  Verbose:   enabled"
 [ -n "$SKIP_TAGS" ] && echo "  Skip:      $SKIP_TAGS"
 [ -n "$LIMIT_TAGS" ] && echo "  Tags:      $LIMIT_TAGS"
+[ -n "$APP_FILTER" ] && echo "  App:       $APP_FILTER"
 [ -n "$EXTRA_VARS" ] && echo "  Extra:     $EXTRA_VARS"
 echo ""
 
