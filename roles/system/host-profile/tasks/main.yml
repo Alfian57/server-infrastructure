@@ -99,7 +99,16 @@
         )
       }}
     autoheal_image: "{{ autoheal_image_override if (autoheal_image_override | default('') | length > 0) else autoheal_preferred_image }}"
-    minio_image: "{{ minio_image_override if (minio_image_override | default('') | length > 0) else minio_preferred_image }}"
+    minio_image: >-
+      {{
+        minio_image_override
+        if minio_image_override | default('') | length > 0
+        else (
+          minio_legacy_cpu_image
+          if host_container_arch == 'amd64' and not (host_supports_x86_64_v2 | bool)
+          else minio_preferred_image
+        )
+      }}
 
 - name: Display host profile selection
   ansible.builtin.debug:
@@ -111,3 +120,4 @@
       - "  MySQL-compatible engine: {{ mysql_auto_engine }} ({{ mysql_auto_image }})"
       - "  PostgreSQL auto image: {{ postgres_auto_image }}"
       - "  Redis auto image: {{ redis_auto_image }}"
+      - "  MinIO auto image: {{ minio_image }}"

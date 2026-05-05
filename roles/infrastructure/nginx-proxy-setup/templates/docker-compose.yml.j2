@@ -11,6 +11,9 @@ services:
             - npm_data:/data
             - npm_letsencrypt:/etc/letsencrypt
             - /var/run/docker.sock:/var/run/docker.sock:ro
+        secrets:
+            - npm_initial_admin_email
+            - npm_initial_admin_password
         healthcheck:
             test: ["CMD", "/usr/bin/check-health"]
             interval: 10s
@@ -18,8 +21,16 @@ services:
             start_period: 90s
         environment:
             - DISABLE_IPV6=true
+            - INITIAL_ADMIN_EMAIL__FILE=/run/secrets/npm_initial_admin_email
+            - INITIAL_ADMIN_PASSWORD__FILE=/run/secrets/npm_initial_admin_password
         networks:
             - nginx_proxy_manager_network
+
+secrets:
+    npm_initial_admin_email:
+        file: ./secrets/initial_admin_email
+    npm_initial_admin_password:
+        file: ./secrets/initial_admin_password
 
 volumes:
     npm_data:

@@ -17,8 +17,8 @@ vault_github_username: "your-github-username"
 vault_github_token: "REPLACE_WITH_GITHUB_PAT"
 vault_docker_password: "{{ vault_github_token }}"
 
-vault_cloudflare_email: "you@example.com"
-vault_cloudflare_api_token: "REPLACE_WITH_CLOUDFLARE_TOKEN"
+vault_cloudflare_email: "you@example.com"  # Required when using a Global API Key
+vault_cloudflare_api_token: "REPLACE_WITH_CLOUDFLARE_API_TOKEN_OR_GLOBAL_API_KEY"
 
 vault_npm_admin_email: "admin@example.com"
 vault_npm_admin_password: "REPLACE_WITH_STRONG_PASSWORD"

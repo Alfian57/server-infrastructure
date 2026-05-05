@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,33 @@ def load_yaml(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise SystemExit(f"{path} must contain a YAML mapping")
     return data
+
+def git_file_state(path: Path) -> str:
+    if not path.exists():
+        return "missing"
+    if not (PROJECT_DIR / ".git").exists():
+        return "unknown"
+
+    rel_path = path.relative_to(PROJECT_DIR).as_posix()
+    ignored = subprocess.run(
+        ["git", "check-ignore", "-q", rel_path],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        check=False,
+    )
+    if ignored.returncode == 0:
+        return "ignored"
+
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", rel_path],
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        check=False,
+        text=True,
+    )
+    if tracked.returncode == 0:
+        return "tracked"
+    return "untracked"
 
 
 def apps() -> list[dict[str, Any]]:
@@ -56,6 +84,12 @@ def repo_name(item: dict[str, Any]) -> str:
 
 def repo_ref(item: dict[str, Any]) -> str:
     return f"{repo_owner(item)}/{repo_name(item)}"
+
+def find_app(app_name: str) -> dict[str, Any]:
+    for app in apps():
+        if app["name"] == app_name:
+            return app
+    raise SystemExit(f"Unknown app: {app_name}")
 
 
 def image_name(item: dict[str, Any]) -> str:
@@ -138,12 +172,27 @@ def cmd_env_check(args: argparse.Namespace) -> int:
             print(f"OK   {app['name']}: no env template required")
             continue
         path = PROJECT_DIR / env_template
-        if path.exists():
+        state = git_file_state(path)
+        if state == "tracked" or state == "unknown":
             print(f"OK   {app['name']}: {env_template}")
+        elif state == "ignored":
+            print(f"MISS {app['name']}: {env_template} exists locally but is ignored by git")
+            failed += 1
+        elif state == "untracked":
+            print(f"MISS {app['name']}: {env_template} exists locally but is not tracked by git")
+            failed += 1
         else:
             print(f"MISS {app['name']}: {env_template}")
             failed += 1
     return 1 if failed else 0
+
+def cmd_deploy_tags(args: argparse.Namespace) -> int:
+    app = find_app(args.app)
+    tags = ["application"]
+    if args.include_runtime_deps and app.get("requires_warp_proxy", False):
+        tags.insert(0, "cloudflare-warp-setup")
+    print(",".join(tags))
+    return 0
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
@@ -180,9 +229,18 @@ def cmd_doctor(_: argparse.Namespace) -> int:
             print(f"{name}: build.workflow is empty", file=sys.stderr)
             failed += 1
         env_template = app.get("env_template")
-        if env_template and not (PROJECT_DIR / env_template).exists():
-            print(f"{name}: missing env template {env_template}", file=sys.stderr)
-            failed += 1
+        if env_template:
+            env_path = PROJECT_DIR / env_template
+            env_state = git_file_state(env_path)
+            if env_state == "missing":
+                print(f"{name}: missing env template {env_template}", file=sys.stderr)
+                failed += 1
+            elif env_state == "ignored":
+                print(f"{name}: env template is ignored by git: {env_template}", file=sys.stderr)
+                failed += 1
+            elif env_state == "untracked":
+                print(f"{name}: env template is not tracked by git: {env_template}", file=sys.stderr)
+                failed += 1
 
     print(f"Apps: {len(names)}")
     print(f"Repositories: {len(repos)}")
@@ -201,6 +259,15 @@ def main() -> int:
     sub.add_parser("mobile-vars").set_defaults(func=cmd_mobile_vars)
     sub.add_parser("workflows").set_defaults(func=cmd_workflows)
     sub.add_parser("doctor").set_defaults(func=cmd_doctor)
+
+    deploy_tags = sub.add_parser("deploy-tags")
+    deploy_tags.add_argument("--app", required=True)
+    deploy_tags.add_argument(
+        "--include-runtime-deps",
+        action="store_true",
+        help="include infra/runtime tags required by the app (for real deploys, not dry-runs)",
+    )
+    deploy_tags.set_defaults(func=cmd_deploy_tags)
 
     env_check = sub.add_parser("env-check")
     env_check.add_argument("--app", default="")

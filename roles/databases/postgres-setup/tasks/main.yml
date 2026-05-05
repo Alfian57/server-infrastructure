@@ -36,6 +36,10 @@
       - "Existing image: {{ postgres_existing_image | default('none') }}"
       - "Effective image: {{ postgres_effective_image }}"
 
+- name: Set PostgreSQL admin connection facts
+  ansible.builtin.set_fact:
+    postgres_admin_user: "{{ vault_postgres_user }}"
+
 - name: Create postgres directory
   ansible.builtin.file:
     path: "{{ docker_stack_databases }}/postgres"
@@ -83,12 +87,28 @@
   delay: 10
 
 - name: Create application databases
-  ansible.builtin.shell:
-    cmd: |
-      docker exec postgres-db psql -U root -d postgres -tc \
-        "SELECT 1 FROM pg_database WHERE datname = '{{ item }}'" | grep -q 1 || \
-      docker exec postgres-db psql -U root -d postgres -c "CREATE DATABASE {{ item }}"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ vault_postgres_password }}"
+      - postgres-db
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ postgres_admin_user }}"
+      - -d
+      - postgres
+    stdin: |
+      SELECT format('CREATE DATABASE %I', '{{ item | replace("'", "''") }}')
+      WHERE NOT EXISTS (
+        SELECT FROM pg_database WHERE datname = '{{ item | replace("'", "''") }}'
+      ) \gexec
   loop: "{{ postgres_databases | default([]) }}"
   register: db_creation
-  changed_when: "'CREATE DATABASE' in db_creation.stdout"
-  failed_when: false
+  changed_when: "'CREATE DATABASE' in (db_creation.stdout | default(''))"
+  failed_when: db_creation.rc != 0
+  no_log: true

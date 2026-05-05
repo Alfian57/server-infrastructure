@@ -28,7 +28,6 @@ read_default() {
 }
 
 current_host="$(get_vps_ip || true)"
-current_user="$(awk 'NF && $1 !~ /^\[/ {for (i=1;i<=NF;i++) if ($i ~ /^ansible_user=/) {split($i,a,"="); print a[2]; exit}}' "$PROJECT_DIR/inventory/hosts.ini" 2>/dev/null || true)"
 current_port="$(awk 'NF && $1 !~ /^\[/ {for (i=1;i<=NF;i++) if ($i ~ /^ansible_port=/) {split($i,a,"="); print a[2]; exit}}' "$PROJECT_DIR/inventory/hosts.ini" 2>/dev/null || true)"
 
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
@@ -37,7 +36,7 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 vps_host="$(read_default "VPS IP/host" "$current_host")"
-bootstrap_user="$(read_default "Initial SSH user" "${current_user:-root}")"
+bootstrap_user="$(read_default "Initial SSH user" "${BOOTSTRAP_USER:-root}")"
 bootstrap_port="$(read_default "SSH port" "${current_port:-$SSH_PORT}")"
 
 echo ""
@@ -49,6 +48,7 @@ auth_choice="${auth_choice:-1}"
 
 inventory_line="${vps_host} ansible_user=${bootstrap_user} ansible_port=${bootstrap_port}"
 bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini --ask-pass"
+bootstrap_auth_method="password"
 
 case "$auth_choice" in
   1|password|Password)
@@ -59,6 +59,7 @@ case "$auth_choice" in
     bootstrap_key="$(read_default "Initial private key path" "$SSH_KEY_PATH")"
     inventory_line="${inventory_line} ansible_ssh_private_key_file=${bootstrap_key}"
     bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini"
+    bootstrap_auth_method="key"
     ;;
   *)
     echo -e "${RED}✗ Invalid authentication method: $auth_choice${NC}"
@@ -70,6 +71,9 @@ cat > "$PROJECT_DIR/inventory/hosts.ini" << EOF
 [all]
 ${inventory_line}
 EOF
+
+mkdir -p "$PROJECT_DIR/.ansible"
+printf '%s\n' "$bootstrap_auth_method" > "$PROJECT_DIR/.ansible/bootstrap-auth-method"
 
 echo ""
 echo -e "${GREEN}✓ inventory/hosts.ini prepared for bootstrap${NC}"

@@ -128,6 +128,7 @@
           storage-driver: "overlay2"
           live-restore: true
       notify: Restart Docker
+      when: not (setup_security | default(false) | bool)
 
     - name: Flush handlers to restart Docker if needed
       ansible.builtin.meta: flush_handlers

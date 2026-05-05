@@ -48,4 +48,6 @@ Do not force-switch an existing MariaDB volume to MySQL without a dump/restore m
 
 Docker installation supports Debian/Ubuntu and RedHat-family hosts. Debian/Ubuntu uses the matching Docker APT repository (`debian` or `ubuntu`), not a hardcoded Ubuntu repository.
 
-Security hardening, WARP, and cost optimization are currently Debian-family only because they use UFW/APT-specific tasks.
+Security hardening and cost optimization are currently Debian-family only because they use UFW/APT-specific tasks.
+
+WARP remains limited to Debian-family `linux/amd64` hosts, but it now follows Cloudflare's official `any main` APT repository and auto-detects the Docker bridge gateway/subnet instead of assuming `172.17.0.1`.

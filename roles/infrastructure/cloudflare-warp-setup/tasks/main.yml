@@ -6,158 +6,279 @@
   ansible.builtin.debug:
     msg: "Cloudflare WARP installation is {{ 'enabled' if warp_install else 'disabled' }}"
 
-- name: End play for this role if WARP installation is disabled
-  ansible.builtin.meta: end_host
+- name: Skip WARP setup when disabled
+  ansible.builtin.debug:
+    msg: "Skipping Cloudflare WARP because warp_install=false"
   when: not warp_install | bool
 
-# ═══════════════════════════════════════════════════════════
-# PREREQUISITES
-# ═══════════════════════════════════════════════════════════
+- name: Validate WARP host support
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'Debian'
+      - host_container_arch | default('amd64') == 'amd64'
+    fail_msg: "Cloudflare WARP role currently supports Debian/Ubuntu on linux/amd64 hosts only."
+    quiet: true
+  when: warp_install | bool
 
-- name: Install prerequisites for WARP
-  ansible.builtin.apt:
-    name:
-      - curl
-      - gpg
-      - lsb-release
-      - socat
-    state: present
-    update_cache: true
+- name: Inspect Docker bridge network for WARP forwarding
+  community.docker.docker_network_info:
+    name: "{{ warp_bridge_network_name }}"
+  register: warp_bridge_network
+  when: warp_install | bool
 
-# ═══════════════════════════════════════════════════════════
-# CLOUDFLARE WARP INSTALLATION
-# ═══════════════════════════════════════════════════════════
+- name: Collect Docker networks used by WARP-backed apps
+  ansible.builtin.set_fact:
+    warp_required_network_names: >-
+      {{
+        portfolio_apps
+        | default([])
+        | selectattr('requires_warp_proxy', 'defined')
+        | selectattr('requires_warp_proxy')
+        | map(attribute='networks')
+        | flatten
+        | select('string')
+        | unique
+        | list
+      }}
+  when: warp_install | bool
 
-- name: Create directory for Cloudflare GPG key
-  ansible.builtin.file:
-    path: /usr/share/keyrings
-    state: directory
-    mode: "0755"
-
-- name: Download Cloudflare WARP GPG key
-  ansible.builtin.get_url:
-    url: https://pkg.cloudflareclient.com/pubkey.gpg
-    dest: /tmp/cloudflare-warp.gpg
-    mode: "0644"
-
-- name: Convert and install Cloudflare GPG key
-  ansible.builtin.shell: |
-    gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg /tmp/cloudflare-warp.gpg
-  args:
-    creates: /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-
-- name: Add Cloudflare WARP repository
-  ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ warp_repo_codename }} main"
-    state: present
-    filename: cloudflare-client
-
-- name: Install Cloudflare WARP
-  ansible.builtin.apt:
-    name: cloudflare-warp
-    state: present
-    update_cache: true
-
-# ═══════════════════════════════════════════════════════════
-# WARP CONFIGURATION (SAFE PROXY MODE)
-# ═══════════════════════════════════════════════════════════
-
-- name: Check WARP registration status
-  ansible.builtin.command: warp-cli --accept-tos registration show
-  register: warp_registration_check
-  changed_when: false
+- name: Inspect Docker networks used by WARP-backed apps
+  community.docker.docker_network_info:
+    name: "{{ item }}"
+  loop: "{{ warp_required_network_names | default([]) }}"
+  register: warp_required_network_info
   failed_when: false
+  when:
+    - warp_install | bool
+    - (warp_required_network_names | default([])) | length > 0
 
-- name: Register WARP client
-  ansible.builtin.shell: warp-cli --accept-tos registration new
-  when: warp_registration_check.rc != 0
+- name: Derive Docker bridge facts for WARP forwarding
+  ansible.builtin.set_fact:
+    warp_bridge_ipam: "{{ (warp_bridge_network.network | default({})).IPAM.Config | default([]) | first | default({}) }}"
+  when: warp_install | bool
 
-- name: Set WARP to proxy mode (safe for SSH)
-  ansible.builtin.command: warp-cli --accept-tos mode proxy
-  changed_when: true
+- name: Derive Docker subnets allowed to access WARP forward port
+  ansible.builtin.set_fact:
+    warp_discovered_docker_subnets: >-
+      {{
+        (
+          warp_required_network_info.results | default([])
+          | selectattr('network', 'defined')
+          | map(attribute='network')
+          | selectattr('IPAM', 'defined')
+          | map(attribute='IPAM')
+          | selectattr('Config', 'defined')
+          | map(attribute='Config')
+          | flatten
+          | selectattr('Subnet', 'defined')
+          | map(attribute='Subnet')
+          | reject('in', [None, ''])
+          | unique
+          | list
+        )
+      }}
+    warp_explicit_docker_subnets: >-
+      {{
+        (
+          warp_docker_subnets
+          if (warp_docker_subnets | default([]) | length > 0)
+          else (
+            [warp_docker_subnet]
+            if (warp_docker_subnet | default('') | length > 0)
+            else []
+          )
+        )
+      }}
+  when: warp_install | bool
 
-- name: Set WARP proxy port
-  ansible.builtin.command: "warp-cli --accept-tos proxy port {{ warp_proxy_port }}"
-  changed_when: true
+- name: Select effective Docker bridge values for WARP forwarding
+  ansible.builtin.set_fact:
+    warp_forward_bind_address: >-
+      {{
+        warp_forward_bind_address
+        if warp_forward_bind_address | default('') | length > 0
+        else warp_bridge_ipam.Gateway | default('')
+      }}
+    warp_allowed_docker_subnets: >-
+      {{
+        warp_explicit_docker_subnets
+        if (warp_explicit_docker_subnets | default([]) | length > 0)
+        else (
+          warp_discovered_docker_subnets
+          if (warp_discovered_docker_subnets | default([]) | length > 0)
+          else [warp_default_docker_subnet]
+        )
+      }}
+  when: warp_install | bool
 
-- name: Check WARP connection status
-  ansible.builtin.command: warp-cli --accept-tos status
-  register: warp_status_check
-  changed_when: false
-  failed_when: false
-
-- name: Connect to WARP
-  ansible.builtin.command: warp-cli --accept-tos connect
-  when: "'Connected' not in warp_status_check.stdout"
-  changed_when: true
-
-- name: Wait for WARP connection
-  ansible.builtin.pause:
-    seconds: 5
-
-- name: Verify WARP connection status
-  ansible.builtin.command: warp-cli --accept-tos status
-  register: warp_final_status
-  changed_when: false
-
-- name: Display WARP status
-  ansible.builtin.debug:
-    msg: "{{ warp_final_status.stdout_lines }}"
+- name: Validate Docker bridge settings for WARP forwarding
+  ansible.builtin.assert:
+    that:
+      - warp_forward_bind_address | default('') | length > 0
+      - warp_allowed_docker_subnets | default([]) | length > 0
+    fail_msg: >-
+      Could not determine Docker bridge gateway/subnet for WARP proxy forwarding.
+      Set warp_forward_bind_address and warp_docker_subnets explicitly if this host
+      does not use standard Docker bridge networking.
+    quiet: true
+  when: warp_install | bool
 
 # ═══════════════════════════════════════════════════════════
-# SOCAT PROXY FORWARDING (Docker -> WARP)
+# CLOUDFLARE WARP INSTALLATION AND PROXY FORWARDING
 # ═══════════════════════════════════════════════════════════
 
-- name: Deploy WARP proxy forwarding systemd service
-  ansible.builtin.template:
-    src: warp-proxy-forward.service.j2
-    dest: /etc/systemd/system/warp-proxy-forward.service
-    mode: "0644"
-    owner: root
-    group: root
-  notify: Restart WARP proxy forward service
+- name: Install and configure Cloudflare WARP proxy
+  when: warp_install | bool
+  block:
+    - name: Install prerequisites for WARP
+      ansible.builtin.apt:
+        name:
+          - curl
+          - gpg
+          - lsb-release
+          - socat
+        state: present
+        update_cache: true
 
-- name: Enable and start WARP proxy forwarding service
-  ansible.builtin.systemd:
-    name: warp-proxy-forward
-    state: started
-    enabled: true
-    daemon_reload: true
+    - name: Create directory for Cloudflare GPG key
+      ansible.builtin.file:
+        path: /usr/share/keyrings
+        state: directory
+        mode: "0755"
 
-# ═══════════════════════════════════════════════════════════
-# UFW CONFIGURATION FOR DOCKER ACCESS
-# ═══════════════════════════════════════════════════════════
+    - name: Download Cloudflare WARP GPG key
+      ansible.builtin.get_url:
+        url: https://pkg.cloudflareclient.com/pubkey.gpg
+        dest: /tmp/cloudflare-warp.gpg
+        mode: "0644"
 
-- name: Allow Docker subnets to access WARP forward port
-  community.general.ufw:
-    rule: allow
-    from_ip: "{{ warp_docker_subnet }}"
-    port: "{{ warp_forward_port }}"
-    proto: tcp
-    comment: "WARP proxy access from Docker containers"
+    - name: Convert and install Cloudflare GPG key
+      ansible.builtin.shell: |
+        gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg /tmp/cloudflare-warp.gpg
+      args:
+        creates: /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
 
-# ═══════════════════════════════════════════════════════════
-# VERIFICATION
-# ═══════════════════════════════════════════════════════════
+    - name: Add Cloudflare WARP repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ warp_apt_repo_suite }} main"
+        state: present
+        filename: cloudflare-client
 
-- name: Verify WARP proxy forwarding service
-  ansible.builtin.systemd:
-    name: warp-proxy-forward
-  register: warp_forward_service
+    - name: Install Cloudflare WARP
+      ansible.builtin.apt:
+        name: cloudflare-warp
+        state: present
+        update_cache: true
 
-- name: Display completion message
-  ansible.builtin.debug:
-    msg:
-      - "═══════════════════════════════════════════════════════════"
-      - "  ✓ Cloudflare WARP Installation Complete!"
-      - "═══════════════════════════════════════════════════════════"
-      - ""
-      - "  Mode: {{ warp_mode }}"
-      - "  WARP Proxy: 127.0.0.1:{{ warp_proxy_port }}"
-      - "  Docker Proxy: 172.17.0.1:{{ warp_forward_port }}"
-      - ""
-      - "  Docker containers should use:"
-      - "  HTTP_PROXY=http://172.17.0.1:{{ warp_forward_port }}"
-      - "  HTTPS_PROXY=http://172.17.0.1:{{ warp_forward_port }}"
-      - ""
-      - "═══════════════════════════════════════════════════════════"
+    - name: Enable and start WARP daemon
+      ansible.builtin.systemd:
+        name: warp-svc
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Check WARP registration status
+      ansible.builtin.command: warp-cli --accept-tos registration show
+      register: warp_registration_check
+      changed_when: false
+      failed_when: false
+      retries: 6
+      delay: 5
+      until: warp_registration_check.rc in [0, 1]
+
+    - name: Register WARP client
+      ansible.builtin.command: warp-cli --accept-tos registration new
+      register: warp_registration_result
+      changed_when: true
+      retries: 3
+      delay: 5
+      until: warp_registration_result.rc == 0
+      when: warp_registration_check.rc != 0
+
+    - name: Set WARP to proxy mode
+      ansible.builtin.command: "warp-cli --accept-tos mode {{ warp_mode }}"
+      changed_when: true
+
+    - name: Set WARP proxy port
+      ansible.builtin.command: "warp-cli --accept-tos proxy port {{ warp_proxy_port }}"
+      changed_when: true
+
+    - name: Check WARP connection status
+      ansible.builtin.command: warp-cli --accept-tos status
+      register: warp_status_check
+      changed_when: false
+      failed_when: false
+
+    - name: Connect to WARP
+      ansible.builtin.command: warp-cli --accept-tos connect
+      when: "'Connected' not in warp_status_check.stdout"
+      changed_when: true
+
+    - name: Verify WARP connection status
+      ansible.builtin.command: warp-cli --accept-tos status
+      register: warp_final_status
+      changed_when: false
+      retries: 12
+      delay: 5
+      until: "'Connected' in warp_final_status.stdout"
+
+    - name: Wait for local WARP proxy port
+      ansible.builtin.wait_for:
+        host: 127.0.0.1
+        port: "{{ warp_proxy_port }}"
+        timeout: 60
+
+    - name: Deploy WARP proxy forwarding systemd service
+      ansible.builtin.template:
+        src: warp-proxy-forward.service.j2
+        dest: /etc/systemd/system/warp-proxy-forward.service
+        mode: "0644"
+        owner: root
+        group: root
+      notify: Restart WARP proxy forward service
+
+    - name: Enable and start WARP proxy forwarding service
+      ansible.builtin.systemd:
+        name: warp-proxy-forward
+        state: started
+        enabled: true
+        daemon_reload: true
+
+    - name: Allow Docker subnets to access WARP forward port
+      community.general.ufw:
+        rule: allow
+        from_ip: "{{ item }}"
+        port: "{{ warp_forward_port }}"
+        proto: tcp
+        comment: "WARP proxy access from Docker containers"
+      loop: "{{ warp_allowed_docker_subnets }}"
+
+    - name: Wait for Docker WARP forward port
+      ansible.builtin.wait_for:
+        host: "{{ warp_forward_bind_address }}"
+        port: "{{ warp_forward_port }}"
+        timeout: 60
+
+    - name: Verify WARP proxy forwarding service
+      ansible.builtin.systemd:
+        name: warp-proxy-forward
+      register: warp_forward_service
+
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg:
+          - "═══════════════════════════════════════════════════════════"
+          - "  ✓ Cloudflare WARP Installation Complete!"
+          - "═══════════════════════════════════════════════════════════"
+          - ""
+          - "  Mode: {{ warp_mode }}"
+          - "  WARP Proxy: 127.0.0.1:{{ warp_proxy_port }}"
+          - "  Docker Proxy: {{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+          - "  Allowed Docker subnets: {{ warp_allowed_docker_subnets | join(', ') }}"
+          - ""
+          - "  Docker containers should use:"
+          - "  HTTP_PROXY=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+          - "  HTTPS_PROXY=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+          - "  NO_PROXY={{ warp_no_proxy }}"
+          - ""
+          - "═══════════════════════════════════════════════════════════"

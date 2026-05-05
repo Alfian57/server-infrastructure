@@ -15,18 +15,17 @@
   hosts: all
   gather_facts: false
   become: true
+  vars_files:
+    - ../group_vars/all/vars.yml
   vars:
-    ssh_key_name: "server_ed25519"
     ssh_public_key_path: "~/.ssh/{{ ssh_key_name }}.pub"
     ssh_private_key_path: "~/.ssh/{{ ssh_key_name }}"
-    deploy_user: "deployer"
-    ci_deploy_user: "app-deployer"
     
     # Users to configure SSH key for
     bootstrap_users:
       - root
-      - deployer
-      - app-deployer
+      - "{{ deploy_user }}"
+      - "{{ ci_deploy_user }}"
       - alfiang
 
   pre_tasks:

@@ -59,42 +59,54 @@ full-setup: ## ⭐ ONE COMMAND: Bootstrap + Setup + Deploy + Cloud Services (for
 	@echo "═══════════════════════════════════════════════════════════════════"
 	@echo ""
 	@echo "This will run:"
-	@echo "  1. Bootstrap SSH key authentication"
-	@echo "  2. Full server setup (Docker, databases, etc)"
-	@echo "  3. Deploy all applications with migrations & seeders"
-	@echo "  4. Update GitHub secrets for CI/CD"
-	@echo "  5. Update Cloudflare DNS records"
+	@echo "  1. Prepare bootstrap inventory for the VPS provider's initial SSH user"
+	@echo "  2. Bootstrap SSH key authentication"
+	@echo "  3. Full server setup (Docker, databases, etc)"
+	@echo "  4. Update Cloudflare DNS records"
+	@echo "  5. Deploy all applications with migrations & seeders"
+	@echo "  6. Update GitHub secrets for CI/CD"
 	@echo ""
-	@echo "Prepare inventory first with: make prepare-bootstrap"
-	@echo "Use make bootstrap-password for password auth or make bootstrap-key for key auth."
+	@echo "This command is for a fresh VPS. It will prepare bootstrap inventory first."
+	@echo "Use the VPS provider's initial SSH user, usually root/ubuntu/debian."
+	@echo "Destructive demo seeds are allowed only in this fresh setup flow."
 	@echo ""
 	@read -p "Press Enter to continue or Ctrl+C to cancel..."
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 1/5: Bootstrap SSH Key"
+	@echo "  Step 1/6: Prepare Bootstrap Inventory"
 	@echo "════════════════════════════════════════════════════════════════════"
-	@$(MAKE) bootstrap-password
+	@./scripts/prepare-bootstrap-inventory.sh
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 2/5: Switching to SSH Key Authentication"
+	@echo "  Step 2/6: Bootstrap SSH Key"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@auth_method=$$(cat .ansible/bootstrap-auth-method 2>/dev/null || echo password); \
+	case "$$auth_method" in \
+		key|private-key|2) $(MAKE) bootstrap-key ;; \
+		password|1) $(MAKE) bootstrap-password ;; \
+		*) echo "Invalid auth method: $$auth_method"; exit 1 ;; \
+	esac
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 3/6: Switching to SSH Key Authentication"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@./scripts/update-inventory-ssh.sh || true
 	@sleep 2
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 3/5: Full Deployment with Migrations & Seeders"
+	@echo "  Step 4/6: Update Cloudflare DNS"
 	@echo "════════════════════════════════════════════════════════════════════"
-	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true"
+	@./scripts/update-cloudflare-dns-local.sh -y
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 4/5: Update GitHub Secrets"
+	@echo "  Step 5/6: Full Deployment with Migrations & Seeders"
+	@echo "════════════════════════════════════════════════════════════════════"
+	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true confirm_destroy_data=yes"
+	@echo ""
+	@echo "════════════════════════════════════════════════════════════════════"
+	@echo "  Step 6/6: Update GitHub Secrets"
 	@echo "════════════════════════════════════════════════════════════════════"
 	@yes | ./scripts/update-github-secrets-local.sh
-	@echo ""
-	@echo "════════════════════════════════════════════════════════════════════"
-	@echo "  Step 5/5: Update Cloudflare DNS"
-	@echo "════════════════════════════════════════════════════════════════════"
-	@yes | ./scripts/update-cloudflare-dns-local.sh
 	@echo ""
 	@echo "════════════════════════════════════════════════════════════════════"
 	@echo "  ✅ FULL SETUP COMPLETE!"
@@ -142,7 +154,7 @@ deploy: check ## Full deployment (use after bootstrap)
 	@ansible-playbook $(PLAYBOOK) $(OPTS)
 
 deploy-fresh: check ## Fresh deployment with seeders
-	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true"
+	@ansible-playbook $(PLAYBOOK) $(OPTS) -e "run_seeder_on_deploy=true confirm_destroy_data=yes"
 
 deploy-script: ## Full deployment using script (interactive)
 	@./scripts/full-deploy.sh
@@ -197,11 +209,13 @@ repo-audit: ## Audit remote repo Dockerfile/workflow/image settings (APP=name op
 
 app: check app-env-check ## Deploy one app (APP=name)
 	@[ -n "$(APP)" ] || (echo "Usage: make app APP=<name>" && exit 1)
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application -e "app=$(APP)"
+	@APP_TAGS="$$(./scripts/app-catalog.py deploy-tags --app $(APP) --include-runtime-deps)"; \
+	ansible-playbook $(PLAYBOOK) $(OPTS) --tags "$$APP_TAGS" -e "app=$(APP)"
 
 app-dry-run: check app-env-check ## Dry-run one app (APP=name)
 	@[ -n "$(APP)" ] || (echo "Usage: make app-dry-run APP=<name>" && exit 1)
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags application -e "app=$(APP)" --check --diff
+	@APP_TAGS="$$(./scripts/app-catalog.py deploy-tags --app $(APP))"; \
+	ansible-playbook $(PLAYBOOK) $(OPTS) --tags "$$APP_TAGS" -e "app=$(APP)" --check --diff
 
 optimization: check ## Cost optimization only
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags optimization
@@ -209,13 +223,19 @@ optimization: check ## Cost optimization only
 ##@ Individual Roles - Infrastructure
 
 docker: check ## Docker setup
-	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags docker-setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags docker-setup,final-docker-hardening
 
 nginx: check ## Nginx Proxy Manager
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags nginx-proxy-setup
 
 autoheal: check ## Autoheal setup
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags autoheal-setup
+
+minio: check ## MinIO setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags minio-setup
+
+cloudflare-warp: check ## Cloudflare WARP proxy setup
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags cloudflare-warp-setup
 
 ##@ Individual Roles - Databases
 

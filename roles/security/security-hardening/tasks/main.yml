@@ -17,6 +17,7 @@
 - name: Include SSH hardening
   ansible.builtin.include_tasks: ssh-hardening.yml
   tags: [security-ssh, ssh-hardening]
+  when: not (security_ssh_defer_until_end | default(true) | bool)
 
 # Docker Security
 - name: Include Docker security
@@ -47,7 +48,7 @@
       - "Security Features Enabled:"
       - "  • UFW Firewall (ports: 22/2222, 80, 443, 81, 3306, 5432, 6379)"
       - "  • Fail2ban (SSH, HTTP, Docker)"
-      - "  • SSH Hardening (no root, key-only, rate limit)"
+      - "  • SSH Hardening {{ '(deferred until final post-deployment step)' if security_ssh_defer_until_end | default(true) | bool else '(no root, key-only, rate limit)' }}"
       - "  • Docker Security (userns-remap, no-new-privileges)"
       - "  • System Hardening (kernel parameters, file permissions)"
       - ""

@@ -166,7 +166,14 @@ run_deployment() {
     [ -n "$SKIP_TAGS" ] && CMD+=(--skip-tags "$SKIP_TAGS")
     [ -n "$LIMIT_TAGS" ] && CMD+=(--tags "$LIMIT_TAGS")
     [ -n "$EXTRA_VARS" ] && CMD+=(-e "$EXTRA_VARS")
-    [ -n "$APP_FILTER" ] && CMD+=(--tags application -e "app=$APP_FILTER")
+    if [ -n "$APP_FILTER" ]; then
+        APP_TAG_ARGS=(deploy-tags --app "$APP_FILTER")
+        if [ -z "$DRY_RUN" ]; then
+            APP_TAG_ARGS+=(--include-runtime-deps)
+        fi
+        APP_TAGS=$("$PROJECT_DIR/scripts/app-catalog.py" "${APP_TAG_ARGS[@]}")
+        CMD+=(--tags "$APP_TAGS" -e "app=$APP_FILTER")
+    fi
     
     # Run
     printf "Command:"
@@ -208,7 +215,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --fresh)
-            EXTRA_VARS="run_seeder_on_deploy=true"
+            EXTRA_VARS="run_seeder_on_deploy=true confirm_destroy_data=yes"
             shift
             ;;
         --help)

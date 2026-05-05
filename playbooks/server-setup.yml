@@ -18,6 +18,26 @@
     setup_applications: true
     setup_optimization: true
     reboot_at_end: false
+    portfolio_app_filter: "{{ app | default('') }}"
+    portfolio_apps_enabled: >-
+      {{
+        (portfolio_apps | selectattr('enabled', 'undefined') | list)
+        + (portfolio_apps | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list)
+      }}
+    portfolio_apps_for_run: >-
+      {{
+        portfolio_apps_enabled
+        if portfolio_app_filter | length == 0
+        else (portfolio_apps_enabled | selectattr('name', 'equalto', portfolio_app_filter) | list)
+      }}
+    warp_required_for_run: >-
+      {{
+        (portfolio_apps_for_run
+        | selectattr('requires_warp_proxy', 'defined')
+        | selectattr('requires_warp_proxy', 'equalto', true)
+        | list
+        | length) > 0
+      }}
 
   pre_tasks:
     - name: Validate minimum Ansible version
@@ -106,6 +126,7 @@
       when:
         - setup_infrastructure | bool
         - ansible_os_family == 'Debian'
+        - warp_required_for_run | bool
 
     # ═══════════════════════════════════════════════════════════
     # DATABASES
@@ -143,6 +164,68 @@
         - ansible_os_family == 'Debian'
 
   post_tasks:
+    - name: Apply final Docker hardening
+      ansible.builtin.include_role:
+        name: security-hardening
+        tasks_from: docker-security
+        apply:
+          tags:
+            - infrastructure
+            - docker-setup
+            - security
+            - security-docker
+            - docker-hardening
+            - final-docker-hardening
+      when:
+        - setup_security | bool
+        - setup_infrastructure | bool
+        - ansible_os_family == 'Debian'
+      tags:
+        - infrastructure
+        - docker-setup
+        - security
+        - security-docker
+        - docker-hardening
+        - final-docker-hardening
+
+    - name: Flush final Docker hardening handlers
+      ansible.builtin.meta: flush_handlers
+      tags:
+        - infrastructure
+        - docker-setup
+        - security
+        - security-docker
+        - docker-hardening
+        - final-docker-hardening
+
+    - name: Apply final SSH hardening
+      ansible.builtin.include_role:
+        name: security-hardening
+        tasks_from: ssh-hardening
+        apply:
+          tags:
+            - security
+            - security-ssh
+            - ssh-hardening
+            - final-ssh-hardening
+      when:
+        - setup_security | bool
+        - security_ssh_defer_until_end | default(true) | bool
+        - ansible_os_family == 'Debian'
+      tags:
+        - security
+        - security-ssh
+        - ssh-hardening
+        - final-ssh-hardening
+
+    - name: Flush final SSH hardening handlers
+      ansible.builtin.meta: flush_handlers
+      tags:
+        - security
+        - security-ssh
+        - ssh-hardening
+        - final-ssh-hardening
+
     - name: Display completion message
       ansible.builtin.debug:
         msg:

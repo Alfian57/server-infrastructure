@@ -14,6 +14,8 @@ vault.yml.decrypted
 .env
 .env.*
 !.env.example
+!**/.env.example
+!**/.env.j2
 
 # Codex local state and credentials
 .codex/

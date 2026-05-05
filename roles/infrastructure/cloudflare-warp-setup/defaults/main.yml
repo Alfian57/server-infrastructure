@@ -8,9 +8,17 @@ warp_install: true
 warp_mode: "proxy"           # Use proxy mode (safe for SSH, no system-wide VPN)
 warp_proxy_port: 40000       # Internal WARP proxy port (localhost only)
 warp_forward_port: 40001     # External port for Docker access (via socat)
+warp_forward_bind_address: ""
+warp_no_proxy: "localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
-# Repository configuration (force noble for newer Ubuntu compatibility)
-warp_repo_codename: "noble"
+# Repository configuration. Cloudflare's official APT repo uses `any main`.
+warp_apt_repo_suite: "any"
+warp_bridge_network_name: "bridge"
 
-# Docker subnet to allow through UFW
-warp_docker_subnet: "172.16.0.0/12"
+# Docker subnets allowed to reach the forwarded proxy port. Keep the legacy
+# single-subnet variable for backward compatibility, but prefer the list form.
+# When both are empty, the role will discover subnets from WARP-backed app
+# networks and fall back to 172.16.0.0/12 for standard Docker bridge ranges.
+warp_docker_subnet: ""
+warp_docker_subnets: []
+warp_default_docker_subnet: "172.16.0.0/12"

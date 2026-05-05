@@ -5,27 +5,36 @@
   register: minio_existing_container
   failed_when: false
 
+- name: Select requested MinIO image
+  ansible.builtin.set_fact:
+    minio_requested_image: "{{ minio_image_override if minio_image_override | default('') | length > 0 else (minio_image | default('minio/minio:latest')) }}"
+    minio_existing_image: "{{ minio_existing_container.container.Config.Image | default('') }}"
+
+- name: Decide whether to preserve existing MinIO image
+  ansible.builtin.set_fact:
+    minio_should_preserve_existing_image: >-
+      {{
+        minio_preserve_existing_image | bool
+        and minio_existing_container.exists | default(false)
+        and minio_existing_image | default('') | length > 0
+        and not (minio_image_override | default('') | length > 0)
+      }}
+
 - name: Select effective MinIO image
   ansible.builtin.set_fact:
-    minio_existing_image: "{{ minio_existing_container.container.Config.Image | default('') }}"
     minio_effective_image: >-
       {{
-        minio_image_override
-        if minio_image_override | default('') | length > 0
-        else (
-          minio_existing_container.container.Config.Image
-          if minio_preserve_existing_image | bool
-          and minio_existing_container.exists | default(false)
-          and minio_existing_container.container.Config.Image | default('') | length > 0
-          else minio_image | default('minio/minio:latest')
-        )
+        minio_existing_image
+        if minio_should_preserve_existing_image | bool
+        else minio_requested_image
       }}
 
 - name: Display MinIO image selection
   ansible.builtin.debug:
     msg:
-      - "Requested auto image: {{ minio_image | default('unset') }}"
+      - "Requested auto image: {{ minio_requested_image }}"
       - "Existing image: {{ minio_existing_image | default('none') }}"
+      - "Preserve existing image: {{ minio_should_preserve_existing_image | bool }}"
       - "Effective image: {{ minio_effective_image }}"
 
 - name: Create MinIO directory
@@ -51,6 +60,7 @@
     mode: "0644"
     owner: "{{ ansible_user | default('root') }}"
     group: "{{ ansible_user | default('root') }}"
+  register: minio_compose_file
 
 - name: Copy MinIO .env file
   ansible.builtin.template:
@@ -68,20 +78,51 @@
 - name: Deploy MinIO container
   community.docker.docker_compose_v2:
     project_src: /opt/docker-stack/infrastructure/minio
-    pull: always
+    pull: "{{ 'always' if minio_compose_file.changed else 'policy' }}"
     state: present
   register: minio_deployment
 
 - name: Wait for MinIO to be ready
-  ansible.builtin.uri:
-    url: "http://localhost:9000/minio/health/live"
-    method: GET
-    status_code: [200]
-    timeout: 10
-  register: minio_health
-  retries: 10
-  delay: 5
-  until: minio_health.status == 200
+  block:
+    - name: Poll MinIO health endpoint
+      ansible.builtin.uri:
+        url: "http://localhost:9000/minio/health/live"
+        method: GET
+        status_code: [200]
+        timeout: 10
+      register: minio_health
+      retries: 30
+      delay: 5
+      until: minio_health.status == 200
+  rescue:
+    - name: Capture MinIO container status
+      community.docker.docker_container_info:
+        name: minio
+      register: minio_failed_container_info
+      failed_when: false
+
+    - name: Capture MinIO logs
+      ansible.builtin.command:
+        argv:
+          - docker
+          - logs
+          - --tail
+          - "80"
+          - minio
+      register: minio_failed_logs
+      changed_when: false
+      failed_when: false
+
+    - name: Fail with MinIO diagnostics
+      ansible.builtin.fail:
+        msg: |-
+          MinIO did not become ready on http://localhost:9000/minio/health/live.
+          Requested image: {{ minio_requested_image }}
+          Effective image: {{ minio_effective_image }}
+          Container state: {{ minio_failed_container_info.container.State.Status | default('missing') }}
+          Exit code: {{ minio_failed_container_info.container.State.ExitCode | default('n/a') }}
+          Recent logs:
+          {{ (minio_failed_logs.stdout | default('no logs captured'))[-3000:] }}
 
 - name: Display MinIO deployment status
   ansible.builtin.debug:

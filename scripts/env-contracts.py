@@ -462,6 +462,27 @@ def gh_set_variable(full_repo: str, key: str, value: str, dry_run: bool, env: di
     print(f"OK   {full_repo}: variable {key}")
     return True
 
+def gh_list_repo_names(kind: str, full_repo: str, env: dict[str, str]) -> set[str]:
+    result = subprocess.run(
+        ["gh", kind, "list", "--repo", full_repo, "--json", "name"],
+        text=True,
+        cwd=PROJECT_DIR,
+        env=env,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ContractError(result.stderr.strip() or f"failed to list {kind} for {full_repo}")
+
+    payload = json.loads(result.stdout or "[]")
+    if not isinstance(payload, list):
+        raise ContractError(f"unexpected {kind} list response for {full_repo}")
+    return {
+        str(item.get("name", "")).strip()
+        for item in payload
+        if isinstance(item, dict) and item.get("name")
+    }
+
 
 def sync_repo(
     full_repo: str,
@@ -489,6 +510,46 @@ def sync_repo(
             continue
         ok = gh_set_variable(full_repo, key, value, dry_run, env) and ok
     return ok
+
+def check_remote_repo_sync(
+    full_repo: str,
+    ci: dict[str, dict[str, Any]],
+    vault: dict[str, Any],
+    env: dict[str, str],
+) -> bool:
+    source_errors = (
+        check_mapping_sources(ci["secrets"], vault, "secret")
+        + check_mapping_sources(ci["variables"], vault, "variable")
+    )
+    if source_errors:
+        print(f"FAIL {full_repo}: invalid catalog mappings")
+        for error in sorted(source_errors):
+            print(f"  - {error}")
+        return False
+
+    try:
+        remote_secrets = gh_list_repo_names("secret", full_repo, env)
+        remote_variables = gh_list_repo_names("variable", full_repo, env)
+    except ContractError as exc:
+        print(f"FAIL {full_repo}: {exc}")
+        return False
+
+    expected_secrets = set(ci["secrets"].keys())
+    expected_variables = set(ci["variables"].keys())
+    missing_secrets = sorted(expected_secrets - remote_secrets)
+    missing_variables = sorted(expected_variables - remote_variables)
+
+    if not missing_secrets and not missing_variables:
+        print(
+            f"OK   {full_repo}: "
+            f"{len(expected_secrets)} secrets, {len(expected_variables)} variables present"
+        )
+        return True
+
+    print(f"FAIL {full_repo}: GitHub configuration drift detected")
+    print_list("  missing secrets", missing_secrets)
+    print_list("  missing variables", missing_variables)
+    return False
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -565,6 +626,40 @@ def cmd_github_sync(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def cmd_github_check(args: argparse.Namespace) -> int:
+    data = catalog()
+    default_owner = github_owner()
+    vault = load_vault(required=False)
+    env = gh_environment(vault)
+    repo_filter = set(args.repo or [])
+    ok = True
+
+    for app in enabled_apps(data):
+        full_repo = repo_ref(app, default_owner)
+        repo = repo_name(app)
+        if repo_filter and repo not in repo_filter and app["name"] not in repo_filter and full_repo not in repo_filter:
+            continue
+        ok = check_remote_repo_sync(full_repo, ci_config(data, app), vault, env) and ok
+
+    for mobile in mobile_repositories(data):
+        repo = repo_name(mobile)
+        full_repo = repo_ref(mobile, default_owner)
+        if repo_filter and repo not in repo_filter and full_repo not in repo_filter:
+            continue
+        mobile_ci = mobile.get("ci", {}) or {}
+        raw_variables = {key: {"value": value} for key, value in (mobile.get("variables", {}) or {}).items()}
+        ci = {
+            "secrets": mobile_ci.get("secrets", {}) or {},
+            "variables": {
+                **raw_variables,
+                **(mobile_ci.get("variables", {}) or {}),
+            },
+        }
+        ok = check_remote_repo_sync(full_repo, ci, vault, env) and ok
+
+    return 0 if ok else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -582,6 +677,10 @@ def main() -> int:
     sync.add_argument("--repo", action="append", default=[])
     sync.add_argument("--dry-run", action="store_true")
     sync.set_defaults(func=cmd_github_sync)
+
+    github_check = sub.add_parser("github-check", help="check mapped GitHub secrets and variables")
+    github_check.add_argument("--repo", action="append", default=[])
+    github_check.set_defaults(func=cmd_github_check)
 
     args = parser.parse_args()
     return int(args.func(args))

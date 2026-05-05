@@ -23,12 +23,6 @@ source "$SCRIPT_DIR/config.sh"
 # Disable strict mode for counting logic
 set +e
 
-# Expected secrets for each repository
-EXPECTED_SECRETS=("VPS_HOST" "VPS_USER" "VPS_SSH_PORT" "VPS_KEY" "DOCKER_TOKEN")
-
-# Repositories to check, loaded from the central app catalog.
-CHECK_REPOS=("${ALL_REPOS[@]}")
-
 echo ""
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}  ${GREEN}Check Cloud Services Status${NC}                                  ${BLUE}║${NC}"
@@ -61,37 +55,17 @@ echo ""
 # Check GitHub Secrets
 # ═══════════════════════════════════════════════════════════
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}Checking GitHub Repository Secrets${NC}"
+echo -e "${YELLOW}Checking GitHub Repository Secrets and Variables${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-github_ok=0
+github_ok=1
 github_fail=0
-
-for repo in "${CHECK_REPOS[@]}"; do
-  full_repo="${repo}"
-  echo -e "${BLUE}Repository: ${full_repo}${NC}"
-  
-  # Get secrets list
-  secrets=$(gh secret list --repo "$full_repo" 2>/dev/null | awk '{print $1}')
-  
-  all_found=true
-  for expected in "${EXPECTED_SECRETS[@]}"; do
-    if echo "$secrets" | grep -q "^${expected}$"; then
-      echo -e "  ${GREEN}✓${NC} $expected"
-    else
-      echo -e "  ${RED}✗${NC} $expected (missing)"
-      all_found=false
-    fi
-  done
-  
-  if [ "$all_found" = true ]; then
-    ((github_ok++))
-  else
-    ((github_fail++))
-  fi
-  echo ""
-done
+if ! "$PROJECT_DIR/scripts/env-contracts.py" github-check; then
+  github_ok=0
+  github_fail=1
+fi
+echo ""
 
 # ═══════════════════════════════════════════════════════════
 # Check Cloudflare DNS
@@ -101,7 +75,29 @@ echo -e "${YELLOW}Checking Cloudflare DNS Records${NC}"
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-CF_TOKEN=$(get_cf_token)
+CF_CREDENTIAL=$(get_cf_token)
+CF_EMAIL=$(get_cf_email)
+export CF_CREDENTIAL
+export CF_EMAIL
+
+if [ -z "$CF_CREDENTIAL" ]; then
+  echo -e "${RED}✗ Failed to get Cloudflare credential from vault_cloudflare_api_token${NC}"
+  exit 1
+fi
+
+if ! CF_AUTH_TYPE=$(detect_cloudflare_auth "$CF_CREDENTIAL"); then
+  echo -e "${RED}✗ Cloudflare credential is invalid${NC}"
+  echo "  Use either API Token, or Global API Key plus vault_cloudflare_email."
+  exit 1
+fi
+export CF_AUTH_TYPE
+
+if [ "$CF_AUTH_TYPE" = "global_key" ]; then
+  echo -e "${GREEN}✓ Cloudflare Global API Key verified${NC}"
+else
+  echo -e "${GREEN}✓ Cloudflare API Token verified${NC}"
+fi
+echo ""
 
 dns_ok=0
 dns_fail=0
@@ -110,8 +106,7 @@ for domain in "${!DOMAINS_CONFIG[@]}"; do
   echo -e "${BLUE}Domain: ${domain}${NC}"
   
   # Get zone ID
-  zone_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
-    -H "Authorization: Bearer $CF_TOKEN" | jq -r '.result[0].id // empty')
+  zone_id=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" | jq -r '.result[0].id // empty')
   
   if [ -z "$zone_id" ]; then
     echo -e "  ${YELLOW}⚠${NC} Domain not found in Cloudflare (skipping)"
@@ -120,10 +115,11 @@ for domain in "${!DOMAINS_CONFIG[@]}"; do
   fi
   
   # Get A records
-  records=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A" \
-    -H "Authorization: Bearer $CF_TOKEN")
+  records=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A")
 
-  for record in ${DOMAINS_CONFIG[$domain]}; do
+  record_list=()
+  read -r -a record_list <<< "${DOMAINS_CONFIG[$domain]}"
+  for record in "${record_list[@]}"; do
     if [ "$record" = "@" ]; then
       fqdn="$domain"
     elif [ "$record" = "*" ]; then
@@ -157,7 +153,7 @@ done
 echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║${NC}  ${GREEN}Summary${NC}                                                      ${BLUE}║${NC}"
 echo -e "${BLUE}╠═══════════════════════════════════════════════════════════════╣${NC}"
-echo -e "${BLUE}║${NC}  GitHub Repositories: ${GREEN}${github_ok} OK${NC} / ${RED}${github_fail} Failed${NC}                      ${BLUE}║${NC}"
+echo -e "${BLUE}║${NC}  GitHub Catalog Check: ${GREEN}${github_ok} OK${NC} / ${RED}${github_fail} Failed${NC}                      ${BLUE}║${NC}"
 echo -e "${BLUE}║${NC}  Cloudflare Domains:  ${GREEN}${dns_ok} OK${NC} / ${RED}${dns_fail} Failed${NC}                       ${BLUE}║${NC}"
 echo -e "${BLUE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""

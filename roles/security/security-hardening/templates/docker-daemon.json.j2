@@ -4,6 +4,7 @@
     "max-size": "{{ security_docker_log_max_size }}",
     "max-file": "{{ security_docker_log_max_file }}"
   },
+  "storage-driver": "{{ security_docker_storage_driver }}",
   {% if security_docker_userns_remap != 'disabled' %}
   "userns-remap": "{{ security_docker_userns_remap }}",
   {% endif %}

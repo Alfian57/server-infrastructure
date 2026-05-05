@@ -20,9 +20,6 @@ set +e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/config.sh"
 
-# Records that should NOT be proxied (wildcard)
-NON_PROXIED="*"
-
 print_header() {
   echo ""
   echo -e "${BLUE}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -36,7 +33,6 @@ update_dns_record() {
   local domain=$2
   local name=$3
   local vps_ip=$4
-  local cf_token=$5
   local full_name
   local api_name
   
@@ -54,14 +50,13 @@ update_dns_record() {
   
   # Determine if proxied
   local proxied="true"
-  if [[ "$NON_PROXIED" == *"$name"* ]]; then
+  if [ "$name" = "*" ]; then
     proxied="false"
   fi
   
   # Check if record exists
   local existing
-  existing=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_name}&type=A" \
-    -H "Authorization: Bearer $cf_token" | jq -r '.result[0].id // empty')
+  existing=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?name=${full_name}&type=A" | jq -r '.result[0].id // empty')
   local payload
   payload=$(jq -cn \
     --arg name "$api_name" \
@@ -73,8 +68,7 @@ update_dns_record() {
   if [ -n "$existing" ]; then
     # Update existing record
     local result
-    result=$(curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${existing}" \
-      -H "Authorization: Bearer $cf_token" \
+    result=$(cloudflare_request PUT "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${existing}" \
       -H "Content-Type: application/json" \
       --data "$payload")
     
@@ -88,8 +82,7 @@ update_dns_record() {
   else
     # Create new record
     local result
-    result=$(curl -s -X POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
-      -H "Authorization: Bearer $cf_token" \
+    result=$(cloudflare_request POST "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records" \
       -H "Content-Type: application/json" \
       --data "$payload")
     
@@ -109,7 +102,6 @@ update_domain() {
   local domain=$1
   local records=$2
   local vps_ip=$3
-  local cf_token=$4
   
   echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo -e "${YELLOW}Domain: ${domain}${NC}"
@@ -117,8 +109,7 @@ update_domain() {
   
   # Get zone ID
   local zone_id
-  zone_id=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" \
-    -H "Authorization: Bearer $cf_token" | jq -r '.result[0].id // empty')
+  zone_id=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones?name=${domain}" | jq -r '.result[0].id // empty')
   
   if [ -z "$zone_id" ]; then
     echo -e "${YELLOW}⚠${NC} Domain not found in Cloudflare: $domain (skipping)"
@@ -132,8 +123,10 @@ update_domain() {
   local success=0
   local failed=0
   
-  for name in $records; do
-    if update_dns_record "$zone_id" "$domain" "$name" "$vps_ip" "$cf_token"; then
+  local record_list=()
+  read -r -a record_list <<< "$records"
+  for name in "${record_list[@]}"; do
+    if update_dns_record "$zone_id" "$domain" "$name" "$vps_ip"; then
       ((success++))
     else
       ((failed++))
@@ -173,26 +166,34 @@ echo -e "${GREEN}✓ Requirements met${NC}"
 
 # Get credentials
 vps_ip=$(get_vps_ip)
-cf_token=$(get_cf_token)
+CF_CREDENTIAL=$(get_cf_token)
+CF_EMAIL=$(get_cf_email)
+export CF_CREDENTIAL
+export CF_EMAIL
 
-if [ -z "$cf_token" ]; then
-  echo -e "${RED}✗ Failed to get Cloudflare API token from vault${NC}"
+if [ -z "$CF_CREDENTIAL" ]; then
+  echo -e "${RED}✗ Failed to get Cloudflare credential from vault_cloudflare_api_token${NC}"
   exit 1
 fi
 
 echo -e "${GREEN}✓ VPS IP: $vps_ip${NC}"
-echo -e "${GREEN}✓ Cloudflare token loaded${NC}"
+echo -e "${GREEN}✓ Cloudflare credential loaded${NC}"
 echo ""
 
-# Verify token
-token_check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
-  -H "Authorization: Bearer $cf_token" | jq -r '.success')
-
-if [ "$token_check" != "true" ]; then
-  echo -e "${RED}✗ Cloudflare API token is invalid${NC}"
+if ! CF_AUTH_TYPE=$(detect_cloudflare_auth "$CF_CREDENTIAL"); then
+  echo -e "${RED}✗ Cloudflare credential is invalid${NC}"
+  echo "  Use either:"
+  echo "  - API Token in vault_cloudflare_api_token, or"
+  echo "  - Global API Key in vault_cloudflare_api_token plus vault_cloudflare_email"
   exit 1
 fi
-echo -e "${GREEN}✓ Cloudflare API token verified${NC}"
+export CF_AUTH_TYPE
+
+if [ "$CF_AUTH_TYPE" = "global_key" ]; then
+  echo -e "${GREEN}✓ Cloudflare Global API Key verified${NC}"
+else
+  echo -e "${GREEN}✓ Cloudflare API Token verified${NC}"
+fi
 echo ""
 
 # Show loaded configuration
@@ -247,10 +248,10 @@ echo ""
 # Update domains
 overall_failed=0
 if [ -n "$SINGLE_DOMAIN" ]; then
-  update_domain "$SINGLE_DOMAIN" "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" "$vps_ip" "$cf_token" || overall_failed=1
+  update_domain "$SINGLE_DOMAIN" "${DOMAINS_CONFIG[$SINGLE_DOMAIN]}" "$vps_ip" || overall_failed=1
 else
   for domain in "${!DOMAINS_CONFIG[@]}"; do
-    update_domain "$domain" "${DOMAINS_CONFIG[$domain]}" "$vps_ip" "$cf_token" || overall_failed=1
+    update_domain "$domain" "${DOMAINS_CONFIG[$domain]}" "$vps_ip" || overall_failed=1
   done
 fi
 

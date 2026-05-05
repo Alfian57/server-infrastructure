@@ -162,6 +162,13 @@
     state: present
   loop: "{{ app_networks }}"
 
+- name: "{{ app_name }} | Verify WARP proxy dependency"
+  ansible.builtin.wait_for:
+    host: "{{ warp_forward_bind_address }}"
+    port: "{{ warp_forward_port }}"
+    timeout: 10
+  when: portfolio_app.requires_warp_proxy | default(false) | bool
+
 - name: "{{ app_name }} | Deploy container"
   community.docker.docker_compose_v2:
     project_src: "{{ app_install_dir }}"

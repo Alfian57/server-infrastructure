@@ -291,6 +291,7 @@ portfolio_apps:
   - name: "ruang-tenang-api"
     repo: "ruang-tenang-api"
     stack: "golang"
+    requires_warp_proxy: true
     build:
       dockerfile: "Dockerfile"
       workflow: "build-and-deploy.yml"
@@ -304,8 +305,12 @@ portfolio_apps:
     run_fresh_migrate: false
     run_seeder: false
     extra_environment:
-      HTTP_PROXY: "http://172.17.0.1:40001"
-      HTTPS_PROXY: "http://172.17.0.1:40001"
+      HTTP_PROXY: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+      HTTPS_PROXY: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+      http_proxy: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+      https_proxy: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
+      NO_PROXY: "{{ warp_no_proxy }}"
+      no_proxy: "{{ warp_no_proxy }}"
     proxy:
       domain: "api.ruang-tenang.site"
       scheme: "http"

@@ -93,6 +93,55 @@ get_cf_token() {
     grep "vault_cloudflare_api_token:" | awk '{print $2}' | tr -d '"'
 }
 
+# Get Cloudflare account email from vault. Required when using Global API Key.
+get_cf_email() {
+  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
+    grep "vault_cloudflare_email:" | awk '{print $2}' | tr -d '"'
+}
+
+detect_cloudflare_auth() {
+  local credential=$1
+  local token_check
+
+  token_check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user/tokens/verify" \
+    -H "Authorization: Bearer $credential" | jq -r '.success // false' 2>/dev/null)
+  if [ "$token_check" = "true" ]; then
+    echo "api_token"
+    return 0
+  fi
+
+  CF_EMAIL="${CF_EMAIL:-$(get_cf_email)}"
+  if [ -n "$CF_EMAIL" ]; then
+    local key_check
+    key_check=$(curl -s -X GET "https://api.cloudflare.com/client/v4/user" \
+      -H "X-Auth-Email: $CF_EMAIL" \
+      -H "X-Auth-Key: $credential" | jq -r '.success // false' 2>/dev/null)
+    if [ "$key_check" = "true" ]; then
+      echo "global_key"
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+cloudflare_request() {
+  local method=$1
+  local url=$2
+  shift 2
+
+  if [ "${CF_AUTH_TYPE:-api_token}" = "global_key" ]; then
+    curl -s -X "$method" "$url" \
+      -H "X-Auth-Email: $CF_EMAIL" \
+      -H "X-Auth-Key: $CF_CREDENTIAL" \
+      "$@"
+  else
+    curl -s -X "$method" "$url" \
+      -H "Authorization: Bearer $CF_CREDENTIAL" \
+      "$@"
+  fi
+}
+
 # =============================================================================
 # Repository List (loaded from vars.yml)
 # =============================================================================

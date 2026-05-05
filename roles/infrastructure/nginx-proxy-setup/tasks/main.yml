@@ -35,6 +35,26 @@
     state: directory
     mode: "0755"
 
+- name: Create nginx-proxy-manager secrets directory
+  ansible.builtin.file:
+    path: "{{ npm_install_dir }}/secrets"
+    state: directory
+    mode: "0700"
+
+- name: Write nginx-proxy-manager initial admin email secret
+  ansible.builtin.copy:
+    dest: "{{ npm_install_dir }}/secrets/initial_admin_email"
+    content: "{{ npm_admin_email }}\n"
+    mode: "0600"
+  no_log: true
+
+- name: Write nginx-proxy-manager initial admin password secret
+  ansible.builtin.copy:
+    dest: "{{ npm_install_dir }}/secrets/initial_admin_password"
+    content: "{{ npm_admin_password }}\n"
+    mode: "0600"
+  no_log: true
+
 - name: Copy docker-compose.yml
   ansible.builtin.template:
     src: docker-compose.yml.j2
@@ -82,7 +102,7 @@
       delay: 5
       failed_when: false
 
-    - name: Check if admin credentials are already updated
+    - name: Wait for configured admin credentials to be accepted
       ansible.builtin.uri:
         url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
         method: POST
@@ -90,130 +110,102 @@
         body:
           identity: "{{ npm_admin_email }}"
           secret: "{{ npm_admin_password }}"
-        status_code: [200, 401]
+        status_code: [200, 400, 401]
         timeout: 10
       register: current_auth_check
+      until: current_auth_check.status | default(0) == 200
+      retries: 18
+      delay: 10
       failed_when: false
       no_log: true
 
-    - name: Handle initial setup if admin credentials not updated
-      when: current_auth_check.status != 200
-      block:
-        - name: Get initial auth token with default credentials
-          ansible.builtin.uri:
-            url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
-            method: POST
-            body_format: json
-            body:
-              identity: "admin@example.com"
-              secret: "changeme"
-            status_code: [200, 401]
-            timeout: 10
-          register: initial_auth_response
-          retries: 5
-          delay: 10
-          until: initial_auth_response.status in [200, 401]
-          failed_when: false
-          no_log: true
+    - name: Try legacy default admin credentials
+      when: current_auth_check.status | default(0) != 200
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+        method: POST
+        body_format: json
+        body:
+          identity: "{{ npm_default_admin_email }}"
+          secret: "{{ npm_default_admin_password }}"
+        status_code: [200, 400, 401]
+        timeout: 10
+      register: legacy_auth_response
+      retries: 5
+      delay: 10
+      until: legacy_auth_response.status | default(0) in [200, 400, 401]
+      failed_when: false
+      no_log: true
 
-        - name: Update admin user credentials
-          ansible.builtin.uri:
-            url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1"
-            method: PUT
-            headers:
-              Authorization: "Bearer {{ initial_auth_response.json.token }}"
-            body_format: json
-            body:
-              email: "{{ npm_admin_email }}"
-              nickname: "{{ npm_admin_nickname | default('Admin') }}"
-              is_disabled: false
-            status_code: 200
-            timeout: 10
-          no_log: true
-          when: initial_auth_response.status == 200
+    - name: Update legacy admin user credentials
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ legacy_auth_response.json.token }}"
+        body_format: json
+        body:
+          email: "{{ npm_admin_email }}"
+          nickname: "{{ npm_admin_nickname | default('Admin') }}"
+          is_disabled: false
+        status_code: 200
+        timeout: 10
+      no_log: true
+      when:
+        - current_auth_check.status | default(0) != 200
+        - legacy_auth_response is defined
+        - legacy_auth_response.status | default(0) == 200
 
-        - name: Update admin password
-          ansible.builtin.uri:
-            url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1/auth"
-            method: PUT
-            headers:
-              Authorization: "Bearer {{ initial_auth_response.json.token }}"
-            body_format: json
-            body:
-              type: "password"
-              current: "changeme"
-              secret: "{{ npm_admin_password }}"
-            status_code: [200, 201]
-            timeout: 10
-          no_log: true
-          when: initial_auth_response.status == 200
+    - name: Update legacy admin password
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/users/1/auth"
+        method: PUT
+        headers:
+          Authorization: "Bearer {{ legacy_auth_response.json.token }}"
+        body_format: json
+        body:
+          type: "password"
+          current: "{{ npm_default_admin_password }}"
+          secret: "{{ npm_admin_password }}"
+        status_code: [200, 201]
+        timeout: 10
+      no_log: true
+      when:
+        - current_auth_check.status | default(0) != 200
+        - legacy_auth_response is defined
+        - legacy_auth_response.status | default(0) == 200
 
-        - name: Reset admin credentials through NPM models
-          ansible.builtin.command:
-            argv:
-              - docker
-              - exec
-              - -e
-              - "NPM_ADMIN_EMAIL={{ npm_admin_email }}"
-              - -e
-              - "NPM_ADMIN_PASSWORD={{ npm_admin_password }}"
-              - -e
-              - "NPM_ADMIN_NICKNAME={{ npm_admin_nickname | default('Admin') }}"
-              - nginx-proxy-manager
-              - node
-              - -e
-              - |
-                const db = require('/app/db');
-                const bcrypt = require('bcrypt');
-                const User = require('/app/models/user');
-                const Auth = require('/app/models/auth');
-                (async () => {
-                  const hash = await bcrypt.hash(process.env.NPM_ADMIN_PASSWORD, 13);
-                  const user = await User.query()
-                    .where('is_deleted', 0)
-                    .orderBy('id', 'asc')
-                    .first();
-                  if (!user) {
-                    throw new Error('No active NPM admin user was found');
-                  }
-                  await User.query()
-                    .patch({
-                      email: process.env.NPM_ADMIN_EMAIL,
-                      nickname: process.env.NPM_ADMIN_NICKNAME || 'Admin',
-                      is_disabled: 0
-                    })
-                    .where('id', user.id);
-                  const updated = await Auth.query()
-                    .patch({
-                      secret: hash,
-                      is_deleted: 0
-                    })
-                    .where({ user_id: user.id, type: 'password' });
-                  await db.destroy();
-                  if (!updated) {
-                    throw new Error('No admin password auth row was updated');
-                  }
-                })().catch(async (error) => {
-                  console.error(error.message);
-                  try { await db.destroy(); } catch (e) {}
-                  process.exit(1);
-                });
-          changed_when: true
-          when: initial_auth_response.status != 200
-          no_log: true
+    - name: Verify configured admin credentials
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
+        method: POST
+        body_format: json
+        body:
+          identity: "{{ npm_admin_email }}"
+          secret: "{{ npm_admin_password }}"
+        status_code: [200, 400, 401]
+        timeout: 10
+      register: verified_auth_check
+      until: verified_auth_check.status | default(0) == 200
+      retries: 6
+      delay: 5
+      failed_when: false
+      no_log: true
+      when: current_auth_check.status | default(0) != 200
 
-        - name: Verify credential update by getting new token
-          ansible.builtin.uri:
-            url: "http://{{ ansible_default_ipv4.address }}:81/api/tokens"
-            method: POST
-            body_format: json
-            body:
-              identity: "{{ npm_admin_email }}"
-              secret: "{{ npm_admin_password }}"
-            status_code: 200
-            timeout: 10
-          register: current_auth_check
-          no_log: true
+    - name: Fail if configured admin credentials are not accepted
+      ansible.builtin.fail:
+        msg: >-
+          Nginx Proxy Manager did not accept the configured admin credentials.
+          This role now provisions fresh NPM installs through the official
+          INITIAL_ADMIN_EMAIL and INITIAL_ADMIN_PASSWORD environment variables.
+          If this VPS already has an NPM data volume, update the vault to match
+          its existing admin account or remove the NPM data volume before
+          rerunning a destructive fresh setup.
+      when: >-
+        (current_auth_check.status | default(0) != 200)
+        and
+        (verified_auth_check is not defined or verified_auth_check.status | default(0) != 200)
 
     - name: Get authentication token
       ansible.builtin.uri:
@@ -341,16 +333,30 @@
         timeout: 30
       when: proxy_host_created.changed
 
-    - name: Check DNS propagation for each subdomain
+    - name: Identify proxy hosts that require DNS propagation before SSL
+      ansible.builtin.set_fact:
+        dns_wait_hosts: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+      when: proxy_hosts is defined
+
+    - name: Display skipped DNS propagation wait for Cloudflare SSL hosts
+      ansible.builtin.debug:
+        msg: "Skipping DNS propagation wait for {{ (proxy_hosts | length) - (dns_wait_hosts | default([]) | length) }} Cloudflare Flexible/edge SSL proxy host(s)."
+      when:
+        - proxy_hosts is defined
+        - (proxy_hosts | length) > (dns_wait_hosts | default([]) | length)
+
+    - name: Check DNS propagation for direct Let's Encrypt domains
       ansible.builtin.command:
         cmd: "dig +short {{ target_domain }} @8.8.8.8"
       vars:
         target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
       register: dns_check
-      loop: "{{ proxy_hosts }}"
+      loop: "{{ dns_wait_hosts | default([]) }}"
       changed_when: false
       failed_when: false
-      when: proxy_hosts is defined
+      when:
+        - dns_wait_hosts is defined
+        - dns_wait_hosts | length > 0
 
     - name: Display DNS propagation status
       ansible.builtin.debug:
@@ -366,18 +372,20 @@
       loop: "{{ dns_check.results }}"
       when: dns_check.results is defined and item.item is defined
 
-    - name: Wait for DNS propagation (retry until all domains resolve)
+    - name: Wait for DNS propagation for direct Let's Encrypt domains
       ansible.builtin.command:
         cmd: "dig +short {{ target_domain }} @8.8.8.8"
       vars:
         target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
       register: dns_propagation_check
       until: dns_propagation_check.stdout != ""
-      retries: 30
+      retries: 12
       delay: 10
-      loop: "{{ proxy_hosts }}"
+      loop: "{{ dns_wait_hosts | default([]) }}"
       changed_when: false
-      when: proxy_hosts is defined
+      when:
+        - dns_wait_hosts is defined
+        - dns_wait_hosts | length > 0
       ignore_errors: true
 
     - name: Display DNS propagation wait results

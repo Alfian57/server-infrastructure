@@ -1,11 +1,13 @@
 [Unit]
 Description=Forward Docker Traffic to WARP Proxy
-After=network.target
+Wants=network-online.target warp-svc.service
+After=network-online.target warp-svc.service
 
 [Service]
-# Listen on {{ warp_forward_port }} (External) -> Forward to {{ warp_proxy_port }} (Local WARP)
-ExecStart=/usr/bin/socat TCP-LISTEN:{{ warp_forward_port }},fork,bind=0.0.0.0,reuseaddr TCP:127.0.0.1:{{ warp_proxy_port }}
+# Listen on Docker host address {{ warp_forward_bind_address }}:{{ warp_forward_port }} -> local WARP proxy {{ warp_proxy_port }}
+ExecStart=/usr/bin/socat TCP-LISTEN:{{ warp_forward_port }},fork,bind={{ warp_forward_bind_address }},reuseaddr TCP:127.0.0.1:{{ warp_proxy_port }}
 Restart=always
+RestartSec=3
 User=root
 
 [Install]

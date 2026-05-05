@@ -127,31 +127,17 @@ cp group_vars/all/vault.yml.example group_vars/all/vault.yml
 make vault-edit
 ```
 
-### 3. Update Inventory
+### 3. Fresh VPS Bootstrap
 ```bash
-# Edit dengan server IP Anda
-nano inventory/hosts.ini
+# Full bootstrap + setup + deploy untuk VPS baru
+make full-setup
 
-# Isi dengan:
-# [all]
-# YOUR_SERVER_IP ansible_user=root ansible_port=22
-```
-
-### 4. Test Connection
-```bash
-make ping
-```
-
-### 5. 🚀 One-Command Full Deployment
-```bash
-# Full deployment (RECOMMENDED)
+# Atau siapkan bootstrap step-by-step
+make prepare-bootstrap
+make bootstrap-password   # jika login awal memakai password
+make bootstrap-key        # jika login awal sudah memakai private key
+make switch-to-ssh
 make deploy
-
-# Atau dengan script interaktif
-./scripts/full-deploy.sh
-
-# Fresh deployment dengan seeders (untuk pertama kali)
-make deploy-fresh
 ```
 
 ## 🎯 Deployment Options
@@ -160,6 +146,7 @@ make deploy-fresh
 
 | Command | Description |
 |---------|-------------|
+| `make full-setup` | Bootstrap fresh VPS, setup server, update cloud services, deploy apps |
 | `make deploy` | Full deployment semua komponen |
 | `make deploy-fresh` | Fresh deployment dengan database seeders |
 | `make deploy-script` | Interactive deployment dengan script |
@@ -359,7 +346,7 @@ make panca-trivia      # Deploy Panca Trivia app
 make all-apps          # Deploy all applications
 
 # Dynamic redeploy
-make redeploy-app APP=materi-ku
+make app APP=materi-ku
 ```
 
 #### Server Management
@@ -367,18 +354,19 @@ make redeploy-app APP=materi-ku
 make facts             # Gather server facts
 make list-hosts        # List all hosts
 make list-tags         # List available tags
-make server-info       # Display server information
+make status            # Display server reachability and uptime
 ```
 
 #### Vault Management
 ```bash
 # Setup
-make vault-create-pass              # Create vault password file
+echo "your-secure-password" > .vault_pass
+chmod 600 .vault_pass
 
 # Main vault operations (recommended)
-make vault-main                     # Quick edit main vault (group_vars/all/vault.yml)
+make vault-create                   # Create group_vars/all/vault.yml from example
+make vault-edit                     # Edit main vault (group_vars/all/vault.yml)
 make vault-status                   # Show status of all vault files
-make vault-migrate                  # Run migration from old structure
 
 # Generic vault operations
 make vault-encrypt FILE=path/file   # Encrypt any file
@@ -391,7 +379,7 @@ make vault-view FILE=path/file      # View any encrypted file
 - ✅ All secrets in one place: `group_vars/all/vault.yml`
 - ✅ Easy to manage, audit, and rotate
 - ✅ Automatic loading by Ansible
-- 📚 Full guide: `cat group_vars/README.md`
+- 📚 Checklist tambahan: `docs/VAULT_ADDITIONS.md`
 
 #### Utilities
 ```bash
@@ -404,7 +392,7 @@ make version           # Show Ansible version
 ### 📚 Detailed Documentation
 Untuk dokumentasi lengkap Makefile dengan examples dan workflows, lihat:
 ```bash
-cat MAKEFILE_GUIDE.md
+make help
 ```
 
 ## 💻 Penggunaan Manual
@@ -582,10 +570,6 @@ File sensitive (credentials, tokens, passwords) dienkripsi menggunakan Ansible V
 
 **Setup vault password:**
 ```bash
-# Menggunakan Makefile
-make vault-create-pass
-
-# Manual
 echo "your-secure-password" > .vault_pass
 chmod 600 .vault_pass
 ```
@@ -593,16 +577,16 @@ chmod 600 .vault_pass
 **Encrypt/Decrypt files:**
 ```bash
 # Menggunakan Makefile
-make vault-encrypt FILE=roles/mysql-setup/vars/main.yml
-make vault-decrypt FILE=roles/mysql-setup/vars/main.yml
-make vault-edit FILE=roles/mysql-setup/vars/main.yml
-make vault-view FILE=roles/mysql-setup/vars/main.yml
+make vault-encrypt FILE=group_vars/all/vault.yml
+make vault-decrypt FILE=group_vars/all/vault.yml
+make vault-edit FILE=group_vars/all/vault.yml
+make vault-view FILE=group_vars/all/vault.yml
 
 # Manual dengan ansible-vault
-ansible-vault encrypt roles/mysql-setup/vars/main.yml
-ansible-vault decrypt roles/mysql-setup/vars/main.yml
-ansible-vault edit roles/mysql-setup/vars/main.yml
-ansible-vault view roles/mysql-setup/vars/main.yml
+ansible-vault encrypt group_vars/all/vault.yml
+ansible-vault decrypt group_vars/all/vault.yml
+ansible-vault edit group_vars/all/vault.yml
+ansible-vault view group_vars/all/vault.yml
 ```
 
 **Best practices:**
@@ -686,7 +670,7 @@ roles:
 5. **Deploy:**
 ```bash
 make check
-make redeploy-app APP=my-new-app
+make app APP=my-new-app
 ```
 
 **Dokumentasi lengkap:**
@@ -720,7 +704,7 @@ make lint
 ### Container Issues
 ```bash
 # Check running containers
-make server-info
+make containers
 
 # View container logs
 ssh root@your-server
@@ -731,10 +715,11 @@ docker logs --tail 100 -f mysql
 ### Vault Issues
 ```bash
 # Create vault password
-make vault-create-pass
+echo "your-secure-password" > .vault_pass
+chmod 600 .vault_pass
 
 # Verify vault can decrypt
-make vault-view FILE=roles/users-setup/vars/main.yml
+make vault-view
 ```
 
 ### Debug Mode
@@ -804,4 +789,4 @@ SPDX-License-Identifier: MIT-0
 
 **Last Updated:** November 2025
 
-**Need help?** Check `MAKEFILE_GUIDE.md` for detailed command documentation.
+**Need help?** Run `make help` to list the maintained commands in this repository.
