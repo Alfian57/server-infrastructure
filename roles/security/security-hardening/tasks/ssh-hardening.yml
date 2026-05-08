@@ -2,6 +2,38 @@
 # SSH Hardening Configuration
 # Additional security measures for SSH
 
+- name: Prevent SSH hardening lockout for root-based Ansible sessions
+  ansible.builtin.assert:
+    that:
+      - not (
+          (security_ssh_harden_config | default(true) | bool)
+          and (security_ssh_permit_root_login | string == 'no')
+          and (ansible_user | default('') == 'root')
+        )
+    fail_msg: >-
+      Refusing to apply SSH hardening while Ansible is connected as root because
+      PermitRootLogin=no would lock out the current access path. Switch
+      inventory to a managed non-root user first (for example `make switch-to-ssh`)
+      and rerun the playbook.
+
+- name: Build effective SSH allowed users list
+  ansible.builtin.set_fact:
+    security_ssh_allowed_users_effective: >-
+      {{
+        (
+          security_ssh_allowed_users | default([])
+          + (
+            [ansible_user]
+            if (
+              ansible_user is defined
+              and ansible_user | length > 0
+              and ansible_user != 'root'
+            )
+            else []
+          )
+        ) | unique | list
+      }}
+
 - name: Backup original sshd_config
   ansible.builtin.copy:
     src: /etc/ssh/sshd_config
@@ -104,13 +136,13 @@
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: "^#?AllowUsers"
-    line: "AllowUsers {{ security_ssh_allowed_users | join(' ') }}"
+    line: "AllowUsers {{ security_ssh_allowed_users_effective | join(' ') }}"
     state: present
   notify: Restart sshd
   when: 
     - security_ssh_harden_config | default(true)
-    - security_ssh_allowed_users is defined
-    - security_ssh_allowed_users | length > 0
+    - security_ssh_allowed_users_effective is defined
+    - security_ssh_allowed_users_effective | length > 0
 
 - name: Configure SSH - Use strong ciphers
   ansible.builtin.lineinfile:
@@ -161,4 +193,5 @@
       - "  • Password auth: {{ security_ssh_password_authentication }}"
       - "  • Max auth tries: {{ security_ssh_max_auth_tries }}"
       - "  • Client timeout: {{ security_ssh_client_alive_interval }}s"
+      - "  • Allowed users: {{ security_ssh_allowed_users_effective | join(', ') if security_ssh_allowed_users_effective | length > 0 else 'all users' }}"
       - "  • SSH config test: {{ 'PASSED' if sshd_test.rc == 0 else 'FAILED' }}"

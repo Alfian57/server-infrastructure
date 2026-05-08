@@ -11,8 +11,10 @@ warp_forward_port: 40001     # External port for Docker access (via socat)
 warp_forward_bind_address: ""
 warp_no_proxy: "localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
-# Repository configuration. Cloudflare's official APT repo uses `any main`.
-warp_apt_repo_suite: "any"
+# Repository configuration. Use the host distro codename because the WARP APT
+# repository publishes distro-specific suites such as `bookworm`, `jammy`,
+# and `noble`. The `any` suite currently does not expose APT release metadata.
+warp_apt_repo_suite: "{{ ansible_distribution_release | lower }}"
 warp_bridge_network_name: "bridge"
 
 # Docker subnets allowed to reach the forwarded proxy port. Keep the legacy

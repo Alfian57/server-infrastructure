@@ -46,6 +46,7 @@
     mode: "0644"
     owner: root
     group: root
+  notify: Restart docker
   when: 
     - docker_check.rc == 0
     - security_docker_use_seccomp | default(true)
@@ -154,9 +155,9 @@
   ansible.builtin.debug:
     msg:
       - "Docker Security Applied:"
-      - "  • User namespace remapping: {{ security_docker_userns_remap | default('disabled') }}"
-      - "  • No new privileges: {{ security_docker_no_new_privileges | default('enabled') }}"
-      - "  • Seccomp profile: {{ 'enabled' if security_docker_use_seccomp | default(true) else 'disabled' }}"
+      - "  • Global user namespace remapping: {{ security_docker_userns_remap | default('disabled') }}"
+      - "  • Global no new privileges: {{ security_docker_no_new_privileges | default(false) }}"
+      - "  • Custom seccomp profile: {{ 'enabled' if security_docker_use_seccomp | default(false) else 'disabled (Docker default profile)' }}"
       - "  • AppArmor profile: {{ 'enabled' if security_docker_use_apparmor | default(true) else 'disabled' }}"
       - "  • Log rotation: {{ security_docker_log_max_size }} / {{ security_docker_log_rotate_count }} days"
       - "  • Audit logging: {{ 'enabled' if security_docker_enable_audit | default(false) else 'disabled' }}"

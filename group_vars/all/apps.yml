@@ -205,7 +205,7 @@ portfolio_apps:
     image: "ghcr.io/solvotech/location-based-presence-web:latest"
     stack: "laravel"
     build:
-      dockerfile: "nginx/Dockerfile"
+      dockerfile: "docker/Dockerfile"
       workflow: "web.yml"
     env_template: "roles/applications/location-based-presence-web-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]

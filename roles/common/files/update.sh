@@ -67,6 +67,20 @@ log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
 # Validate password file exists
 [[ -f "${PASSWORD_FILE}" ]] || error_exit "Password file not found: ${PASSWORD_FILE}"
 
+COMPOSE_IMAGES=$(docker compose -f "${COMPOSE_FILE}" config | awk '/^[[:space:]]+image:/ {print $2}' | sort | uniq)
+declare -A OLD_IMAGE_IDS=()
+
+log "INFO" "Recording currently deployed image IDs"
+for IMAGE in ${COMPOSE_IMAGES}; do
+    IMAGE_ID=$(docker image inspect "${IMAGE}" --format '{{.Id}}' 2>/dev/null || true)
+    if [[ -n "${IMAGE_ID}" ]]; then
+        OLD_IMAGE_IDS["${IMAGE}"]="${IMAGE_ID}"
+        log "INFO" "Current image for ${IMAGE}: ${IMAGE_ID}"
+    else
+        log "INFO" "No existing local image found for ${IMAGE}"
+    fi
+done
+
 # Login to registry (try with sudo if password file is not readable)
 log "INFO" "Logging in to ${REGISTRY}"
 LOGIN_SUCCESS=false
@@ -107,6 +121,44 @@ else
     error_exit "Failed to deploy containers"
 fi
 
+run_laravel_post_deploy() {
+    local service=$1
+
+    log "INFO" "Detected Laravel application in service ${service}"
+    log "INFO" "Clearing Laravel runtime caches"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan optimize:clear || \
+        error_exit "Failed to clear Laravel caches for ${service}"
+
+    log "INFO" "Running Laravel migrations"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan migrate --force || \
+        error_exit "Failed to run Laravel migrations for ${service}"
+
+    log "INFO" "Rebuilding Laravel runtime caches"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan config:cache || \
+        error_exit "Failed to cache Laravel config for ${service}"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan route:cache || \
+        log "WARN" "Could not cache Laravel routes for ${service}"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan view:cache || \
+        log "WARN" "Could not cache Laravel views for ${service}"
+
+    log "INFO" "Restarting Laravel workers"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan queue:restart || \
+        log "WARN" "Could not restart Laravel queue workers for ${service}"
+
+    # Some images disable opcache timestamp validation, so restart after cache rebuild.
+    log "INFO" "Restarting ${service} to load fresh Laravel config"
+    docker compose -f "${COMPOSE_FILE}" restart "${service}" || \
+        error_exit "Failed to restart Laravel service ${service}"
+}
+
+log "INFO" "Checking for Laravel post-deploy tasks"
+SERVICES=$(docker compose -f "${COMPOSE_FILE}" ps --services --filter status=running)
+for SERVICE in ${SERVICES}; do
+    if docker compose -f "${COMPOSE_FILE}" exec -T "${SERVICE}" sh -lc 'test -f artisan' > /dev/null 2>&1; then
+        run_laravel_post_deploy "${SERVICE}"
+    fi
+done
+
 # Logout from registry
 log "INFO" "Logging out from ${REGISTRY}"
 docker logout "${REGISTRY}" > /dev/null 2>&1 || log "WARN" "Logout failed, but continuing"
@@ -114,27 +166,33 @@ docker logout "${REGISTRY}" > /dev/null 2>&1 || log "WARN" "Logout failed, but c
 # Cleanup old images
 log "INFO" "Starting image cleanup"
 
-# Get images defined in this compose file
-USED_IMAGES=$(docker compose -f "${COMPOSE_FILE}" config | awk '/^[[:space:]]+image:/ {print $2}' | sort | uniq)
+RUNNING_CONTAINER_IMAGE_IDS=$(docker ps -aq | xargs -r docker inspect --format '{{.Image}}' | sort | uniq)
 
-# Get all images currently in use by any container
-ALL_USED_IMAGES=$(docker ps -a --format '{{.Image}}' | sort | uniq)
-
-# Remove unused images from this compose
 REMOVED_COUNT=0
-for IMAGE in ${USED_IMAGES}; do
-    # Skip if image is currently in use
-    if echo "${ALL_USED_IMAGES}" | grep -qF "${IMAGE}"; then
-        log "INFO" "Skipping in-use image: ${IMAGE}"
+for IMAGE in ${COMPOSE_IMAGES}; do
+    OLD_IMAGE_ID="${OLD_IMAGE_IDS[${IMAGE}]:-}"
+    NEW_IMAGE_ID=$(docker image inspect "${IMAGE}" --format '{{.Id}}' 2>/dev/null || true)
+
+    if [[ -z "${OLD_IMAGE_ID}" ]]; then
+        log "INFO" "Skipping cleanup for ${IMAGE}: no previous image ID recorded"
         continue
     fi
-    
-    # Try to remove unused image
-    if docker rmi "${IMAGE}" 2>/dev/null; then
-        log "INFO" "Removed unused image: ${IMAGE}"
+
+    if [[ "${OLD_IMAGE_ID}" == "${NEW_IMAGE_ID}" ]]; then
+        log "INFO" "Skipping cleanup for ${IMAGE}: image ID did not change"
+        continue
+    fi
+
+    if echo "${RUNNING_CONTAINER_IMAGE_IDS}" | grep -qF "${OLD_IMAGE_ID}"; then
+        log "INFO" "Skipping old image for ${IMAGE}: still used by a container (${OLD_IMAGE_ID})"
+        continue
+    fi
+
+    if docker rmi "${OLD_IMAGE_ID}" > /dev/null 2>&1; then
+        log "INFO" "Removed old image for ${IMAGE}: ${OLD_IMAGE_ID}"
         ((REMOVED_COUNT+=1))
     else
-        log "WARN" "Could not remove image: ${IMAGE}"
+        log "WARN" "Could not remove old image for ${IMAGE}: ${OLD_IMAGE_ID}"
     fi
 done
 

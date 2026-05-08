@@ -24,6 +24,10 @@
   ansible.builtin.include_tasks: docker-security.yml
   tags: [security-docker, docker-hardening]
 
+- name: Apply Docker security changes before infrastructure roles
+  ansible.builtin.meta: flush_handlers
+  tags: [security-docker, docker-hardening]
+
 # System Security
 - name: Include system security hardening
   ansible.builtin.include_tasks: system-security.yml
@@ -49,7 +53,7 @@
       - "  • UFW Firewall (ports: 22/2222, 80, 443, 81, 3306, 5432, 6379)"
       - "  • Fail2ban (SSH, HTTP, Docker)"
       - "  • SSH Hardening {{ '(deferred until final post-deployment step)' if security_ssh_defer_until_end | default(true) | bool else '(no root, key-only, rate limit)' }}"
-      - "  • Docker Security (userns-remap, no-new-privileges)"
+      - "  • Docker Security (seccomp, AppArmor, per-container hardening where supported)"
       - "  • System Hardening (kernel parameters, file permissions)"
       - ""
       - "Security Check Script:"

@@ -62,13 +62,6 @@ load_local_github_token() {
 
 load_local_github_token
 
-# SSH Configuration  
-SSH_KEY_NAME=$(get_var "ssh_key_name")
-SSH_KEY_PATH="${HOME}/.ssh/${SSH_KEY_NAME}"
-DEPLOY_USER=$(get_var "deploy_user")
-CI_DEPLOY_USER=$(get_var "ci_deploy_user")
-SSH_PORT=$(get_var "ssh_port")
-
 # Primary Domain
 PRIMARY_DOMAIN=$(get_var "primary_domain")
 
@@ -80,6 +73,32 @@ PRIMARY_DOMAIN=$(get_var "primary_domain")
 get_vps_ip() {
   grep -v "^#" "$PROJECT_DIR/inventory/hosts.ini" | grep -v "^\[" | grep -v "^$" | head -1 | awk '{print $1}'
 }
+
+# Get a connection field from the first inventory host line.
+get_inventory_field() {
+  local field=$1
+  awk -v target="$field" '
+    NF && $1 !~ /^\[/ {
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ ("^" target "=")) {
+          split($i, a, "=")
+          print a[2]
+          exit
+        }
+      }
+    }
+  ' "$PROJECT_DIR/inventory/hosts.ini" 2>/dev/null || true
+}
+
+# SSH Configuration
+SSH_KEY_NAME=$(get_var "ssh_key_name")
+SSH_KEY_PATH="${HOME}/.ssh/${SSH_KEY_NAME}"
+DEPLOY_USER=$(get_var "deploy_user")
+CI_DEPLOY_USER=$(get_var "ci_deploy_user")
+SSH_PORT=$(get_inventory_field "ansible_port")
+if [ -z "$SSH_PORT" ]; then
+  SSH_PORT=$(get_var "ssh_port")
+fi
 
 # Get GitHub token from vault
 get_github_token() {

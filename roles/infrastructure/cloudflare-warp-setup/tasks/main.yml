@@ -20,6 +20,16 @@
     quiet: true
   when: warp_install | bool
 
+- name: Validate WARP APT repository suite
+  ansible.builtin.assert:
+    that:
+      - warp_apt_repo_suite | default('') | length > 0
+    fail_msg: >-
+      Cloudflare WARP APT repository suite is empty. Set warp_apt_repo_suite to
+      the host distro codename (for example `bookworm`, `jammy`, or `noble`).
+    quiet: true
+  when: warp_install | bool
+
 - name: Inspect Docker bridge network for WARP forwarding
   community.docker.docker_network_info:
     name: "{{ warp_bridge_network_name }}"

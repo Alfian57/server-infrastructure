@@ -29,6 +29,14 @@
       - "Existing image: {{ npm_existing_image | default('none') }}"
       - "Effective image: {{ npm_effective_image }}"
 
+- name: Remove unhealthy nginx-proxy-manager container before recreate
+  community.docker.docker_container:
+    name: nginx-proxy-manager
+    state: absent
+  when:
+    - npm_existing_container.exists | default(false)
+    - (npm_existing_container.container.State.Status | default('')) in ['restarting', 'exited', 'dead']
+
 - name: Create nginx-proxy-manager directory
   ansible.builtin.file:
     path: "{{ npm_install_dir }}"
@@ -85,9 +93,36 @@
       delay: 10
       failed_when: false
 
+    - name: Inspect nginx-proxy-manager container after failed readiness check
+      community.docker.docker_container_info:
+        name: nginx-proxy-manager
+      register: npm_failed_container_info
+      failed_when: false
+      when: npm_health_check.status not in [200, 302]
+
+    - name: Collect nginx-proxy-manager logs after failed readiness check
+      ansible.builtin.command:
+        argv:
+          - docker
+          - logs
+          - --tail
+          - "30"
+          - nginx-proxy-manager
+      register: npm_failed_container_logs
+      changed_when: false
+      failed_when: false
+      when: npm_health_check.status not in [200, 302]
+
     - name: Fail if nginx-proxy-manager is not ready
       ansible.builtin.fail:
-        msg: "Nginx Proxy Manager failed to start after 10 minutes"
+        msg: |-
+          Nginx Proxy Manager failed to start after 10 minutes.
+          Container state: {{ npm_failed_container_info.container.State.Status | default('unknown') }}
+          Restarting: {{ npm_failed_container_info.container.State.Restarting | default('unknown') }}
+          Exit code: {{ npm_failed_container_info.container.State.ExitCode | default('unknown') }}
+          Health: {{ npm_failed_container_info.container.State.Health.Status | default('unknown') }}
+          Recent logs:
+          {{ (npm_failed_container_logs.stdout_lines | default([]) + npm_failed_container_logs.stderr_lines | default([])) | join('\n') }}
       when: npm_health_check.status not in [200, 302]
 
     - name: Wait for API to be fully ready
@@ -333,16 +368,25 @@
         timeout: 30
       when: proxy_host_created.changed
 
-    - name: Identify proxy hosts that require DNS propagation before SSL
+    - name: Identify proxy hosts that require DNS propagation before HTTP-01 SSL
       ansible.builtin.set_fact:
-        dns_wait_hosts: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+        dns_wait_hosts: >-
+          {{
+            proxy_hosts
+            | rejectattr('cloudflare_flexible', 'defined')
+            | list
+            + proxy_hosts
+            | selectattr('cloudflare_flexible', 'equalto', false)
+            | list
+          }}
       when: proxy_hosts is defined
 
-    - name: Display skipped DNS propagation wait for Cloudflare SSL hosts
+    - name: Display skipped HTTP-01 DNS propagation wait for Cloudflare DNS SSL hosts
       ansible.builtin.debug:
-        msg: "Skipping DNS propagation wait for {{ (proxy_hosts | length) - (dns_wait_hosts | default([]) | length) }} Cloudflare Flexible/edge SSL proxy host(s)."
+        msg: "Skipping HTTP-01 DNS propagation wait for {{ (proxy_hosts | length) - (dns_wait_hosts | default([]) | length) }} Cloudflare DNS challenge proxy host(s)."
       when:
         - proxy_hosts is defined
+        - npm_enable_cloudflare_dns_ssl | bool
         - (proxy_hosts | length) > (dns_wait_hosts | default([]) | length)
 
     - name: Check DNS propagation for direct Let's Encrypt domains
@@ -416,20 +460,173 @@
     # ═══════════════════════════════════════════════════════════════════════════════
     # SSL Certificate Management
     # ═══════════════════════════════════════════════════════════════════════════════
-    # For domains with cloudflare_flexible: true, we skip Let's Encrypt
-    # because Cloudflare provides SSL at the edge (Flexible or Full mode).
-    # Let's Encrypt HTTP-01 challenge will fail for Cloudflare-proxied domains.
+    # Cloudflare-proxied domains use Let's Encrypt DNS-01 via Cloudflare's API.
+    # Direct/non-Cloudflare domains keep using HTTP-01.
     # ═══════════════════════════════════════════════════════════════════════════════
 
-    - name: Identify domains that need Let's Encrypt (not behind Cloudflare proxy)
+    - name: Identify domains that need Let's Encrypt HTTP-01
       ansible.builtin.set_fact:
-        letsencrypt_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+        letsencrypt_http_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
       when: proxy_hosts is defined
 
-    - name: Identify domains using Cloudflare SSL (skip Let's Encrypt)
+    - name: Identify domains that need Let's Encrypt DNS-01 through Cloudflare
+      ansible.builtin.set_fact:
+        letsencrypt_cloudflare_dns_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
+      when:
+        - proxy_hosts is defined
+        - npm_enable_cloudflare_dns_ssl | bool
+
+    - name: Identify Cloudflare domains that should stay edge-only
       ansible.builtin.set_fact:
         cloudflare_ssl_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
+      when:
+        - proxy_hosts is defined
+        - not (npm_enable_cloudflare_dns_ssl | bool)
+
+    - name: Build Let's Encrypt certificate request list
+      ansible.builtin.set_fact:
+        letsencrypt_domains: "{{ (letsencrypt_http_domains | default([])) + (letsencrypt_cloudflare_dns_domains | default([])) }}"
       when: proxy_hosts is defined
+
+    - name: Initialize Let's Encrypt certificate domain groups
+      ansible.builtin.set_fact:
+        letsencrypt_http_domain_names: []
+        letsencrypt_cloudflare_dns_domain_names: []
+        existing_certificate_domain_names: "{{ existing_certificates.json | default([]) | map(attribute='domain_names') | flatten | list }}"
+      when: proxy_hosts is defined
+
+    - name: Build Let's Encrypt HTTP-01 domain group
+      ansible.builtin.set_fact:
+        letsencrypt_http_domain_names: "{{ letsencrypt_http_domain_names + [target_domain] }}"
+      vars:
+        target_domain: "{{ item.domain if item.domain is defined else (item.subdomain + '.' + npm_domain_name) }}"
+      loop: "{{ letsencrypt_http_domains | default([]) }}"
+      when:
+        - letsencrypt_http_domains is defined
+        - letsencrypt_http_domains | length > 0
+
+    - name: Build Let's Encrypt Cloudflare DNS-01 domain group
+      ansible.builtin.set_fact:
+        letsencrypt_cloudflare_dns_domain_names: "{{ letsencrypt_cloudflare_dns_domain_names + [target_domain] }}"
+      vars:
+        target_domain: "{{ item.domain if item.domain is defined else (item.subdomain + '.' + npm_domain_name) }}"
+      loop: "{{ letsencrypt_cloudflare_dns_domains | default([]) }}"
+      when:
+        - letsencrypt_cloudflare_dns_domains is defined
+        - letsencrypt_cloudflare_dns_domains | length > 0
+
+    - name: Build grouped Let's Encrypt certificate requests
+      ansible.builtin.set_fact:
+        letsencrypt_certificate_requests: >-
+          {{
+            [
+              {
+                'domain_names': letsencrypt_http_domain_names | default([]),
+                'dns_challenge': false
+              },
+              {
+                'domain_names': letsencrypt_cloudflare_dns_domain_names | default([]),
+                'dns_challenge': true
+              }
+            ]
+            | rejectattr('domain_names', 'equalto', [])
+            | list
+          }}
+      when: proxy_hosts is defined
+
+    - name: Preinstall certbot Cloudflare DNS plugin
+      ansible.builtin.shell: |
+        docker exec nginx-proxy-manager sh -lc '
+        set -eu
+        . /opt/certbot/bin/activate
+        certbot_version="$(certbot --version | grep -Eo "[0-9]([.][0-9]+)+")"
+        SETUPTOOLS_USE_DISTUTILS=stdlib pip install --no-cache-dir \
+          "acme==${certbot_version}" \
+          "{{ npm_cloudflare_dns_plugin_package }}==${certbot_version}"
+        '
+      args:
+        executable: /bin/sh
+      register: npm_cloudflare_dns_plugin_install
+      changed_when: "'Successfully installed' in npm_cloudflare_dns_plugin_install.stdout"
+      when:
+        - letsencrypt_cloudflare_dns_domains is defined
+        - letsencrypt_cloudflare_dns_domains | length > 0
+        - npm_cloudflare_dns_provider == 'cloudflare'
+
+    - name: Verify Cloudflare API token before DNS-01 certificate request
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/user/tokens/verify"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ cloudflare_api_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+        timeout: 30
+      register: npm_cloudflare_token_verify
+      failed_when: false
+      no_log: true
+      when:
+        - npm_validate_cloudflare_credentials | bool
+        - letsencrypt_cloudflare_dns_domains is defined
+        - letsencrypt_cloudflare_dns_domains | length > 0
+        - npm_cloudflare_dns_provider == 'cloudflare'
+        - npm_cloudflare_api_auth_method == 'api_token'
+
+    - name: Verify Cloudflare Global API Key before DNS-01 certificate request
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/user"
+        method: GET
+        headers:
+          X-Auth-Email: "{{ cloudflare_email }}"
+          X-Auth-Key: "{{ cloudflare_global_api_key }}"
+          Content-Type: "application/json"
+        status_code: 200
+        timeout: 30
+      register: npm_cloudflare_global_key_verify
+      failed_when: false
+      no_log: true
+      when:
+        - npm_validate_cloudflare_credentials | bool
+        - letsencrypt_cloudflare_dns_domains is defined
+        - letsencrypt_cloudflare_dns_domains | length > 0
+        - npm_cloudflare_dns_provider == 'cloudflare'
+        - npm_cloudflare_api_auth_method == 'global_api_key'
+
+    - name: Fail if Cloudflare API token is not usable
+      ansible.builtin.fail:
+        msg: |-
+          Cloudflare API token verification failed before requesting Let's Encrypt DNS-01 certificates.
+          Status: {{ npm_cloudflare_token_verify.status | default('unknown') }}
+          Error: {{ npm_cloudflare_token_verify.json.errors | default(npm_cloudflare_token_verify.msg | default('unknown error')) }}
+          Required token permissions: Zone:Read and DNS:Edit for every zone in the proxy host list.
+      when: >-
+        npm_cloudflare_api_auth_method == 'api_token'
+        and
+        npm_cloudflare_token_verify is defined
+        and
+        (
+          npm_cloudflare_token_verify.status | default(0) != 200
+          or
+          not (npm_cloudflare_token_verify.json.success | default(false) | bool)
+        )
+
+    - name: Fail if Cloudflare Global API Key is not usable
+      ansible.builtin.fail:
+        msg: |-
+          Cloudflare Global API Key verification failed before requesting Let's Encrypt DNS-01 certificates.
+          Status: {{ npm_cloudflare_global_key_verify.status | default('unknown') }}
+          Error: {{ npm_cloudflare_global_key_verify.json.errors | default(npm_cloudflare_global_key_verify.msg | default('unknown error')) }}
+          Required credentials: the Cloudflare account email plus a valid Global API Key for a user that can read zones and edit DNS records.
+      when: >-
+        npm_cloudflare_api_auth_method == 'global_api_key'
+        and
+        npm_cloudflare_global_key_verify is defined
+        and
+        (
+          npm_cloudflare_global_key_verify.status | default(0) != 200
+          or
+          not (npm_cloudflare_global_key_verify.json.success | default(false) | bool)
+        )
 
     - name: Display SSL strategy for each domain
       ansible.builtin.debug:
@@ -437,48 +634,82 @@
           ╔════════════════════════════════════════════════════════════════╗
           ║ SSL Certificate Strategy
           ╠════════════════════════════════════════════════════════════════╣
-          ║ Let's Encrypt SSL ({{ letsencrypt_domains | default([]) | length }} domains):
-          {% for item in letsencrypt_domains | default([]) %}
+          ║ Let's Encrypt HTTP-01 ({{ letsencrypt_http_domains | default([]) | length }} domains):
+          {% for item in letsencrypt_http_domains | default([]) %}
           ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
           {% endfor %}
           ║
-          ║ Cloudflare Flexible SSL ({{ cloudflare_ssl_domains | default([]) | length }} domains):
+          ║ Let's Encrypt DNS-01 via Cloudflare ({{ letsencrypt_cloudflare_dns_domains | default([]) | length }} domains):
+          {% for item in letsencrypt_cloudflare_dns_domains | default([]) %}
+          ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
+          {% endfor %}
+          ║
+          ║ Cloudflare edge-only SSL ({{ cloudflare_ssl_domains | default([]) | length }} domains):
           {% for item in cloudflare_ssl_domains | default([]) %}
-          ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %} (self-signed + CF edge)
+          ║   • {% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}
           {% endfor %}
           ╚════════════════════════════════════════════════════════════════╝
       when: proxy_hosts is defined
 
-    - name: Request Let's Encrypt SSL certificate for non-Cloudflare domains
+    - name: Request Let's Encrypt SSL certificates
       ansible.builtin.uri:
         url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"
         method: POST
         headers:
           Authorization: "Bearer {{ npm_auth_token }}"
         body_format: json
-        body:
-          domain_names:
-            - "{{ target_domain }}"
-          meta:
-            letsencrypt_email: "{{ npm_admin_email }}"
-            letsencrypt_agree: true
-            dns_challenge: false
-            key_type: "rsa"
-          provider: "letsencrypt"
+        body: "{{ npm_certificate_request_body }}"
         status_code: [200, 201]
+        timeout: "{{ npm_certificate_request_timeout_seconds | int }}"
       vars:
-        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
-        existing_cert: "{{ existing_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
+        certificate_domain_names: "{{ item.domain_names | difference(existing_certificate_domain_names | default([])) | list }}"
+        cloudflare_dns_challenge: "{{ item.dns_challenge | default(false) | bool }}"
+        npm_certificate_request_meta_base:
+          dns_challenge: "{{ cloudflare_dns_challenge | bool }}"
+          key_type: "rsa"
+        npm_cloudflare_dns_api_token_credentials: |-
+          dns_cloudflare_api_token={{ cloudflare_api_token }}
+        npm_cloudflare_dns_global_api_key_credentials: |-
+          dns_cloudflare_email={{ cloudflare_email }}
+          dns_cloudflare_api_key={{ cloudflare_global_api_key }}
+        npm_certificate_request_meta_cloudflare:
+          dns_provider: "{{ npm_cloudflare_dns_provider }}"
+          dns_provider_credentials: "{{ npm_cloudflare_dns_global_api_key_credentials if npm_cloudflare_api_auth_method == 'global_api_key' else npm_cloudflare_dns_api_token_credentials }}"
+          propagation_seconds: "{{ npm_cloudflare_dns_propagation_seconds | int }}"
+        npm_certificate_request_body:
+          domain_names: "{{ certificate_domain_names }}"
+          meta: "{{ npm_certificate_request_meta_base | combine(npm_certificate_request_meta_cloudflare if cloudflare_dns_challenge | bool else {}) }}"
+          provider: "letsencrypt"
       register: ssl_cert_request
-      loop: "{{ letsencrypt_domains | default([]) }}"
+      loop: "{{ letsencrypt_certificate_requests | default([]) }}"
       when:
-        - letsencrypt_domains is defined
-        - letsencrypt_domains | length > 0
-        - existing_cert.id is not defined
-      failed_when: ssl_cert_request.status not in [200, 201]
-      retries: 3
-      delay: 10
-      until: ssl_cert_request.status in [200, 201]
+        - letsencrypt_certificate_requests is defined
+        - letsencrypt_certificate_requests | length > 0
+        - certificate_domain_names | length > 0
+      failed_when: false
+      no_log: true
+
+    - name: Fail with sanitized Let's Encrypt certificate request errors
+      ansible.builtin.fail:
+        msg: |-
+          Nginx Proxy Manager failed to issue one or more Let's Encrypt certificates.
+          {% for result in ssl_cert_request.results | default([]) %}
+          {% if result.status is defined and result.status not in [200, 201] %}
+          - Domains: {{ result.item.domain_names | default([]) | join(', ') }}
+            Status: {{ result.status | default('unknown') }}
+            Error: {{ result.json.error.message | default(result.msg | default('unknown error')) }}
+          {% endif %}
+          {% endfor %}
+      when: >-
+        ssl_cert_request.results is defined
+        and
+        (
+          ssl_cert_request.results
+          | selectattr('status', 'defined')
+          | rejectattr('status', 'in', [200, 201])
+          | list
+          | length
+        ) > 0
 
     # Legacy origin SSL is disabled by default. Cloudflare Flexible/edge SSL hosts
     # are managed through the NPM API as HTTP origin proxy hosts.
@@ -544,6 +775,7 @@
       ansible.builtin.set_fact:
         failed_ssl_domains: "{{ failed_ssl_domains | default([]) + [item.item] }}"
       loop: "{{ ssl_cert_request.results | default([]) }}"
+      no_log: true
       when:
         - item.status is defined
         - item.status not in [200, 201]
@@ -660,6 +892,7 @@
         proxy_host_id: "{{ current_host.id | default('') }}"
         cert_for_domain: "{{ updated_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
         certificate_id: "{{ cert_for_domain.id | default(0) }}"
+        cloudflare_edge: "{{ item.cloudflare_flexible | default(false) | bool }}"
         npm_proxy_host_ssl_body:
           domain_names:
             - "{{ target_domain }}"
@@ -670,7 +903,7 @@
           ssl_forced: true
           caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
           block_exploits: true
-          advanced_config: ""
+          advanced_config: "{{ npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '' }}"
           meta: {}
           access_list_id: 0
           allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
@@ -683,7 +916,6 @@
       loop: "{{ proxy_hosts }}"
       when:
         - proxy_hosts is defined
-        - not (item.cloudflare_flexible | default(false) | bool)
         - certificate_id | int > 0
         - proxy_host_id != ''
 
@@ -699,7 +931,7 @@
           ║ Note: SSL handled by Cloudflare. NPM has HTTP backend only.
           {% elif item.status | default(0) in [200, 201] %}
           ║ Status: ✅ SSL Enabled & Configured
-          ║ Certificate: Let's Encrypt
+          ║ Certificate: Let's Encrypt{% if item.item.cloudflare_flexible | default(false) %} (Cloudflare DNS challenge){% endif %}
           ║ SSL Forced: Yes (HTTP → HTTPS redirect)
           ║ HTTP/2: Enabled
           ║ HSTS: Enabled
@@ -711,6 +943,13 @@
           {% endif %}
           ╚════════════════════════════════════════════════════════════════╝
       loop: "{{ proxy_host_ssl_update.results }}"
+      loop_control:
+        label: >-
+          {{
+            item.item.domain
+            if item.item.domain is defined
+            else item.item.subdomain | default('unknown') ~ '.' ~ npm_domain_name
+          }}
       when:
         - proxy_host_ssl_update.results is defined
         - not ansible_check_mode

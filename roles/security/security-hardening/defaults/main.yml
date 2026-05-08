@@ -7,9 +7,9 @@
 security_ufw_reset: false
 security_ufw_logging_level: "low"  # off, low, medium, high, full
 
-# SSH port - Keep at 22 to avoid lockout
-# Only change if you've confirmed port change works
-security_ssh_port: 22
+# SSH port used by firewall/fail2ban. By default this follows the active
+# Ansible connection port to avoid drift between inventory and security rules.
+security_ssh_port: "{{ ansible_port | default(22) }}"
 
 # Allow NPM dashboard externally
 security_allow_npm_dashboard: true
@@ -111,14 +111,22 @@ security_ssh_kex_algorithms: "curve25519-sha256,curve25519-sha256@libssh.org,dif
 # ==========================================
 security_docker_harden: true
 
-# User namespace remapping (isolate containers)
-security_docker_userns_remap: "default"      # 'default' or specific user
+# User namespace remapping can break images that rely on setuid/init helpers
+# and can hide existing Docker volumes when toggled after deployment. Keep it
+# opt-in instead of forcing it globally.
+security_docker_userns_remap: "disabled"     # 'disabled', 'default', or specific user
 
-# Prevent privilege escalation
-security_docker_no_new_privileges: true
+# Prevent privilege escalation. Do not force this globally at the Docker daemon
+# level because images that use s6-overlay/setuid init helpers, including
+# nginx-proxy-manager, fail to start. Apply no-new-privileges per container
+# where the image is known to support it.
+security_docker_no_new_privileges: false
 
 # Seccomp and AppArmor
-security_docker_use_seccomp: true
+# Keep Docker's maintained built-in seccomp profile by default. The custom
+# profile in this role is opt-in because incomplete syscall allowlists can break
+# common init systems such as s6-overlay.
+security_docker_use_seccomp: false
 security_docker_use_apparmor: true
 
 # Log configuration

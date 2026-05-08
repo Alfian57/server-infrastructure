@@ -13,12 +13,20 @@ npm_domain_name: "{{ vault_npm_domain_name }}"
 # Cloudflare DNS settings (from vault)
 cloudflare_email: "{{ vault_cloudflare_email }}"
 cloudflare_api_token: "{{ vault_cloudflare_api_token }}"
+cloudflare_global_api_key: "{{ vault_cloudflare_global_api_key | default(vault_cloudflare_api_token) }}"
 
 # Docker image policy
 npm_image_version: "2.14.0"
 npm_image_override: ""
 npm_preserve_existing_image: true
 npm_manage_legacy_origin_ssl: false
+npm_enable_cloudflare_dns_ssl: true
+npm_cloudflare_api_auth_method: "global_api_key" # api_token or global_api_key
+npm_cloudflare_dns_provider: "cloudflare"
+npm_cloudflare_dns_plugin_package: "certbot-dns-cloudflare"
+npm_cloudflare_dns_propagation_seconds: 120
+npm_validate_cloudflare_credentials: true
+npm_certificate_request_timeout_seconds: 900
 npm_cloudflare_forwarded_proto_config: |
   set $x_forwarded_proto $http_x_forwarded_proto;
   set $x_forwarded_scheme $http_x_forwarded_proto;
