@@ -1,0 +1,12 @@
+---
+- name: "{{ item.name }} | Check if compose file exists"
+  ansible.builtin.stat:
+    path: "{{ docker_stack_applications }}/{{ item.name }}/docker-compose.yml"
+  register: disabled_app_compose
+
+- name: "{{ item.name }} | Stop and remove container"
+  community.docker.docker_compose_v2:
+    project_src: "{{ docker_stack_applications }}/{{ item.name }}"
+    state: absent
+    remove_orphans: true
+  when: disabled_app_compose.stat.exists

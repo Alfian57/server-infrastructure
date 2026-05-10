@@ -304,6 +304,29 @@
       register: existing_proxy_hosts
       when: proxy_hosts is defined
 
+    - name: Build list of desired domain names
+      ansible.builtin.set_fact:
+        npm_desired_domains_full: >-
+          {{ proxy_hosts | selectattr('domain', 'defined') | map(attribute='domain') | list
+          + proxy_hosts | selectattr('subdomain', 'defined') | map(attribute='subdomain') | map('regex_replace', '^(.+)$', '\1.' + npm_domain_name) | list }}
+      when: proxy_hosts is defined
+
+    - name: Remove proxy hosts for disabled apps
+      ansible.builtin.uri:
+        url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/proxy-hosts/{{ item.id }}"
+        method: DELETE
+        headers:
+          Authorization: "Bearer {{ npm_auth_token }}"
+        status_code: [200, 204]
+      loop: "{{ existing_proxy_hosts.json | default([]) }}"
+      loop_control:
+        label: "{{ item.domain_names | default(['unknown']) | first }}"
+      when:
+        - proxy_hosts is defined
+        - existing_proxy_hosts.json is defined
+        - item.domain_names | default([]) | length > 0
+        - item.domain_names | first not in npm_desired_domains_full
+
     - name: Get existing SSL certificates
       ansible.builtin.uri:
         url: "http://{{ ansible_default_ipv4.address }}:81/api/nginx/certificates"

@@ -6,6 +6,35 @@
 # Untuk credential dan secret, lihat vault.yml
 
 # ============================================================================
+# Role Toggle (Enable/Disable individual roles)
+# ============================================================================
+# System
+enable_update_apt: true
+enable_users_setup: true
+enable_git_setup: true
+
+# Security
+enable_security_hardening: true
+
+# Infrastructure
+enable_docker_setup: true
+enable_autoheal: true
+enable_nginx_proxy: true
+enable_minio: false
+enable_cloudflare_warp: true
+
+# Databases
+enable_mysql: true
+enable_postgres: true
+enable_redis: true
+
+# Applications
+enable_portfolio_apps: true
+
+# Optimization
+enable_cost_optimization: true
+
+# ============================================================================
 # Global Configuration (Single Source of Truth)
 # ============================================================================
 # GitHub Configuration

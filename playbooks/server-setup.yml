@@ -65,6 +65,22 @@
           - "═══════════════════════════════════════════════════════════"
       tags: always
 
+    - name: "Cleanup disabled MinIO container"
+      block:
+        - name: Check if MinIO compose file exists
+          ansible.builtin.stat:
+            path: "{{ docker_stack_infrastructure }}/minio/docker-compose.yml"
+          register: minio_compose_file_check
+
+        - name: Stop and remove MinIO container
+          community.docker.docker_compose_v2:
+            project_src: "{{ docker_stack_infrastructure }}/minio"
+            state: absent
+            remove_orphans: true
+          when: minio_compose_file_check.stat.exists
+      when: not (enable_minio | bool)
+      tags: [infrastructure, minio-setup]
+
   roles:
     # ═══════════════════════════════════════════════════════════
     # SYSTEM SETUP
@@ -77,15 +93,20 @@
       tags: [system, update-apt]
       when:
         - setup_system | bool
+        - enable_update_apt | bool
         - ansible_os_family == 'Debian'
 
     - role: users-setup
       tags: [system, users-setup]
-      when: setup_system | bool
+      when:
+        - setup_system | bool
+        - enable_users_setup | bool
 
     - role: git-setup
       tags: [system, git-setup]
-      when: setup_system | bool
+      when:
+        - setup_system | bool
+        - enable_git_setup | bool
 
     # NOTE: github-cli-setup and cloudflare-dns-setup are now run locally via:
     #   make update-github-secrets
@@ -99,6 +120,7 @@
       tags: [security, security-hardening]
       when:
         - setup_security | bool
+        - enable_security_hardening | bool
         - ansible_os_family == 'Debian'
 
     # ═══════════════════════════════════════════════════════════
@@ -107,24 +129,33 @@
     # ═══════════════════════════════════════════════════════════
     - role: docker-setup
       tags: [infrastructure, docker-setup]
-      when: setup_infrastructure | bool
+      when:
+        - setup_infrastructure | bool
+        - enable_docker_setup | bool
 
     - role: autoheal-setup
       tags: [infrastructure, autoheal-setup]
-      when: setup_infrastructure | bool
+      when:
+        - setup_infrastructure | bool
+        - enable_autoheal | bool
 
     - role: nginx-proxy-setup
       tags: [infrastructure, nginx-proxy-setup]
-      when: setup_infrastructure | bool
+      when:
+        - setup_infrastructure | bool
+        - enable_nginx_proxy | bool
 
     - role: minio-setup
       tags: [infrastructure, minio-setup]
-      when: setup_infrastructure | bool
+      when:
+        - setup_infrastructure | bool
+        - enable_minio | bool
 
     - role: cloudflare-warp-setup
       tags: [infrastructure, cloudflare-warp-setup]
       when:
         - setup_infrastructure | bool
+        - enable_cloudflare_warp | bool
         - ansible_os_family == 'Debian'
         - warp_required_for_run | bool
 
@@ -134,15 +165,21 @@
     # ═══════════════════════════════════════════════════════════
     - role: mysql-setup
       tags: [database, mysql-setup]
-      when: setup_databases | bool
+      when:
+        - setup_databases | bool
+        - enable_mysql | bool
 
     - role: postgres-setup
       tags: [database, postgres-setup]
-      when: setup_databases | bool
+      when:
+        - setup_databases | bool
+        - enable_postgres | bool
 
     - role: redis-setup
       tags: [database, redis-setup]
-      when: setup_databases | bool
+      when:
+        - setup_databases | bool
+        - enable_redis | bool
 
     # ═══════════════════════════════════════════════════════════
     # APPLICATIONS
@@ -151,7 +188,9 @@
     # ═══════════════════════════════════════════════════════════
     - role: portfolio-apps
       tags: [application, portfolio-apps]
-      when: setup_applications | bool
+      when:
+        - setup_applications | bool
+        - enable_portfolio_apps | bool
 
     # ═══════════════════════════════════════════════════════════
     # OPTIMIZATION
@@ -161,6 +200,7 @@
       tags: [optimization, cost-optimization]
       when:
         - setup_optimization | bool
+        - enable_cost_optimization | bool
         - ansible_os_family == 'Debian'
 
   post_tasks:

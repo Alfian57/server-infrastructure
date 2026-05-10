@@ -23,6 +23,7 @@ github_actions_defaults:
 
 portfolio_apps:
   - name: "materi-ku"
+    enabled: false
     repo: "materi-ku"
     stack: "laravel"
     build:
@@ -73,6 +74,7 @@ portfolio_apps:
       mysql: ["panca_trivia"]
 
   - name: "ruang-istirahat"
+    enabled: false
     repo: "ruang-istirahat"
     stack: "laravel"
     build:
@@ -123,6 +125,7 @@ portfolio_apps:
       mysql: ["tech_talk"]
 
   - name: "posyandu"
+    enabled: false
     repo: "posyandu-digital"
     image_name: "posyandu"
     stack: "laravel"
@@ -149,6 +152,7 @@ portfolio_apps:
       mysql: ["posyandu"]
 
   - name: "presensi-skansaba-web"
+    enabled: false
     repo: "Presensi-Skansaba-Web"
     image_name: "presensi-skansaba-web"
     stack: "laravel"
@@ -286,6 +290,7 @@ portfolio_apps:
       mysql: ["bank_lab"]
 
   - name: "campus-project-hub-api"
+    enabled: false
     repo: "campus-project-hub-api"
     stack: "golang"
     build:
@@ -353,6 +358,7 @@ portfolio_apps:
       postgres: ["ruang_tenang"]
 
   - name: "campus-project-hub-web"
+    enabled: false
     repo: "campus-project-hub-web"
     stack: "nextjs"
     build:
@@ -436,6 +442,7 @@ portfolio_apps:
       records: ["@"]
 
   - name: "file-pod-api"
+    enabled: false
     repo: "file-pod-api"
     stack: "express"
     build:
@@ -512,4 +519,9 @@ postgres_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')
   | map(attribute='postgres') | select('defined') | flatten | unique | list }}
 portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
-portfolio_proxy_hosts: "{{ portfolio_apps | map(attribute='proxy') | select('defined') | list }}"
+portfolio_proxy_hosts: >-
+  {{
+    ((portfolio_apps | selectattr('enabled', 'undefined') | list)
+    + (portfolio_apps | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list))
+    | map(attribute='proxy') | select('defined') | list
+  }}

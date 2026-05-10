@@ -7,6 +7,18 @@
     fail_msg: "portfolio_apps is empty. Define applications in group_vars/all/apps.yml."
     quiet: true
 
+- name: Select disabled portfolio applications for cleanup
+  ansible.builtin.set_fact:
+    portfolio_apps_disabled: >-
+      {{ portfolio_apps | selectattr('enabled', 'defined') | selectattr('enabled', 'equalto', false) | list }}
+
+- name: "Cleanup disabled app: {{ item.name }}"
+  ansible.builtin.include_tasks: cleanup-one.yml
+  loop: "{{ portfolio_apps_disabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: portfolio_app_filter | length == 0
+
 - name: Select enabled portfolio applications
   ansible.builtin.set_fact:
     portfolio_apps_selected: >-
