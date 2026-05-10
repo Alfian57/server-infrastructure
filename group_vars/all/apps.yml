@@ -228,6 +228,33 @@ portfolio_apps:
     databases:
       mysql: ["location_based_presence"]
 
+  - name: "lelang-fashion-web"
+    repo_owner: "SolvoTech"
+    repo: "lelang-fashion-web"
+    image: "ghcr.io/solvotech/lelang-fashion-web:latest"
+    stack: "laravel"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "web.yml"
+    env_template: "roles/applications/lelang-fashion-web-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "lelang_fashion_web_storage:/var/www/html/storage"
+    env_mount_path: "/var/www/html/.env"
+    proxy:
+      domain: "lelang-fashion.solvo-tech.site"
+      scheme: "http"
+      forward_host: "lelang-fashion-web"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "solvo-tech.site"
+      records: ["lelang-fashion"]
+    databases:
+      mysql: ["pelelangan_produk_fashion"]
+
   - name: "demo-sql-injection"
     repo_owner: "Alfian57"
     repo: "demo-sql-injection"
@@ -459,6 +486,15 @@ mobile_repositories:
         MOBILE_API_BASE_URL:
           source: "vault:vault_location_based_presence_mobile_api_base_url"
 
+  - name: "lelang-fashion-mobile"
+    repo_owner: "SolvoTech"
+    variables:
+      MOBILE_API_BASE_URL: "https://lelang-fashion.solvo-tech.site/api"
+    ci:
+      variables:
+        MOBILE_API_BASE_URL:
+          source: "vault:vault_lelang_fashion_mobile_api_base_url"
+
 mysql_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')
   | map(attribute='mysql') | select('defined') | flatten | unique | list }}
@@ -466,6 +502,9 @@ mysql_database_users:
   - database: "location_based_presence"
     username: "{{ vault_location_based_presence_web_db_username }}"
     password: "{{ vault_location_based_presence_web_db_password }}"
+  - database: "pelelangan_produk_fashion"
+    username: "{{ vault_lelang_fashion_web_db_username }}"
+    password: "{{ vault_lelang_fashion_web_db_password }}"
   - database: "bank_lab"
     username: "{{ vault_demo_sql_injection_db_username }}"
     password: "{{ vault_demo_sql_injection_db_password }}"

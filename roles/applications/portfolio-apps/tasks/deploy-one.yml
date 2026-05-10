@@ -139,6 +139,7 @@
     owner: "{{ app_admin_user }}"
     group: "{{ app_runtime_group }}"
   when: app_env_template | length > 0
+  register: app_env_render
   no_log: true
 
 - name: "{{ app_name }} | Render docker compose"
@@ -174,7 +175,7 @@
     project_src: "{{ app_install_dir }}"
     pull: always
     remove_orphans: true
-    recreate: auto
+    recreate: "{{ 'always' if (app_env_render.changed | default(false)) or (portfolio_force_recreate | default(false) | bool) else 'auto' }}"
     state: present
   register: app_deployment
 

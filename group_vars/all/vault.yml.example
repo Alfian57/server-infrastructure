@@ -53,6 +53,19 @@ vault_location_based_presence_web_db_password: "change-this-db-password"
 # Location Based Presence Mobile
 vault_location_based_presence_mobile_api_base_url: "https://location-based-presence.solvo-tech.site/api/mobile"
 
+# Lelang Fashion Web
+vault_lelang_fashion_web_app_key: "base64:generate-with-php-artisan-key:generate"
+vault_lelang_fashion_web_app_url: "https://lelang-fashion.solvo-tech.site"
+vault_lelang_fashion_web_db_host: "mysql-db"
+vault_lelang_fashion_web_db_port: "3306"
+vault_lelang_fashion_web_db_database: "pelelangan_produk_fashion"
+vault_lelang_fashion_web_db_username: "lelang_fashion"
+vault_lelang_fashion_web_db_password: "change-this-db-password"
+vault_lelang_fashion_web_fonnte_token: ""
+
+# Lelang Fashion Mobile
+vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.solvo-tech.site/api"
+
 # Demo SQL Injection
 vault_demo_sql_injection_db_host: "mysql-db"
 vault_demo_sql_injection_db_port: "3306"
