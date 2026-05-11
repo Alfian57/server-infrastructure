@@ -1,0 +1,52 @@
+DROP DATABASE IF EXISTS `{{ vault_challenge_sql_injection_db_database }}`;
+CREATE DATABASE `{{ vault_challenge_sql_injection_db_database }}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `{{ vault_challenge_sql_injection_db_database }}`;
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL,
+    password VARCHAR(100) NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    role VARCHAR(50) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE students (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    student_number VARCHAR(50) NOT NULL,
+    full_name VARCHAR(150) NOT NULL,
+    email VARCHAR(150) NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    gpa DECIMAL(3,2) NOT NULL,
+    faculty VARCHAR(120) NOT NULL,
+    status VARCHAR(50) NOT NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE secret_flags (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    flag_key VARCHAR(100) NOT NULL,
+    flag_value VARCHAR(255) NOT NULL,
+    note TEXT NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO users (username, password, full_name, role) VALUES
+    ('akademikpusat', 'S1akad_UNC_2026!LabOnly', 'Ratna Prameswari', 'academic_admin'),
+    ('baakoperator', 'B44K_Operator_2026!Internal', 'Gilang Mahendra', 'registrar');
+
+INSERT INTO students (student_number, full_name, email, phone, gpa, faculty, status) VALUES
+    ('UNC2301001', 'Nadia Paramitha', 'nadia.paramitha@student.unc.example', '0812-2101-3001', 3.82, 'Fakultas Ilmu Komputer', 'Aktif'),
+    ('UNC2301002', 'Rafi Alfarizi', 'rafi.alfarizi@student.unc.example', '0813-2101-3002', 3.41, 'Fakultas Ekonomi dan Bisnis', 'Aktif'),
+    ('UNC2202044', 'Meiska Lestari', 'meiska.lestari@student.unc.example', '0815-2202-3044', 3.96, 'Fakultas Kedokteran', 'Beasiswa'),
+    ('UNC2103160', 'Dimas Wiratama', 'dimas.wiratama@student.unc.example', '0817-2103-3160', 2.98, 'Fakultas Teknik', 'Cuti'),
+    ('UNC2400117', 'Salsabila Putri', 'salsabila.putri@student.unc.example', '0819-2400-1170', 3.67, 'Fakultas Ilmu Sosial dan Politik', 'Aktif'),
+    ('UNC2000788', 'Bagas Cakra Pradana', 'bagas.pradana@student.unc.example', '0821-2000-7880', 3.12, 'Fakultas Hukum', 'Alumni');
+
+INSERT INTO secret_flags (flag_key, flag_value, note) VALUES
+    ('scholarship', 'PRESTASI-UNC-2026', 'Kode internal beasiswa prestasi untuk simulasi validasi.'),
+    ('scholarship', 'RISET-CAKRAWALA', 'Kode internal program hibah riset mahasiswa.'),
+    ('flag', 'FLAG{UNC_Jangan_Dibaca_Operator}', 'Catatan rahasia yang tidak semestinya tampil di halaman pencarian.'),
+    ('memo', 'RapatAkreditasiPagi', 'Memo internal BAAK untuk persiapan audit akademik semester depan.');
+
+CREATE USER IF NOT EXISTS '{{ vault_challenge_sql_injection_db_username }}'@'%' IDENTIFIED BY '{{ vault_challenge_sql_injection_db_password }}';
+ALTER USER '{{ vault_challenge_sql_injection_db_username }}'@'%' IDENTIFIED BY '{{ vault_challenge_sql_injection_db_password }}';
+GRANT ALL PRIVILEGES ON `{{ vault_challenge_sql_injection_db_database }}`.* TO '{{ vault_challenge_sql_injection_db_username }}'@'%';
+FLUSH PRIVILEGES;

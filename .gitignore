@@ -104,6 +104,7 @@ group_vars/**/vault_unencrypted.yml
 
 # Backup directories
 backup/
+app-sesuaikan/
 
 # Local testing
 .vagrant/

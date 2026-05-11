@@ -179,21 +179,33 @@ portfolio_apps:
       mysql: ["presensi_skansaba"]
 
   - name: "solvo"
-    repo: "solvo"
-    stack: "laravel"
+    repo_owner: "SolvoTech"
+    repo: "solvo-tech"
+    image: "ghcr.io/solvotech/solvo-tech:latest"
+    stack: "nextjs"
     build:
-      dockerfile: "docker/Dockerfile"
+      dockerfile: "Dockerfile"
       workflow: "build-and-deploy.yml"
+    app_port: 3000
     env_template: "roles/applications/solvo-setup/templates/.env.j2"
-    networks: ["nginx_proxy_manager_network", "mysql_network", "redis_network"]
+    ci:
+      variables:
+        NEXT_PUBLIC_APP_URL:
+          value: "https://solvo-tech.site"
+        NEXTAUTH_URL:
+          value: "https://solvo-tech.site"
+    networks: ["nginx_proxy_manager_network", "postgres_network"]
     volumes:
-      - "solvo_storage:/var/www/storage"
-    env_mount_path: "/var/www/.env"
+      - "solvo_uploads:/app/public/uploads"
+    use_prisma: true
+    run_migrate: true
+    run_seeder: true
+    seed_on: "fresh"
     proxy:
       domain: "solvo-tech.site"
       scheme: "http"
       forward_host: "solvo"
-      forward_port: 80
+      forward_port: 3000
       caching_enabled: true
       websocket_support: false
       cloudflare_flexible: true
@@ -201,7 +213,7 @@ portfolio_apps:
       domain: "solvo-tech.site"
       records: ["@"]
     databases:
-      mysql: ["solvo"]
+      postgres: ["solvo_tech"]
 
   - name: "location-based-presence-web"
     repo_owner: "SolvoTech"
@@ -288,6 +300,36 @@ portfolio_apps:
       records: ["demo-sql-injection"]
     databases:
       mysql: ["bank_lab"]
+
+  - name: "challenge-sql-injection"
+    repo_owner: "Alfian57"
+    repo: "challenge-sql-injection"
+    image: "ghcr.io/alfian57/challenge-sql-injection:latest"
+    stack: "php"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 80
+    health_endpoint: "/"
+    env_template: "roles/applications/challenge-sql-injection-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    run_mysql_seed: true
+    mysql_seed_on: "always"
+    mysql_seed_destructive: true
+    mysql_seed_template: "roles/applications/challenge-sql-injection-setup/templates/mysql-seed.sql.j2"
+    proxy:
+      subdomain: "challenge-sql-injection"
+      scheme: "http"
+      forward_host: "challenge-sql-injection"
+      forward_port: 80
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["challenge-sql-injection"]
+    databases:
+      mysql: ["academic_lab"]
 
   - name: "campus-project-hub-api"
     enabled: false
@@ -515,9 +557,16 @@ mysql_database_users:
   - database: "bank_lab"
     username: "{{ vault_demo_sql_injection_db_username }}"
     password: "{{ vault_demo_sql_injection_db_password }}"
+  - database: "academic_lab"
+    username: "{{ vault_challenge_sql_injection_db_username }}"
+    password: "{{ vault_challenge_sql_injection_db_password }}"
 postgres_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')
   | map(attribute='postgres') | select('defined') | flatten | unique | list }}
+postgres_database_users:
+  - database: "solvo_tech"
+    username: "{{ vault_solvo_db_username }}"
+    password: "{{ vault_solvo_db_password }}"
 portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
 portfolio_proxy_hosts: >-
   {{

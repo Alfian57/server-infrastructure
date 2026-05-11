@@ -268,6 +268,12 @@ posyandu: check ## Posyandu app
 solvo: check ## Solvo app
 	@$(MAKE) app APP=solvo
 
+demo-sql-injection: check ## Demo SQL Injection app
+	@$(MAKE) app APP=demo-sql-injection
+
+challenge-sql-injection: check ## Challenge SQL Injection app
+	@$(MAKE) app APP=challenge-sql-injection
+
 presensi-skansaba-web: check ## Presensi Skansaba Web app
 	@$(MAKE) app APP=presensi-skansaba-web
 

@@ -296,6 +296,47 @@
     - app_run_migrate
     - container_info.container.State.Running | default(false) | bool
 
+- name: "{{ app_name }} | Run Next.js Prisma migrations when requested"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} npx prisma migrate deploy
+  register: nextjs_prisma_migration_result
+  when:
+    - app_stack == 'nextjs'
+    - portfolio_app.use_prisma | default(false) | bool
+    - app_run_migrate
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Check Next.js seed marker"
+  ansible.builtin.stat:
+    path: "{{ app_install_dir }}/.seeded"
+  register: nextjs_seed_marker
+  when:
+    - app_stack == 'nextjs'
+    - portfolio_app.use_prisma | default(false) | bool
+    - app_run_seeder
+
+- name: "{{ app_name }} | Run Next.js Prisma seed when requested"
+  ansible.builtin.command:
+    cmd: docker exec {{ app_name }} npm run db:seed
+  register: nextjs_prisma_seed_result
+  when:
+    - app_stack == 'nextjs'
+    - portfolio_app.use_prisma | default(false) | bool
+    - app_run_seeder
+    - app_seed_on == 'always' or app_run_fresh_migrate or (app_seed_on == 'fresh' and not (nextjs_seed_marker.stat.exists | default(false)))
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Mark Next.js Prisma seed complete"
+  ansible.builtin.file:
+    path: "{{ app_install_dir }}/.seeded"
+    state: touch
+    mode: "0644"
+    owner: "{{ app_admin_user }}"
+    group: "{{ app_runtime_group }}"
+  when:
+    - nextjs_prisma_seed_result is defined
+    - nextjs_prisma_seed_result is changed
+
 - name: "{{ app_name }} | Run Go migrations when requested"
   ansible.builtin.command:
     cmd: "docker exec {{ app_name }} ./migrate {{ 'fresh' if app_run_fresh_migrate else 'up' }}"

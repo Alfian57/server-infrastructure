@@ -151,11 +151,23 @@ run_laravel_post_deploy() {
         error_exit "Failed to restart Laravel service ${service}"
 }
 
+run_prisma_post_deploy() {
+    local service=$1
+
+    log "INFO" "Detected Prisma application in service ${service}"
+    log "INFO" "Running Prisma migrations"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" npx prisma migrate deploy || \
+        error_exit "Failed to run Prisma migrations for ${service}"
+}
+
 log "INFO" "Checking for Laravel post-deploy tasks"
 SERVICES=$(docker compose -f "${COMPOSE_FILE}" ps --services --filter status=running)
 for SERVICE in ${SERVICES}; do
     if docker compose -f "${COMPOSE_FILE}" exec -T "${SERVICE}" sh -lc 'test -f artisan' > /dev/null 2>&1; then
         run_laravel_post_deploy "${SERVICE}"
+    fi
+    if docker compose -f "${COMPOSE_FILE}" exec -T "${SERVICE}" sh -lc 'test -f prisma/schema.prisma && command -v npx' > /dev/null 2>&1; then
+        run_prisma_post_deploy "${SERVICE}"
     fi
 done
 

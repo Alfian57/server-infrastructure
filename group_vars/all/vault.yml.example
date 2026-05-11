@@ -73,4 +73,31 @@ vault_demo_sql_injection_db_database: "bank_lab"
 vault_demo_sql_injection_db_username: "demo_sql_injection"
 vault_demo_sql_injection_db_password: "change-this-db-password"
 
+# Challenge SQL Injection
+vault_challenge_sql_injection_db_host: "mysql-db"
+vault_challenge_sql_injection_db_port: "3306"
+vault_challenge_sql_injection_db_database: "academic_lab"
+vault_challenge_sql_injection_db_username: "challenge_sql_injection"
+vault_challenge_sql_injection_db_password: "change-this-db-password"
+
+# Solvo Tech Next.js
+vault_solvo_app_url: "https://solvo-tech.site"
+vault_solvo_nextauth_url: "https://solvo-tech.site"
+vault_solvo_auth_secret: "change-this-auth-secret"
+vault_solvo_cron_secret: "change-this-cron-secret"
+vault_solvo_db_host: "postgres-db"
+vault_solvo_db_port: "5432"
+vault_solvo_db_database: "solvo_tech"
+vault_solvo_db_username: "solvo_tech"
+vault_solvo_db_password: "change-this-db-password"
+vault_solvo_seed_admin_email: "admin@solvo-tech.site"
+vault_solvo_seed_admin_password: "change-this-admin-password"
+vault_solvo_smtp_host: ""
+vault_solvo_smtp_port: "587"
+vault_solvo_smtp_user: ""
+vault_solvo_smtp_password: ""
+vault_solvo_smtp_from: "Solvo Tech <no-reply@solvo-tech.site>"
+vault_solvo_whatsapp_api_url: ""
+vault_solvo_whatsapp_api_key: ""
+
 # Add more as needed...

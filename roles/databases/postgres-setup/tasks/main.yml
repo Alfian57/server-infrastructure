@@ -112,3 +112,42 @@
   changed_when: "'CREATE DATABASE' in (db_creation.stdout | default(''))"
   failed_when: db_creation.rc != 0
   no_log: true
+
+- name: Create application database users
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ vault_postgres_password }}"
+      - postgres-db
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ postgres_admin_user }}"
+      - -d
+      - postgres
+    stdin: |
+      DO $do$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT FROM pg_catalog.pg_roles
+          WHERE rolname = '{{ item.username | replace("'", "''") }}'
+        ) THEN
+          CREATE ROLE "{{ item.username | replace('"', '""') }}" LOGIN PASSWORD '{{ item.password | replace("'", "''") }}';
+        ELSE
+          ALTER ROLE "{{ item.username | replace('"', '""') }}" WITH LOGIN PASSWORD '{{ item.password | replace("'", "''") }}';
+        END IF;
+      END
+      $do$;
+      ALTER DATABASE "{{ item.database | replace('"', '""') }}" OWNER TO "{{ item.username | replace('"', '""') }}";
+      \connect "{{ item.database | replace('"', '""') }}"
+      ALTER SCHEMA public OWNER TO "{{ item.username | replace('"', '""') }}";
+      GRANT ALL PRIVILEGES ON SCHEMA public TO "{{ item.username | replace('"', '""') }}";
+  loop: "{{ postgres_database_users | default([]) }}"
+  register: db_user_creation
+  changed_when: db_user_creation.rc == 0
+  failed_when: db_user_creation.rc != 0
+  no_log: true
