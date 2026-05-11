@@ -113,9 +113,11 @@ else
     error_exit "Failed to pull images"
 fi
 
-# Deploy containers with new images (rolling update - no down first)
+# Deploy containers with new images (rolling update - no down first).
+# Images were already pulled above; avoid a second registry HEAD during `up`
+# because some SSH/CI sessions do not reuse Docker registry credentials there.
 log "INFO" "Deploying containers with rolling update"
-if docker compose -f "${COMPOSE_FILE}" up -d --pull always --force-recreate --remove-orphans; then
+if docker compose -f "${COMPOSE_FILE}" up -d --pull never --force-recreate --remove-orphans; then
     log "INFO" "Successfully deployed containers"
 else
     error_exit "Failed to deploy containers"
