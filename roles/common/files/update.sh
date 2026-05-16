@@ -127,13 +127,13 @@ run_laravel_post_deploy() {
     local service=$1
 
     log "INFO" "Detected Laravel application in service ${service}"
-    log "INFO" "Clearing Laravel runtime caches"
-    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan optimize:clear || \
-        error_exit "Failed to clear Laravel caches for ${service}"
-
     log "INFO" "Running Laravel migrations"
     docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan migrate --force || \
         error_exit "Failed to run Laravel migrations for ${service}"
+
+    log "INFO" "Clearing Laravel runtime caches"
+    docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan optimize:clear || \
+        error_exit "Failed to clear Laravel caches for ${service}"
 
     log "INFO" "Rebuilding Laravel runtime caches"
     docker compose -f "${COMPOSE_FILE}" exec -T "${service}" php artisan config:cache || \

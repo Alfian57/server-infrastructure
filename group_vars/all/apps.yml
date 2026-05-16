@@ -21,6 +21,56 @@ github_actions_defaults:
       source: "vault:vault_github_token"
   variables: {}
 
+pui_app:
+  name: "pui"
+  enabled: true
+  repo: "PUI"
+  stack: "compose"
+  build:
+    workflow: "ci-cd.yml"
+  env_template: "roles/applications/pui-setup/templates/.env.j2"
+  env_contract:
+    path: ".env.example"
+  images:
+    web: "ghcr.io/alfian57/pui-web-client:latest"
+    api: "ghcr.io/alfian57/pui-api-service:latest"
+    vault: "ghcr.io/alfian57/pui-vault-core:latest"
+  ci:
+    variables:
+      VITE_API_BASE_URL:
+        value: "https://pui-api.alfian-gading.my.id"
+      VITE_ENVIRONMENT_NAME:
+        value: "production"
+  proxy_hosts:
+    - subdomain: "pui"
+      scheme: "http"
+      forward_host: "pui-web-client"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    - subdomain: "pui-api"
+      scheme: "http"
+      forward_host: "pui-api-service"
+      forward_port: 8080
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+  dns:
+    domain: "alfian-gading.my.id"
+    records: ["pui", "pui-api"]
+  databases:
+    postgres: ["pui"]
+
+manual_proxy_hosts:
+  - domain: "cikscoffee.my.id"
+    scheme: "http"
+    forward_host: "ciks-coffee-web"
+    forward_port: 80
+    caching_enabled: true
+    websocket_support: false
+    cloudflare_flexible: false
+
 portfolio_apps:
   - name: "materi-ku"
     enabled: false
@@ -271,6 +321,39 @@ portfolio_apps:
     databases:
       mysql: ["pelelangan_produk_fashion"]
 
+  - name: "pos-soto-saben"
+    repo_owner: "SolvoTech"
+    repo: "pos-soto-saben"
+    image: "ghcr.io/solvotech/pos-soto-saben:latest"
+    stack: "laravel"
+    build:
+      dockerfile: "web/docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    env_contract:
+      path: "web/.env.example"
+    app_port: 80
+    env_template: "roles/applications/pos-soto-saben-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    volumes:
+      - "pos_soto_saben_storage:/var/www/storage"
+    env_mount_path: "/var/www/.env"
+    run_migrate: true
+    run_seeder: true
+    seed_on: "fresh"
+    proxy:
+      domain: "pos-soto-saben.solvo-tech.site"
+      scheme: "http"
+      forward_host: "pos-soto-saben"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "solvo-tech.site"
+      records: ["pos-soto-saben"]
+    databases:
+      mysql: ["pos_soto_saben"]
+
   - name: "demo-sql-injection"
     repo_owner: "Alfian57"
     repo: "demo-sql-injection"
@@ -375,7 +458,7 @@ portfolio_apps:
     networks: ["nginx_proxy_manager_network", "postgres_network", "redis_network"]
     volumes:
       - "ruang_tenang_api_uploads:/app/uploads"
-    run_migrate: false
+    run_migrate: true
     run_fresh_migrate: false
     run_seeder: false
     extra_environment:
@@ -544,6 +627,15 @@ mobile_repositories:
         MOBILE_API_BASE_URL:
           source: "vault:vault_lelang_fashion_mobile_api_base_url"
 
+  - name: "pos-soto-saben"
+    repo_owner: "SolvoTech"
+    variables:
+      API_BASE_URL: "https://pos-soto-saben.solvo-tech.site/api"
+    ci:
+      variables:
+        API_BASE_URL:
+          source: "vault:vault_pos_soto_saben_mobile_api_base_url"
+
 mysql_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')
   | map(attribute='mysql') | select('defined') | flatten | unique | list }}
@@ -554,6 +646,9 @@ mysql_database_users:
   - database: "pelelangan_produk_fashion"
     username: "{{ vault_lelang_fashion_web_db_username }}"
     password: "{{ vault_lelang_fashion_web_db_password }}"
+  - database: "pos_soto_saben"
+    username: "{{ vault_pos_soto_saben_db_username }}"
+    password: "{{ vault_pos_soto_saben_db_password }}"
   - database: "bank_lab"
     username: "{{ vault_demo_sql_injection_db_username }}"
     password: "{{ vault_demo_sql_injection_db_password }}"
@@ -561,9 +656,19 @@ mysql_database_users:
     username: "{{ vault_challenge_sql_injection_db_username }}"
     password: "{{ vault_challenge_sql_injection_db_password }}"
 postgres_databases: >-
-  {{ portfolio_apps | map(attribute='databases') | select('defined')
-  | map(attribute='postgres') | select('defined') | flatten | unique | list }}
+  {{
+    ((
+        portfolio_apps | map(attribute='databases') | select('defined')
+        | map(attribute='postgres') | select('defined') | flatten | list
+      )
+      + (pui_app.databases.postgres | default([]))
+    )
+    | unique | list
+  }}
 postgres_database_users:
+  - database: "pui"
+    username: "{{ vault_pui_db_username }}"
+    password: "{{ vault_pui_db_password }}"
   - database: "solvo_tech"
     username: "{{ vault_solvo_db_username }}"
     password: "{{ vault_solvo_db_password }}"
@@ -573,4 +678,6 @@ portfolio_proxy_hosts: >-
     ((portfolio_apps | selectattr('enabled', 'undefined') | list)
     + (portfolio_apps | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list))
     | map(attribute='proxy') | select('defined') | list
+    + (pui_app.proxy_hosts | default([]) if pui_app.enabled | default(true) else [])
+    + (manual_proxy_hosts | default([]))
   }}
