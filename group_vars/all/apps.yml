@@ -445,6 +445,42 @@ portfolio_apps:
     databases:
       postgres: ["campus_project_hub"]
 
+  - name: "smart-pet-feeder"
+    repo_owner: "Alfinzz"
+    repo: "smart-pet-feeder"
+    image: "ghcr.io/alfinzz/smart-pet-feeder:latest"
+    stack: "golang"
+    build:
+      dockerfile: "backend/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 8080
+    health_endpoint: "/health"
+    env_template: "roles/applications/smart-pet-feeder-setup/templates/.env.j2"
+    env_contract:
+      path: "backend/.env.example"
+    ci:
+      variables:
+        API_BASE_URL:
+          value: "https://smart-pet-feeder.alfian-gading.my.id/api/v1"
+    networks: ["nginx_proxy_manager_network", "postgres_network"]
+    runtime_migrate: true
+    run_migrate: false
+    run_fresh_migrate: false
+    run_seeder: false
+    proxy:
+      subdomain: "smart-pet-feeder"
+      scheme: "http"
+      forward_host: "smart-pet-feeder"
+      forward_port: 8080
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["smart-pet-feeder"]
+    databases:
+      postgres: ["smart_pet_feeder"]
+
   - name: "ruang-tenang-api"
     repo: "ruang-tenang-api"
     stack: "golang"
@@ -669,6 +705,9 @@ postgres_database_users:
   - database: "pui"
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
+  - database: "smart_pet_feeder"
+    username: "{{ vault_smart_pet_feeder_db_username }}"
+    password: "{{ vault_smart_pet_feeder_db_password }}"
   - database: "solvo_tech"
     username: "{{ vault_solvo_db_username }}"
     password: "{{ vault_solvo_db_password }}"
