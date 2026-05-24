@@ -12,7 +12,7 @@
     portfolio_apps_disabled: >-
       {{ portfolio_apps | selectattr('enabled', 'defined') | selectattr('enabled', 'equalto', false) | list }}
 
-- name: "Cleanup disabled app: {{ item.name }}"
+- name: Cleanup disabled portfolio applications
   ansible.builtin.include_tasks: cleanup-one.yml
   loop: "{{ portfolio_apps_disabled }}"
   loop_control:

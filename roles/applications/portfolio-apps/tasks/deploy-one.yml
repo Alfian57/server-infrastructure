@@ -14,7 +14,6 @@
   ansible.builtin.assert:
     that:
       - not (portfolio_app.run_fresh_migrate | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
-      - not (portfolio_app.run_mysql_seed | default(false) | bool and portfolio_app.mysql_seed_on | default('manual') == 'always' and portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
     fail_msg: "Refusing destructive database operation for {{ portfolio_app.name }}. Re-run with confirm_destroy_data=yes only when data loss is intended."
     quiet: true
 
@@ -367,6 +366,7 @@
     - portfolio_app.mysql_seed_template is defined
     - portfolio_app.run_mysql_seed | default(false) | bool
     - portfolio_app.mysql_seed_on | default('manual') == 'always'
+    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
   no_log: true
 
 - name: "{{ app_name }} | Run optional MySQL seed SQL"
@@ -380,6 +380,7 @@
     - portfolio_app.mysql_seed_template is defined
     - portfolio_app.run_mysql_seed | default(false) | bool
     - portfolio_app.mysql_seed_on | default('manual') == 'always'
+    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes'
     - container_info.container.State.Running | default(false) | bool
   no_log: true
 

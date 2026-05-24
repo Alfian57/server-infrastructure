@@ -604,30 +604,45 @@ mobile_repositories:
 
   - name: "location-based-presence-mobile"
     repo_owner: "SolvoTech"
+    build:
+      workflow: "mobile.yml"
     variables:
-      MOBILE_API_BASE_URL: "https://location-based-presence.solvo-tech.site/api/mobile"
+      API_BASE_URL: "https://location-based-presence.solvo-tech.site/api/mobile"
+      API_BASE_URL_DEBUG: "https://thankful-midge-noble.ngrok-free.app/api/mobile"
     ci:
       variables:
-        MOBILE_API_BASE_URL:
+        API_BASE_URL:
           source: "vault:vault_location_based_presence_mobile_api_base_url"
+        API_BASE_URL_DEBUG:
+          value: "https://thankful-midge-noble.ngrok-free.app/api/mobile"
 
   - name: "lelang-fashion-mobile"
     repo_owner: "SolvoTech"
+    build:
+      workflow: "mobile.yml"
     variables:
-      MOBILE_API_BASE_URL: "https://lelang-fashion.solvo-tech.site/api"
+      API_BASE_URL: "https://lelang-fashion.solvo-tech.site/api"
+      API_BASE_URL_DEBUG: "https://handwoven-ramp-avid.ngrok-free.dev/api"
     ci:
       variables:
-        MOBILE_API_BASE_URL:
+        API_BASE_URL:
           source: "vault:vault_lelang_fashion_mobile_api_base_url"
+        API_BASE_URL_DEBUG:
+          value: "https://handwoven-ramp-avid.ngrok-free.dev/api"
 
   - name: "pos-soto-saben"
     repo_owner: "SolvoTech"
+    build:
+      workflow: "build-and-deploy.yml"
     variables:
       API_BASE_URL: "https://pos-soto-saben.solvo-tech.site/api"
+      API_BASE_URL_DEBUG: "https://thankful-midge-noble.ngrok-free.app/api"
     ci:
       variables:
         API_BASE_URL:
           source: "vault:vault_pos_soto_saben_mobile_api_base_url"
+        API_BASE_URL_DEBUG:
+          value: "https://thankful-midge-noble.ngrok-free.app/api"
 
 mysql_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')

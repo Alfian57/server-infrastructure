@@ -114,7 +114,7 @@ def cmd_list(_: argparse.Namespace) -> int:
 
 def cmd_repos(_: argparse.Namespace) -> int:
     seen: set[str] = set()
-    for app in apps():
+    for app in apps() + mobile_repositories():
         repo = repo_name(app)
         if repo not in seen:
             print(repo)
@@ -124,7 +124,7 @@ def cmd_repos(_: argparse.Namespace) -> int:
 
 def cmd_repo_refs(_: argparse.Namespace) -> int:
     seen: set[str] = set()
-    for app in apps():
+    for app in apps() + mobile_repositories():
         ref = repo_ref(app)
         if ref not in seen:
             print(ref)
@@ -157,9 +157,14 @@ def cmd_mobile_vars(_: argparse.Namespace) -> int:
 
 
 def cmd_workflows(_: argparse.Namespace) -> int:
-    for app in apps():
+    seen: set[str] = set()
+    for app in apps() + mobile_repositories():
+        ref = repo_ref(app)
+        if ref in seen:
+            continue
+        seen.add(ref)
         workflow = (app.get("build", {}) or {}).get("workflow", "build-and-deploy.yml")
-        print(f"{repo_ref(app)}\t{workflow}")
+        print(f"{ref}\t{workflow}")
     return 0
 
 

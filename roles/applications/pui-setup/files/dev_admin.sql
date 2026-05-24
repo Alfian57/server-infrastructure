@@ -1,5 +1,8 @@
--- Development seed requested for initial PUI production access.
-INSERT INTO users (full_name, email, password_hash, role)
+-- Development-only seed script.
+-- Apply manually when you need a local bootstrap user:
+-- psql "$DATABASE_URL" -f db/seeds/dev_admin.sql
+
+INSERT INTO users (nama, email, password_hash, peran)
 VALUES (
     'Alfian Gading',
     'gading@gmail.com',
@@ -7,10 +10,10 @@ VALUES (
     'user'
 )
 ON CONFLICT (email) DO UPDATE
-SET full_name = EXCLUDED.full_name,
-    role = EXCLUDED.role;
+SET nama = EXCLUDED.nama,
+    peran = EXCLUDED.peran;
 
-INSERT INTO users (full_name, email, password_hash, role)
+INSERT INTO users (nama, email, password_hash, peran)
 VALUES (
     'Admin HashBox',
     'admin@gmail.com',
@@ -18,5 +21,5 @@ VALUES (
     'admin'
 )
 ON CONFLICT (email) DO UPDATE
-SET full_name = EXCLUDED.full_name,
-    role = EXCLUDED.role;
+SET nama = EXCLUDED.nama,
+    peran = EXCLUDED.peran;
