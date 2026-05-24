@@ -295,6 +295,9 @@ ruang-tenang-web: check ## Ruang Tenang Web
 file-pod-api: check ## File Pod API
 	@$(MAKE) app APP=file-pod-api
 
+pui: check ## PUI / HashBox
+	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags pui-setup
+
 ##@ GitHub Actions (Local - No SSH to Server)
 
 trigger-actions: ## ⚡ Trigger all GitHub Actions workflows (from local)

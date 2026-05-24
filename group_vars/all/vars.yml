@@ -30,6 +30,7 @@ enable_redis: true
 
 # Applications
 enable_portfolio_apps: true
+enable_pui_app: true
 
 # Optimization
 enable_cost_optimization: true

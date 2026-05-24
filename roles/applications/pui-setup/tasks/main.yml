@@ -1,0 +1,201 @@
+---
+- name: Validate PUI deployment variables
+  ansible.builtin.assert:
+    that:
+      - pui_db_username is defined
+      - pui_db_username | length > 0
+      - pui_db_password is defined
+      - pui_db_password | length >= 16
+      - github_token is defined
+      - github_token | length > 0
+    fail_msg: "PUI requires vault_pui_db_username, vault_pui_db_password, and vault_github_token."
+    quiet: true
+
+- name: Set PUI deployment facts
+  ansible.builtin.set_fact:
+    pui_admin_user: "{{ deploy_user | default(ansible_user | default('root')) }}"
+    pui_ci_user: "{{ ci_deploy_user | default(deploy_user | default(ansible_user | default('root'))) }}"
+    pui_runtime_group: "docker"
+    pui_images:
+      - "{{ pui_web_image }}"
+      - "{{ pui_api_image }}"
+      - "{{ pui_vault_image }}"
+
+- name: Create PUI application directory
+  ansible.builtin.file:
+    path: "{{ pui_install_dir }}"
+    state: directory
+    mode: "0750"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+
+- name: Create PUI update log directory
+  ansible.builtin.file:
+    path: "/var/log/docker-updates"
+    state: directory
+    mode: "0775"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+
+- name: Check PUI update log file
+  ansible.builtin.stat:
+    path: "/var/log/docker-updates/{{ pui_app_name }}.log"
+  register: pui_update_log_file
+
+- name: Create PUI update log file
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ pui_app_name }}.log"
+    state: touch
+    mode: "0664"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+  when: not pui_update_log_file.stat.exists
+
+- name: Ensure PUI update log file is group writable
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ pui_app_name }}.log"
+    mode: "0664"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+  when: pui_update_log_file.stat.exists
+
+- name: Log in to GitHub Container Registry for PUI
+  community.docker.docker_login:
+    registry_url: "{{ docker_registry | default('ghcr.io') }}"
+    username: "{{ github_username }}"
+    password: "{{ github_token }}"
+    reauthorize: true
+  no_log: true
+
+- name: Validate PUI images exist
+  ansible.builtin.command: "docker manifest inspect {{ item }}"
+  loop: "{{ pui_images }}"
+  register: pui_ghcr_access_check
+  failed_when: pui_ghcr_access_check.rc != 0
+  changed_when: false
+
+- name: Copy PUI update helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../roles/common/files/update.sh"
+    dest: "{{ pui_install_dir }}/update.sh"
+    mode: "0750"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+
+- name: Render PUI environment
+  ansible.builtin.template:
+    src: ".env.j2"
+    dest: "{{ pui_install_dir }}/.env"
+    mode: "0640"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+  register: pui_env_render
+  no_log: true
+
+- name: Render PUI docker compose
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ pui_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+  register: pui_compose_render
+
+- name: Ensure PUI external networks exist
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - "{{ nginx_proxy_network }}"
+    - "{{ postgres_network }}"
+
+- name: Pull PUI images
+  community.docker.docker_image:
+    name: "{{ item }}"
+    source: pull
+    force_source: true
+    state: present
+  loop: "{{ pui_images }}"
+
+- name: Deploy PUI compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ pui_install_dir }}"
+    pull: always
+    remove_orphans: true
+    recreate: "{{ 'always' if (pui_env_render.changed | default(false)) or (pui_compose_render.changed | default(false)) else 'auto' }}"
+    state: present
+  register: pui_deployment
+
+- name: Wait for PUI API to become healthy
+  community.docker.docker_container_info:
+    name: pui-api-service
+  register: pui_api_container_info
+  until:
+    - pui_api_container_info.container is defined
+    - pui_api_container_info.container.State.Health.Status is defined
+    - pui_api_container_info.container.State.Health.Status == 'healthy'
+  retries: "{{ pui_api_health_retries }}"
+  delay: "{{ pui_api_health_delay }}"
+
+- name: Wait for PUI web client to become healthy
+  community.docker.docker_container_info:
+    name: pui-web-client
+  register: pui_web_container_info
+  until:
+    - pui_web_container_info.container is defined
+    - pui_web_container_info.container.State.Health.Status is defined
+    - pui_web_container_info.container.State.Health.Status == 'healthy'
+  retries: 10
+  delay: 6
+
+- name: Copy PUI dev seed SQL
+  ansible.builtin.copy:
+    src: dev_admin.sql
+    dest: "{{ pui_install_dir }}/dev_admin.sql"
+    mode: "0640"
+    owner: "{{ pui_admin_user }}"
+    group: "{{ pui_runtime_group }}"
+  when: pui_seed_dev_users | bool
+
+- name: Seed PUI dev users
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ pui_db_password }}"
+      - postgres-db
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ pui_db_username }}"
+      - -d
+      - "{{ pui_db_name }}"
+    stdin: "{{ lookup('file', 'dev_admin.sql') }}"
+  register: pui_seed_result
+  changed_when: "'INSERT 0' in (pui_seed_result.stdout | default(''))"
+  no_log: true
+  when: pui_seed_dev_users | bool
+
+- name: Verify PUI dependency status
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - pui-api-service
+      - wget
+      - -q
+      - -O
+      - "-"
+      - http://localhost:8080/api/v1/status
+  register: pui_status_check
+  changed_when: false
+
+- name: Display PUI deployment status
+  ansible.builtin.debug:
+    msg: >-
+      PUI deployed at https://{{ pui_web_domain }} with API https://{{ pui_api_domain }}.
+      API container={{ pui_api_container_info.container.State.Health.Status | default('unknown') }};
+      web container={{ pui_web_container_info.container.State.Health.Status | default('unknown') }}.

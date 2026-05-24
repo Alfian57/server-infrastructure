@@ -66,6 +66,8 @@
       tags: always
 
     - name: "Cleanup disabled MinIO container"
+      when: not (enable_minio | bool)
+      tags: [infrastructure, minio-setup]
       block:
         - name: Check if MinIO compose file exists
           ansible.builtin.stat:
@@ -78,8 +80,6 @@
             state: absent
             remove_orphans: true
           when: minio_compose_file_check.stat.exists
-      when: not (enable_minio | bool)
-      tags: [infrastructure, minio-setup]
 
   roles:
     # ═══════════════════════════════════════════════════════════
@@ -191,6 +191,12 @@
       when:
         - setup_applications | bool
         - enable_portfolio_apps | bool
+
+    - role: pui-setup
+      tags: [application, pui-setup]
+      when:
+        - setup_applications | bool
+        - enable_pui_app | bool
 
     # ═══════════════════════════════════════════════════════════
     # OPTIMIZATION

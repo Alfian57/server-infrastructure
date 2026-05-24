@@ -19,6 +19,7 @@ vault.yml.decrypted
 
 # Codex local state and credentials
 .codex/
+app/
 
 # SSH keys (in case accidentally placed here)
 *.pem

@@ -923,7 +923,7 @@
           forward_host: "{{ item.forward_host }}"
           forward_port: "{{ item.forward_port | int }}"
           certificate_id: "{{ certificate_id | int }}"
-          ssl_forced: true
+          ssl_forced: "{{ item.force_ssl | default(true) | bool }}"
           caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
           block_exploits: true
           advanced_config: "{{ npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '' }}"
@@ -931,7 +931,7 @@
           access_list_id: 0
           allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
           http2_support: true
-          hsts_enabled: true
+          hsts_enabled: "{{ item.force_ssl | default(true) | bool }}"
           hsts_subdomains: false
           enabled: true
           locations: []
@@ -955,9 +955,9 @@
           {% elif item.status | default(0) in [200, 201] %}
           ║ Status: ✅ SSL Enabled & Configured
           ║ Certificate: Let's Encrypt{% if item.item.cloudflare_flexible | default(false) %} (Cloudflare DNS challenge){% endif %}
-          ║ SSL Forced: Yes (HTTP → HTTPS redirect)
+          ║ SSL Forced: {{ 'Yes (HTTP -> HTTPS redirect)' if item.item.force_ssl | default(true) | bool else 'No (HTTP remains available)' }}
           ║ HTTP/2: Enabled
-          ║ HSTS: Enabled
+          ║ HSTS: {{ 'Enabled' if item.item.force_ssl | default(true) | bool else 'Disabled' }}
           ║ Block Exploits: Enabled
           ║ Websocket: {{ item.item.websocket_support | default(false) }}
           ║ Caching: {{ item.item.caching_enabled | default(false) }}

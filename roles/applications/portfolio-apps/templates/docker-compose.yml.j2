@@ -63,7 +63,7 @@ services:
       retries: 3
       start_period: 10s
 {% else %}
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:{{ app_port }}{{ app_health_endpoint }}"]
+      test: ["CMD", "wget", "-Y", "off", "--spider", "-q", "http://localhost:{{ app_port }}{{ app_health_endpoint }}"]
       interval: 30s
       timeout: 10s
       retries: 3

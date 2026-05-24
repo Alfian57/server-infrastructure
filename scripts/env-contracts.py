@@ -81,7 +81,11 @@ def enabled_apps(data: dict[str, Any]) -> list[dict[str, Any]]:
     items = data.get("portfolio_apps", [])
     if not isinstance(items, list):
         raise SystemExit("portfolio_apps must be a list")
-    return [item for item in items if item.get("enabled", True)]
+    enabled = [item for item in items if item.get("enabled", True)]
+    pui = data.get("pui_app")
+    if isinstance(pui, dict) and pui.get("enabled", True):
+        enabled.append(pui)
+    return enabled
 
 
 def mobile_repositories(data: dict[str, Any]) -> list[dict[str, Any]]:

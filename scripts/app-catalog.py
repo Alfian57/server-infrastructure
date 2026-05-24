@@ -59,7 +59,11 @@ def apps() -> list[dict[str, Any]]:
     items = data.get("portfolio_apps", [])
     if not isinstance(items, list):
         raise SystemExit("portfolio_apps must be a list")
-    return [item for item in items if item.get("enabled", True)]
+    enabled = [item for item in items if item.get("enabled", True)]
+    pui = data.get("pui_app")
+    if isinstance(pui, dict) and pui.get("enabled", True):
+        enabled.append(pui)
+    return enabled
 
 
 def mobile_repositories() -> list[dict[str, Any]]:
@@ -188,6 +192,9 @@ def cmd_env_check(args: argparse.Namespace) -> int:
 
 def cmd_deploy_tags(args: argparse.Namespace) -> int:
     app = find_app(args.app)
+    if app["name"] == "pui":
+        print("pui-setup")
+        return 0
     tags = ["application"]
     if args.include_runtime_deps and app.get("requires_warp_proxy", False):
         tags.insert(0, "cloudflare-warp-setup")
@@ -207,7 +214,7 @@ def cmd_doctor(_: argparse.Namespace) -> int:
         names.add(name)
         repo = repo_ref(app)
         repos.add(repo)
-        if app.get("stack") not in {"laravel", "nextjs", "golang", "express", "php"}:
+        if app.get("stack") not in {"laravel", "nextjs", "golang", "express", "php", "compose"}:
             print(f"{name}: unsupported stack {app.get('stack')}", file=sys.stderr)
             failed += 1
         if "proxy" in app and not (app["proxy"].get("domain") or app["proxy"].get("subdomain")):
@@ -222,7 +229,7 @@ def cmd_doctor(_: argparse.Namespace) -> int:
                 )
                 failed += 1
         build = app.get("build", {})
-        if build and not build.get("dockerfile"):
+        if build and app.get("stack") != "compose" and not build.get("dockerfile"):
             print(f"{name}: build.dockerfile is empty", file=sys.stderr)
             failed += 1
         if build and not build.get("workflow"):

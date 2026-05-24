@@ -1,0 +1,71 @@
+---
+services:
+  pui-web-client:
+    image: {{ pui_web_image }}
+    container_name: pui-web-client
+    depends_on:
+      pui-api-service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - {{ nginx_proxy_network }}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  pui-api-service:
+    image: {{ pui_api_image }}
+    container_name: pui-api-service
+    depends_on:
+      pui-vault-core:
+        condition: service_started
+    env_file:
+      - .env
+    user: "10001:20000"
+    restart: unless-stopped
+    volumes:
+      - pui_uds:/var/run/pui/uds
+    networks:
+      - {{ nginx_proxy_network }}
+      - {{ postgres_network }}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  pui-vault-core:
+    image: {{ pui_vault_image }}
+    container_name: pui-vault-core
+    env_file:
+      - .env
+    command:
+      - sh
+      - -c
+      - >-
+        mkdir -p /var/run/pui/uds /var/lib/pui/badger /var/lib/pui/chunks &&
+        chown 10002:20000 /var/run/pui/uds &&
+        chown -R 10002:20000 /var/lib/pui/badger /var/lib/pui/chunks &&
+        chmod 0750 /var/run/pui/uds /var/lib/pui/badger /var/lib/pui/chunks &&
+        exec su-exec 10002:20000 vault-core
+    network_mode: "none"
+    restart: unless-stopped
+    volumes:
+      - pui_uds:/var/run/pui/uds
+      - pui_badger:/var/lib/pui/badger
+      - pui_chunks:/var/lib/pui/chunks
+
+networks:
+  {{ nginx_proxy_network }}:
+    external: true
+  {{ postgres_network }}:
+    external: true
+
+volumes:
+  pui_uds:
+  pui_badger:
+  pui_chunks:
