@@ -607,6 +607,34 @@ portfolio_apps:
     databases:
       postgres: ["file_pod"]
 
+  - name: "tugas-backend"
+    repo: "tugas-backend"
+    stack: "express"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 3000
+    health_endpoint: "/health"
+    env_template: "roles/applications/tugas-backend-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "mysql_network"]
+    use_prisma: true
+    run_migrate: true
+    run_fresh_migrate: false
+    run_seeder: false
+    proxy:
+      domain: "tugas-backend.alfian-gading.my.id"
+      scheme: "http"
+      forward_host: "tugas-backend"
+      forward_port: 3000
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["tugas-backend"]
+    databases:
+      mysql: ["tugas_backend"]
+
 mobile_repositories:
   - name: "file-pod-mobile"
     variables:
@@ -677,6 +705,9 @@ mysql_database_users:
   - database: "academic_lab"
     username: "{{ vault_challenge_sql_injection_db_username }}"
     password: "{{ vault_challenge_sql_injection_db_password }}"
+  - database: "tugas_backend"
+    username: "{{ vault_tugas_backend_db_username }}"
+    password: "{{ vault_tugas_backend_db_password }}"
 postgres_databases: >-
   {{
     ((
