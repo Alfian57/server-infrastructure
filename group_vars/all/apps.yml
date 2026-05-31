@@ -296,6 +296,13 @@ portfolio_apps:
       dockerfile: "docker/Dockerfile"
       workflow: "web.yml"
     env_template: "roles/applications/lelang-fashion-web-setup/templates/.env.j2"
+    ci:
+      secrets:
+        APP_KEY:
+          source: "vault:vault_lelang_fashion_web_app_key"
+      variables:
+        APP_URL:
+          source: "vault:vault_lelang_fashion_web_app_url"
     networks: ["nginx_proxy_manager_network", "mysql_network"]
     volumes:
       - "lelang_fashion_web_storage:/var/www/html/storage"
@@ -322,8 +329,15 @@ portfolio_apps:
     build:
       dockerfile: "web/docker/Dockerfile"
       workflow: "build-and-deploy.yml"
+    app_root: "web"
     env_contract:
       path: "web/.env.example"
+    ci:
+      variables:
+        API_BASE_URL:
+          source: "vault:vault_pos_soto_saben_mobile_api_base_url"
+        API_BASE_URL_DEBUG:
+          value: "https://thankful-midge-noble.ngrok-free.app/api"
     app_port: 80
     env_template: "roles/applications/pos-soto-saben-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]

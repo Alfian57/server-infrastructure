@@ -137,6 +137,11 @@ def repo_owner(app: dict[str, Any], default_owner: str) -> str:
 def repo_name(app: dict[str, Any]) -> str:
     return str(app.get("repo") or app["name"])
 
+def app_path(app: dict[str, Any], path: str) -> str:
+    root = str(app.get("app_root") or "").strip("/")
+    clean_path = path.strip("/")
+    return f"{root}/{clean_path}" if root else clean_path
+
 def repo_ref(app: dict[str, Any], default_owner: str) -> str:
     return f"{repo_owner(app, default_owner)}/{repo_name(app)}"
 
@@ -175,8 +180,10 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
         return False
 
     marker = STACK_MARKERS.get(str(app["stack"]))
+    marker_path = app_path(app, marker) if marker else ""
     if marker and marker not in tree:
-        errors.append(f"missing stack marker {marker} for stack={app['stack']}")
+        if marker_path not in tree:
+            errors.append(f"missing stack marker {marker_path} for stack={app['stack']}")
 
     if dockerfile not in tree:
         errors.append(f"catalog build.dockerfile not found: {dockerfile}")
@@ -222,9 +229,10 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
     if exposed_ports and app_port(app) not in exposed_ports:
         errors.append(f"catalog app_port={app_port(app)} but Dockerfile exposes {sorted(exposed_ports)}")
 
-    if app.get("env_contract", {}).get("required", True) and ".env.example" in tree:
+    env_contract_path = str(app.get("env_contract", {}).get("path") or app_path(app, ".env.example"))
+    if app.get("env_contract", {}).get("required", True) and env_contract_path in tree:
         try:
-            env_port = parse_env_example_port(content(owner, repo, ".env.example", env))
+            env_port = parse_env_example_port(content(owner, repo, env_contract_path, env))
         except AuditError:
             env_port = None
         if env_port is not None and env_port != app_port(app):
