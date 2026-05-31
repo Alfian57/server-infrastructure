@@ -608,30 +608,61 @@ portfolio_apps:
       postgres: ["file_pod"]
 
   - name: "tugas-backend"
-    repo: "tugas-backend"
+    repo: "tugas-backend-frontend"
+    stack: "express"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 80
+    health_endpoint: "/"
+    env_contract:
+      ignore_keys: ["VITE_API_URL"]
+    networks: ["nginx_proxy_manager_network"]
+    use_prisma: false
+    run_migrate: false
+    run_fresh_migrate: false
+    run_seeder: false
+    ci:
+      variables:
+        VITE_API_URL:
+          value: "https://tugas-backend-api.alfian-gading.my.id"
+    proxy:
+      domain: "tugas-backend.alfian-gading.my.id"
+      scheme: "http"
+      forward_host: "tugas-backend"
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["tugas-backend"]
+
+  - name: "tugas-backend-api"
+    repo: "tugas-backend-api"
     stack: "express"
     build:
       dockerfile: "Dockerfile"
       workflow: "build-and-deploy.yml"
     app_port: 3000
     health_endpoint: "/health"
-    env_template: "roles/applications/tugas-backend-setup/templates/.env.j2"
+    env_template: "roles/applications/tugas-backend-api-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]
     use_prisma: true
     run_migrate: true
     run_fresh_migrate: false
     run_seeder: false
     proxy:
-      domain: "tugas-backend.alfian-gading.my.id"
+      domain: "tugas-backend-api.alfian-gading.my.id"
       scheme: "http"
-      forward_host: "tugas-backend"
+      forward_host: "tugas-backend-api"
       forward_port: 3000
       caching_enabled: false
       websocket_support: false
       cloudflare_flexible: true
     dns:
       domain: "alfian-gading.my.id"
-      records: ["tugas-backend"]
+      records: ["tugas-backend-api"]
     databases:
       mysql: ["tugas_backend"]
 
