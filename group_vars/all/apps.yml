@@ -631,7 +631,7 @@ portfolio_apps:
       scheme: "http"
       forward_host: "tugas-backend"
       forward_port: 80
-      caching_enabled: true
+      caching_enabled: false
       websocket_support: false
       cloudflare_flexible: true
     dns:
