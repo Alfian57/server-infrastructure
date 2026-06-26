@@ -21,7 +21,6 @@ services:
     networks:
       - nginx_proxy_manager_network
       - postgres_network
-      - redis_network
     healthcheck:
       test: ["CMD", "wget", "-Y", "off", "--spider", "-q", "http://localhost:8080/health"]
       interval: 30s
@@ -33,8 +32,6 @@ networks:
   nginx_proxy_manager_network:
     external: true
   postgres_network:
-    external: true
-  redis_network:
     external: true
 
 volumes:

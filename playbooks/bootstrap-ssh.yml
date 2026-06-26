@@ -222,27 +222,6 @@
       ansible.builtin.debug:
         msg: "SSH Key authentication test: {{ 'SUCCESS' if ssh_test.rc == 0 else 'FAILED' }}"
 
-    # =========================================================================
-    # Disable Password Authentication (only if SSH key works)
-    # =========================================================================
-    - name: Disable PasswordAuthentication
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?PasswordAuthentication"
-        line: "PasswordAuthentication no"
-        state: present
-      when: ssh_test.rc == 0
-      notify: Restart SSHD
-
-    - name: Disable ChallengeResponseAuthentication
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: "^#?ChallengeResponseAuthentication"
-        line: "ChallengeResponseAuthentication no"
-        state: present
-      when: ssh_test.rc == 0
-      notify: Restart SSHD
-
     - name: Warning if SSH key test failed
       ansible.builtin.debug:
         msg: 

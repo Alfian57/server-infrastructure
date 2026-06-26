@@ -42,132 +42,29 @@
     mode: "0600"
     force: false
 
-- name: Configure SSH - Disable root login
+- name: Ensure sshd_config.d directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ensure Include directive is at the top of sshd_config
   ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
-    regexp: "^#?PermitRootLogin"
-    line: "PermitRootLogin {{ security_ssh_permit_root_login }}"
+    line: "Include /etc/ssh/sshd_config.d/*.conf"
+    insertbefore: BOF
     state: present
-  notify: Restart sshd
   when: security_ssh_harden_config | default(true)
 
-- name: Configure SSH - Disable password authentication
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PasswordAuthentication"
-    line: "PasswordAuthentication {{ security_ssh_password_authentication }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Disable empty passwords
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?PermitEmptyPasswords"
-    line: "PermitEmptyPasswords no"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Disable challenge response
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?ChallengeResponseAuthentication"
-    line: "ChallengeResponseAuthentication no"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set max auth tries
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?MaxAuthTries"
-    line: "MaxAuthTries {{ security_ssh_max_auth_tries }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set max sessions
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?MaxSessions"
-    line: "MaxSessions {{ security_ssh_max_sessions }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set client alive interval
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?ClientAliveInterval"
-    line: "ClientAliveInterval {{ security_ssh_client_alive_interval }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set client alive count max
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?ClientAliveCountMax"
-    line: "ClientAliveCountMax {{ security_ssh_client_alive_count_max }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Disable X11 forwarding
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?X11Forwarding"
-    line: "X11Forwarding no"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set log level
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?LogLevel"
-    line: "LogLevel {{ security_ssh_log_level }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Set allowed users
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?AllowUsers"
-    line: "AllowUsers {{ security_ssh_allowed_users_effective | join(' ') }}"
-    state: present
-  notify: Restart sshd
-  when: 
-    - security_ssh_harden_config | default(true)
-    - security_ssh_allowed_users_effective is defined
-    - security_ssh_allowed_users_effective | length > 0
-
-- name: Configure SSH - Use strong ciphers
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?Ciphers"
-    line: "Ciphers {{ security_ssh_ciphers }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Use strong MACs
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?MACs"
-    line: "MACs {{ security_ssh_macs }}"
-    state: present
-  notify: Restart sshd
-  when: security_ssh_harden_config | default(true)
-
-- name: Configure SSH - Use strong KexAlgorithms
-  ansible.builtin.lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "^#?KexAlgorithms"
-    line: "KexAlgorithms {{ security_ssh_kex_algorithms }}"
-    state: present
+- name: Deploy SSH drop-in configuration (00-ansible-hardening.conf)
+  ansible.builtin.template:
+    src: 00-ansible-hardening.conf.j2
+    dest: /etc/ssh/sshd_config.d/00-ansible-hardening.conf
+    owner: root
+    group: root
+    mode: "0600"
   notify: Restart sshd
   when: security_ssh_harden_config | default(true)
 
@@ -188,7 +85,7 @@
 - name: Display SSH hardening status
   ansible.builtin.debug:
     msg:
-      - "SSH Hardening Applied:"
+      - "SSH Hardening Applied (Drop-in):"
       - "  • Root login: {{ security_ssh_permit_root_login }}"
       - "  • Password auth: {{ security_ssh_password_authentication }}"
       - "  • Max auth tries: {{ security_ssh_max_auth_tries }}"

@@ -164,8 +164,8 @@
 
 - name: "{{ app_name }} | Verify WARP proxy dependency"
   ansible.builtin.wait_for:
-    host: "{{ warp_forward_bind_address }}"
-    port: "{{ warp_forward_port }}"
+    host: "{{ warp_forward_bind_address | default('172.17.0.1', true) }}"
+    port: "{{ warp_forward_port | default(40001, true) }}"
     timeout: 10
   when: portfolio_app.requires_warp_proxy | default(false) | bool
 
@@ -287,7 +287,7 @@
 
 - name: "{{ app_name }} | Run Prisma migrations when requested"
   ansible.builtin.command:
-    cmd: docker exec {{ app_name }} npx prisma migrate deploy
+    cmd: "docker exec {{ app_name }} npx prisma {{ portfolio_app.prisma_command | default('migrate deploy') }}"
   register: prisma_migration_result
   when:
     - app_stack == 'express'
@@ -297,7 +297,7 @@
 
 - name: "{{ app_name }} | Run Next.js Prisma migrations when requested"
   ansible.builtin.command:
-    cmd: docker exec {{ app_name }} npx prisma migrate deploy
+    cmd: "docker exec {{ app_name }} npx prisma {{ portfolio_app.prisma_command | default('migrate deploy') }}"
   register: nextjs_prisma_migration_result
   when:
     - app_stack == 'nextjs'

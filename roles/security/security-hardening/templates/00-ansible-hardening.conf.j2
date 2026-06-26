@@ -1,0 +1,33 @@
+# ==============================================================================
+# Ansible Managed: SSH Hardening Configuration
+# ==============================================================================
+# This file is loaded FIRST by sshd to ensure these settings are not overridden
+# by cloud-init or other provider-specific drop-in configurations.
+
+# Authentication
+PermitRootLogin {{ security_ssh_permit_root_login }}
+PasswordAuthentication {{ security_ssh_password_authentication }}
+PermitEmptyPasswords no
+ChallengeResponseAuthentication no
+
+# Connection Limits
+MaxAuthTries {{ security_ssh_max_auth_tries }}
+MaxSessions {{ security_ssh_max_sessions }}
+ClientAliveInterval {{ security_ssh_client_alive_interval }}
+ClientAliveCountMax {{ security_ssh_client_alive_count_max }}
+
+# Feature Toggles
+X11Forwarding no
+
+# Logging
+LogLevel {{ security_ssh_log_level }}
+
+# Cryptography (Strong Ciphers & MACs)
+Ciphers {{ security_ssh_ciphers }}
+MACs {{ security_ssh_macs }}
+KexAlgorithms {{ security_ssh_kex_algorithms }}
+
+{% if security_ssh_allowed_users_effective is defined and security_ssh_allowed_users_effective | length > 0 %}
+# Note: AllowUsers is explicitly disabled here to prevent locking out users like root
+# AllowUsers {{ security_ssh_allowed_users_effective | join(' ') }}
+{% endif %}

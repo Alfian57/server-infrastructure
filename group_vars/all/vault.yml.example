@@ -101,3 +101,18 @@ vault_solvo_whatsapp_api_url: ""
 vault_solvo_whatsapp_api_key: ""
 
 # Add more as needed...
+
+
+# Rebrand UTY
+vault_rebrand_uty_api_db_username: "rebrand_uty_user"
+vault_rebrand_uty_api_db_password: "CHANGE_ME"
+vault_rebrand_uty_api_db_database: "rebrand_uty"
+vault_rebrand_uty_api_jwt_secret: "CHANGE_ME"
+vault_rebrand_uty_api_encryption_key: "CHANGE_ME"
+vault_rebrand_uty_api_tz: "Asia/Jakarta"
+vault_rebrand_uty_api_max_file_size: "26214400"
+vault_rebrand_uty_api_upload_dir: "./uploads"
+vault_rebrand_uty_api_allowed_origins: "https://sistertika.alfian-gading.my.id,https://sistertika-api.alfian-gading.my.id"
+
+vault_rebrand_uty_web_api_url: "https://sistertika-api.alfian-gading.my.id"
+vault_rebrand_uty_web_tz: "Asia/Jakarta"

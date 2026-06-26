@@ -4,7 +4,7 @@
   vars:
     app_name: "ruang-tenang-api"
     requires_database: true
-    requires_redis: true
+    requires_redis: false
     # Enable fresh migration + seeding on first deploy (set to false after)
     run_fresh_migrate: "{{ ruang_tenang_api_fresh_migrate | default(true) }}"
     run_seeder: "{{ ruang_tenang_api_run_seeder | default(true) }}"

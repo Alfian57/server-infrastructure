@@ -89,6 +89,13 @@
     - role: host-profile
       tags: [always, system, host-profile]
 
+    - role: swap-setup
+      tags: [system, swap-setup]
+      when:
+        - setup_system | bool
+        - enable_swap | bool
+        - ansible_os_family == 'Debian'
+
     - role: update-apt
       tags: [system, update-apt]
       when:

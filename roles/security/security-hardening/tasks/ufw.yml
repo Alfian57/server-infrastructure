@@ -32,17 +32,17 @@
 # UFW 'limit' rule allows connections but rate-limits them (6 per 30 seconds)
 - name: Rate limit SSH connections on port 22
   community.general.ufw:
-    rule: limit
+    rule: allow
     port: "22"
     proto: tcp
-    comment: "SSH access with rate limiting"
+    comment: "SSH access (rate limiting disabled)"
 
 - name: Rate limit SSH on custom port
   community.general.ufw:
-    rule: limit
+    rule: allow
     port: "{{ security_ssh_port }}"
     proto: tcp
-    comment: "SSH access with rate limiting (custom port)"
+    comment: "SSH access (rate limiting disabled on custom port)"
   when: security_ssh_port | int != 22
 
 # Web Traffic

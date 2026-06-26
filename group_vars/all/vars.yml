@@ -9,6 +9,8 @@
 # Role Toggle (Enable/Disable individual roles)
 # ============================================================================
 # System
+enable_swap: true
+swap_size_mb: 2048
 enable_update_apt: true
 enable_users_setup: true
 enable_git_setup: true

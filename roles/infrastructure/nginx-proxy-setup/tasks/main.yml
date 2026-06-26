@@ -489,12 +489,12 @@
 
     - name: Identify domains that need Let's Encrypt HTTP-01
       ansible.builtin.set_fact:
-        letsencrypt_http_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | list }}"
+        letsencrypt_http_domains: "{{ proxy_hosts | rejectattr('cloudflare_flexible', 'defined') | selectattr('generate_ssl', 'undefined') | list + proxy_hosts | selectattr('cloudflare_flexible', 'equalto', false) | selectattr('generate_ssl', 'undefined') | list }}"
       when: proxy_hosts is defined
 
     - name: Identify domains that need Let's Encrypt DNS-01 through Cloudflare
       ansible.builtin.set_fact:
-        letsencrypt_cloudflare_dns_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | list }}"
+        letsencrypt_cloudflare_dns_domains: "{{ proxy_hosts | selectattr('cloudflare_flexible', 'defined') | selectattr('cloudflare_flexible', 'equalto', true) | rejectattr('generate_ssl', 'defined') | list }}"
       when:
         - proxy_hosts is defined
         - npm_enable_cloudflare_dns_ssl | bool

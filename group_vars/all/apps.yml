@@ -241,6 +241,7 @@ portfolio_apps:
     volumes:
       - "solvo_uploads:/app/public/uploads"
     use_prisma: true
+    prisma_command: "db push --accept-data-loss"
     run_migrate: true
     run_seeder: true
     seed_on: "fresh"
@@ -362,6 +363,7 @@ portfolio_apps:
       mysql: ["pos_soto_saben"]
 
   - name: "demo-sql-injection"
+    enabled: false
     repo_owner: "Alfian57"
     repo: "demo-sql-injection"
     image: "ghcr.io/alfian57/demo-sql-injection:latest"
@@ -392,6 +394,7 @@ portfolio_apps:
       mysql: ["bank_lab"]
 
   - name: "challenge-sql-injection"
+    enabled: false
     repo_owner: "Alfian57"
     repo: "challenge-sql-injection"
     image: "ghcr.io/alfian57/challenge-sql-injection:latest"
@@ -462,19 +465,20 @@ portfolio_apps:
     app_port: 8080
     health_endpoint: "/health"
     env_template: "roles/applications/ruang-tenang-api-setup/templates/.env.j2"
-    networks: ["nginx_proxy_manager_network", "postgres_network", "redis_network"]
+    networks:
+      ["nginx_proxy_manager_network", "postgres_network", "redis_network"]
     volumes:
       - "ruang_tenang_api_uploads:/app/uploads"
     run_migrate: true
     run_fresh_migrate: false
     run_seeder: false
     extra_environment:
-      HTTP_PROXY: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
-      HTTPS_PROXY: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
-      http_proxy: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
-      https_proxy: "http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}"
-      NO_PROXY: "{{ warp_no_proxy }}"
-      no_proxy: "{{ warp_no_proxy }}"
+      HTTP_PROXY: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
+      HTTPS_PROXY: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
+      http_proxy: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
+      https_proxy: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
+      NO_PROXY: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
+      no_proxy: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
     proxy:
       domain: "api.ruang-tenang.site"
       scheme: "http"
@@ -585,7 +589,8 @@ portfolio_apps:
     env_template: "roles/applications/file-pod-api-setup/templates/.env.j2"
     env_contract:
       required: false
-    networks: ["nginx_proxy_manager_network", "postgres_network", "minio_network"]
+    networks:
+      ["nginx_proxy_manager_network", "postgres_network", "minio_network"]
     volumes:
       - "file_pod_api_uploads:/app/uploads"
     create_uploads_dir: true
@@ -608,6 +613,7 @@ portfolio_apps:
       postgres: ["file_pod"]
 
   - name: "tugas-backend"
+    enabled: false
     repo: "tugas-backend-frontend"
     stack: "express"
     build:
@@ -637,8 +643,51 @@ portfolio_apps:
     dns:
       domain: "alfian-gading.my.id"
       records: ["tugas-backend"]
+  - name: "rebrand-uty-api"
+    enabled: true
+    repo: "rebrand-uty-api"
+    stack: "golang"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 8080
+    health_endpoint: "/health"
+    env_template: "roles/applications/rebrand-uty-api-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network", "postgres_network"]
+    proxy:
+      domain: "sistertika-api.alfian-gading.my.id"
+      scheme: "http"
+      forward_host: "rebrand-uty-api"
+      forward_port: 8080
+      caching_enabled: true
+      websocket_support: false
+      generate_ssl: false
+      cloudflare_flexible: true
+
+  - name: "rebrand-uty-web"
+    enabled: true
+    repo: "rebrand-uty-web"
+    stack: "nextjs"
+    env_contract:
+      required: false
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 3000
+    env_template: "roles/applications/rebrand-uty-web-setup/templates/.env.j2"
+    networks: ["nginx_proxy_manager_network"]
+    proxy:
+      domain: "sistertika.alfian-gading.my.id"
+      scheme: "http"
+      forward_host: "rebrand-uty-web"
+      forward_port: 3000
+      caching_enabled: true
+      websocket_support: false
+      generate_ssl: false
+      cloudflare_flexible: true
 
   - name: "tugas-backend-api"
+    enabled: false
     repo: "tugas-backend-api"
     stack: "express"
     build:
@@ -739,17 +788,25 @@ mysql_database_users:
   - database: "tugas_backend"
     username: "{{ vault_tugas_backend_db_username }}"
     password: "{{ vault_tugas_backend_db_password }}"
+  - database: "rebrand_uty"
+    username: "{{ vault_rebrand_uty_api_db_username }}"
+    password: "{{ vault_rebrand_uty_api_db_password }}"
 postgres_databases: >-
   {{
-    ((
+    (
+      (
         portfolio_apps | map(attribute='databases') | select('defined')
         | map(attribute='postgres') | select('defined') | flatten | list
       )
       + (pui_app.databases.postgres | default([]))
+      + ["rebrand_uty"]
     )
     | unique | list
   }}
 postgres_database_users:
+  - database: "rebrand_uty"
+    username: "{{ vault_rebrand_uty_api_db_username }}"
+    password: "{{ vault_rebrand_uty_api_db_password }}"
   - database: "pui"
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
