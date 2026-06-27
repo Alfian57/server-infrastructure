@@ -116,7 +116,8 @@ users:
     ssh_key: "{{ vault_server_ssh_public_key }}"
     state: "present"
     system: false
-    password_lock: true
+    password: "{{ vault_user_deployer_password }}"
+    password_lock: false
     sudo_nopasswd: false
 
   - name: "alfiang"
