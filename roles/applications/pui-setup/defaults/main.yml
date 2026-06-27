@@ -8,7 +8,7 @@ pui_api_image: "ghcr.io/{{ github_username | lower }}/pui-api-service:{{ pui_ima
 pui_vault_image: "ghcr.io/{{ github_username | lower }}/pui-vault-core:{{ pui_image_tag }}"
 pui_web_domain: "pui.{{ primary_domain }}"
 pui_api_domain: "pui-api.{{ primary_domain }}"
-pui_trusted_proxies: "https://{{ pui_web_domain }},https://{{ pui_api_domain }}"
+pui_trusted_proxies: "172.16.0.0/12,192.168.0.0/16,10.0.0.0/8,127.0.0.1/8"
 pui_strict_download_verify: true
 pui_strict_verify_max_bytes: 67108864
 pui_db_name: "{{ vault_pui_db_database | default('pui') }}"
