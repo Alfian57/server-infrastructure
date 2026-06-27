@@ -94,6 +94,7 @@ portfolio_apps:
   - name: "panca-trivia"
     repo: "panca-trivia"
     stack: "laravel"
+    run_seeder: true
     build:
       dockerfile: "docker/Dockerfile"
       workflow: "build-and-deploy.yml"
@@ -570,7 +571,7 @@ portfolio_apps:
       scheme: "http"
       forward_host: "ruang-tenang-web"
       forward_port: 3000
-      caching_enabled: true
+      caching_enabled: false
       websocket_support: false
       cloudflare_flexible: true
     dns:
