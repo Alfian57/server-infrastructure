@@ -57,7 +57,7 @@ primary_domain: "alfian-gading.my.id"
 ssh_key_name: "server_ed25519"
 ssh_key_path: "~/.ssh/{{ ssh_key_name }}"
 deploy_user: "deployer"
-ci_deploy_user: "app-deployer"
+ci_deploy_user: "deployer"
 ssh_port: 22
 
 # ============================================================================
@@ -109,16 +109,6 @@ users:
     system: false
     sudo_nopasswd: true
 
-  - name: "app-deployer"
-    comment: "GitHub Actions Application Deploy User"
-    groups: ["docker"]
-    shell: "/bin/bash"
-    ssh_key: "{{ vault_server_ssh_public_key }}"
-    state: "present"
-    system: false
-    password: "{{ vault_user_deployer_password }}"
-    password_lock: false
-    sudo_nopasswd: false
 
   - name: "alfiang"
     comment: "Alfian Gading"
