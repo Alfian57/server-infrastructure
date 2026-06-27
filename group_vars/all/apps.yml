@@ -13,6 +13,8 @@ github_actions_defaults:
       source: "runtime:vps_host"
     VPS_USER:
       source: "runtime:ci_deploy_user"
+    VPS_PASSWORD:
+      source: "runtime:vps_password"
     VPS_SSH_PORT:
       source: "runtime:vps_ssh_port"
     VPS_KEY:

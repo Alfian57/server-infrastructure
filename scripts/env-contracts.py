@@ -412,6 +412,11 @@ def runtime_value(name: str, vault: dict[str, Any], variables: dict[str, Any]) -
         if not key_path.exists():
             raise ContractError(f"missing SSH key {key_path}")
         return key_path.read_text(encoding="utf-8")
+    if name == "vps_password":
+        value = vault.get("vault_deployer_plaintext_password")
+        if not value:
+            raise ContractError("missing vault_deployer_plaintext_password in vault")
+        return str(value)
     if name == "docker_token":
         value = vault.get("vault_github_token")
         if not value:

@@ -22,10 +22,9 @@
     ssh_private_key_path: "~/.ssh/{{ ssh_key_name }}"
     
     # Users to configure SSH key for
-    bootstrap_users:
+    users_to_setup:
       - root
       - "{{ deploy_user }}"
-      - "{{ ci_deploy_user }}"
       - alfiang
 
   pre_tasks:
@@ -85,20 +84,12 @@
     - name: Ensure deploy user exists
       ansible.builtin.user:
         name: "{{ deploy_user }}"
-        comment: "Ansible Automation User"
+        comment: "Ansible Automation & CI/CD Deploy User"
         groups: ["sudo"]
         shell: /bin/bash
+        password: "{{ vault_user_deployer_password }}"
         createhome: true
         state: present
-
-    - name: Ensure CI deploy user exists
-      ansible.builtin.user:
-        name: "{{ ci_deploy_user }}"
-        comment: "GitHub Actions Application Deploy User"
-        shell: /bin/bash
-        createhome: true
-        state: present
-        password_lock: true
 
     - name: Ensure alfiang user exists
       ansible.builtin.user:
@@ -147,14 +138,6 @@
         group: alfiang
         mode: "0700"
 
-    - name: Ensure .ssh directory exists for CI deploy user
-      ansible.builtin.file:
-        path: "/home/{{ ci_deploy_user }}/.ssh"
-        state: directory
-        owner: "{{ ci_deploy_user }}"
-        group: "{{ ci_deploy_user }}"
-        mode: "0700"
-
     - name: Add SSH key to deploy user authorized_keys
       ansible.posix.authorized_key:
         user: "{{ deploy_user }}"
@@ -165,13 +148,6 @@
     - name: Add SSH key to alfiang authorized_keys
       ansible.posix.authorized_key:
         user: alfiang
-        key: "{{ ssh_public_key }}"
-        state: present
-        exclusive: false
-
-    - name: Add SSH key to CI deploy user authorized_keys
-      ansible.posix.authorized_key:
-        user: "{{ ci_deploy_user }}"
         key: "{{ ssh_public_key }}"
         state: present
         exclusive: false
@@ -253,19 +229,6 @@
       ansible.builtin.debug:
         msg: "{{ deploy_user }} SSH authentication: {{ '✓ SUCCESS' if deployer_ssh_test.rc == 0 else '✗ FAILED' }}"
 
-    - name: Test SSH key authentication for CI deploy user
-      ansible.builtin.command:
-        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i {{ ssh_private_key_path }} {{ ci_deploy_user }}@{{ inventory_hostname }} echo 'CI deploy user SSH auth works'"
-      delegate_to: localhost
-      become: false
-      register: ci_deployer_ssh_test
-      ignore_errors: true
-      changed_when: false
-
-    - name: Display CI deploy user SSH test result
-      ansible.builtin.debug:
-        msg: "{{ ci_deploy_user }} SSH authentication: {{ '✓ SUCCESS' if ci_deployer_ssh_test.rc == 0 else '✗ FAILED' }}"
-
     - name: Display completion message
       ansible.builtin.debug:
         msg:
@@ -276,7 +239,6 @@
           - "  SSH Key configured for users:"
           - "    - root"
           - "    - {{ deploy_user }} {{ '✓' if deployer_ssh_test.rc == 0 else '✗' }}"
-          - "    - {{ ci_deploy_user }} {{ '✓' if ci_deployer_ssh_test.rc == 0 else '✗' }}"
           - "    - alfiang"
           - ""
           - "  {{ 'Password authentication: DISABLED' if ssh_test.rc == 0 else 'Password authentication: STILL ENABLED (SSH key test failed)' }}"
