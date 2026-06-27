@@ -146,6 +146,7 @@ portfolio_apps:
   - name: "tech-talk"
     repo: "tech-talk"
     stack: "laravel"
+    run_seeder: true
     build:
       dockerfile: "docker/Dockerfile"
       workflow: "built-and-deploy.yml"
@@ -294,6 +295,7 @@ portfolio_apps:
     repo: "lelang-fashion-web"
     image: "ghcr.io/solvotech/lelang-fashion-web:latest"
     stack: "laravel"
+    run_seeder: true
     build:
       dockerfile: "docker/Dockerfile"
       workflow: "web.yml"
