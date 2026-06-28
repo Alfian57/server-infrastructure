@@ -15,9 +15,11 @@ export ANSIBLE_LOCAL_TEMP
 # Ansible options
 ifneq (,$(wildcard $(VAULT_PASS)))
 	OPTS := -i $(INVENTORY) --vault-password-file=$(VAULT_PASS)
+	VAULT_OPTS := --vault-password-file=$(VAULT_PASS)
 	LINT_ENV := ANSIBLE_VAULT_PASSWORD_FILE=$(VAULT_PASS)
 else
 	OPTS := -i $(INVENTORY)
+	VAULT_OPTS :=
 	LINT_ENV :=
 endif
 
@@ -133,7 +135,7 @@ bootstrap-password: ## Bootstrap SSH key using initial password auth
 	@echo "This will setup SSH key authentication on fresh VPS"
 	@echo "You will be prompted for the initial SSH password"
 	@echo ""
-	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) --ask-pass
+	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) $(VAULT_OPTS) --ask-pass
 	@echo ""
 	@echo "If successful, run: make switch-to-ssh"
 
@@ -143,7 +145,7 @@ bootstrap-key: ## Bootstrap SSH key using existing private key auth
 	@echo "═══════════════════════════════════════════"
 	@echo "This will setup the project SSH key on a VPS that already accepts key auth"
 	@echo ""
-	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY)
+	@ansible-playbook playbooks/bootstrap-ssh.yml -i $(INVENTORY) $(VAULT_OPTS)
 	@echo ""
 	@echo "If successful, run: make switch-to-ssh"
 

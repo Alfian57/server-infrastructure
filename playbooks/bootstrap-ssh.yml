@@ -17,6 +17,7 @@
   become: true
   vars_files:
     - ../group_vars/all/vars.yml
+    - ../group_vars/all/vault.yml
   vars:
     ssh_public_key_path: "~/.ssh/{{ ssh_key_name }}.pub"
     ssh_private_key_path: "~/.ssh/{{ ssh_key_name }}"

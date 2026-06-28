@@ -47,7 +47,7 @@ read -r -p "Choose [1]: " auth_choice
 auth_choice="${auth_choice:-1}"
 
 inventory_line="${vps_host} ansible_user=${bootstrap_user} ansible_port=${bootstrap_port}"
-bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini --ask-pass"
+bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini --vault-password-file=.vault_pass --ask-pass"
 bootstrap_auth_method="password"
 
 case "$auth_choice" in
@@ -58,7 +58,7 @@ case "$auth_choice" in
   2|key|private-key|Private-key)
     bootstrap_key="$(read_default "Initial private key path" "$SSH_KEY_PATH")"
     inventory_line="${inventory_line} ansible_ssh_private_key_file=${bootstrap_key}"
-    bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini"
+    bootstrap_command="ansible-playbook playbooks/bootstrap-ssh.yml -i inventory/hosts.ini --vault-password-file=.vault_pass"
     bootstrap_auth_method="key"
     ;;
   *)
