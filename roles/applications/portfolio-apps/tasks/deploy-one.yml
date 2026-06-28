@@ -385,18 +385,33 @@
   no_log: true
 
 - name: "{{ app_name }} | Verify HTTP health endpoint"
-  ansible.builtin.uri:
-    url: "http://localhost:{{ app_port }}{{ '' if app_stack == 'nextjs' else app_health_endpoint }}"
-    method: GET
-    status_code: [200, 204, 301, 302, 304]
-    timeout: 10
+  ansible.builtin.command:
+    cmd: >-
+      docker exec {{ app_name }}
+      {% if app_stack == 'nextjs' %}
+      node -e "const http=require('http');const req=http.request({hostname:'localhost',port:{{ app_port }},path:'/',method:'GET',timeout:8000},(res)=>{process.exit(res.statusCode>=200&&res.statusCode<400?0:1);});req.on('error',()=>process.exit(1));req.on('timeout',()=>process.exit(1));req.end();"
+      {% elif app_stack == 'php' %}
+      php -r "exit(@fsockopen('127.0.0.1', {{ app_port }}) ? 0 : 1);"
+      {% else %}
+      wget -q -O - http://localhost:{{ app_port }}{{ app_health_endpoint }}
+      {% endif %}
   register: app_health
   retries: 10
   delay: 5
+  until: app_health.rc == 0
+  changed_when: false
   failed_when: false
   when:
     - portfolio_verify_health | bool
     - app_stack != 'laravel'
+
+- name: "{{ app_name }} | Warn if HTTP health endpoint did not respond"
+  ansible.builtin.debug:
+    msg: "WARNING: {{ app_name }} did not pass in-container HTTP health probe (rc={{ app_health.rc | default('n/a') }}). Container may still be starting; check logs if this persists."
+  when:
+    - portfolio_verify_health | bool
+    - app_stack != 'laravel'
+    - app_health.rc | default(1) != 0
 
 - name: "{{ app_name }} | Display deployment status"
   ansible.builtin.debug:

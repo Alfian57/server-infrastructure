@@ -151,7 +151,7 @@ portfolio_apps:
     run_seeder: true
     build:
       dockerfile: "docker/Dockerfile"
-      workflow: "built-and-deploy.yml"
+      workflow: "build-and-deploy.yml"
     env_template: "roles/applications/tech-talk-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]
     volumes:
@@ -654,7 +654,7 @@ portfolio_apps:
     stack: "golang"
     build:
       dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
+      workflow: "deploy.yml"
     app_port: 8080
     health_endpoint: "/health"
     env_template: "roles/applications/rebrand-uty-api-setup/templates/.env.j2"
@@ -677,7 +677,7 @@ portfolio_apps:
       required: false
     build:
       dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
+      workflow: "deploy.yml"
     app_port: 3000
     env_template: "roles/applications/rebrand-uty-web-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network"]
@@ -793,9 +793,6 @@ mysql_database_users:
   - database: "tugas_backend"
     username: "{{ vault_tugas_backend_db_username }}"
     password: "{{ vault_tugas_backend_db_password }}"
-  - database: "rebrand_uty"
-    username: "{{ vault_rebrand_uty_api_db_username }}"
-    password: "{{ vault_rebrand_uty_api_db_password }}"
 postgres_databases: >-
   {{
     (
