@@ -347,7 +347,7 @@
 
 - name: "{{ app_name }} | Run Go seeders when requested"
   ansible.builtin.command:
-    cmd: docker exec {{ app_name }} ./seeder
+    cmd: docker exec {{ app_name }} /app/bin/{{ portfolio_app.seeder_binary | default(app_name ~ "-seed") }}
   register: golang_seeder_result
   when:
     - app_stack == 'golang'
