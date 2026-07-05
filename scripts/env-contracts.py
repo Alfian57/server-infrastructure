@@ -410,13 +410,11 @@ def runtime_value(name: str, vault: dict[str, Any], variables: dict[str, Any]) -
         key_name = str(variables.get("ssh_key_name", "server_ed25519"))
         key_path = Path.home() / ".ssh" / key_name
         if not key_path.exists():
-            raise ContractError(f"missing SSH key {key_path}")
+            return ""
         return key_path.read_text(encoding="utf-8")
     if name == "vps_password":
         value = vault.get("vault_deployer_plaintext_password")
-        if not value:
-            raise ContractError("missing vault_deployer_plaintext_password in vault")
-        return str(value)
+        return str(value) if value else ""
     if name == "docker_token":
         value = vault.get("vault_github_token")
         if not value:
@@ -509,6 +507,9 @@ def sync_repo(
             print(f"FAIL {full_repo}: secret {key} ({exc})", file=sys.stderr)
             ok = False
             continue
+        if not value:
+            print(f"SKIP {full_repo}: secret {key} (empty value)")
+            continue
         ok = gh_set_secret(full_repo, key, value, dry_run, env) and ok
     for key, spec in ci["variables"].items():
         try:
@@ -516,6 +517,9 @@ def sync_repo(
         except ContractError as exc:
             print(f"FAIL {full_repo}: variable {key} ({exc})", file=sys.stderr)
             ok = False
+            continue
+        if not value:
+            print(f"SKIP {full_repo}: variable {key} (empty value)")
             continue
         ok = gh_set_variable(full_repo, key, value, dry_run, env) and ok
     return ok

@@ -227,16 +227,16 @@ check_files() {
     missing+=(".vault_pass")
   fi
   
-  if [ ! -f "$SSH_KEY_PATH" ]; then
-    missing+=("$SSH_KEY_PATH")
-  fi
-  
   if [ ${#missing[@]} -gt 0 ]; then
     echo -e "${RED}✗ Missing required files:${NC}"
     for file in "${missing[@]}"; do
       echo "  - $file"
     done
     return 1
+  fi
+
+  if [ ! -f "$SSH_KEY_PATH" ]; then
+    echo -e "${YELLOW}⚠ SSH key not found: $SSH_KEY_PATH (VPS_KEY secret will be skipped)${NC}"
   fi
   
   return 0

@@ -200,7 +200,7 @@ def cmd_deploy_tags(args: argparse.Namespace) -> int:
     if app["name"] == "pui":
         print("pui-setup")
         return 0
-    tags = ["application"]
+    tags = ["portfolio-apps"]
     if args.include_runtime_deps and app.get("requires_warp_proxy", False):
         tags.insert(0, "cloudflare-warp-setup")
     print(",".join(tags))

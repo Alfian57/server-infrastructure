@@ -297,6 +297,34 @@ ruang-tenang-web: check ## Ruang Tenang Web
 file-pod-api: check ## File Pod API
 	@$(MAKE) app APP=file-pod-api
 
+location-based-presence-web: check ## Location Based Presence Web
+	@$(MAKE) app APP=location-based-presence-web
+
+
+lelang-fashion-web: check ## Lelang Fashion Web
+	@$(MAKE) app APP=lelang-fashion-web
+
+
+pos-soto-saben: check ## POS Soto Saben
+	@$(MAKE) app APP=pos-soto-saben
+
+
+tugas-backend: check ## Tugas Backend
+	@$(MAKE) app APP=tugas-backend
+
+
+tugas-backend-api: check ## Tugas Backend API
+	@$(MAKE) app APP=tugas-backend-api
+
+
+sistertika-uty-api: check ## Sistertika UTY API
+	@$(MAKE) app APP=sistertika-uty-api
+
+
+sistertika-uty-web: check ## Sistertika UTY Web
+	@$(MAKE) app APP=sistertika-uty-web
+
+
 pui: check ## PUI / HashBox
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags pui-setup
 

@@ -204,6 +204,7 @@
       when:
         - setup_applications | bool
         - enable_pui_app | bool
+        - portfolio_app_filter | length == 0 or portfolio_app_filter == "pui"
 
     # ═══════════════════════════════════════════════════════════
     # OPTIMIZATION

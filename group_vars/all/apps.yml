@@ -648,30 +648,37 @@ portfolio_apps:
     dns:
       domain: "alfian-gading.my.id"
       records: ["tugas-backend"]
-  - name: "rebrand-uty-api"
+  - name: "sistertika-uty-api"
     enabled: true
-    repo: "rebrand-uty-api"
+    repo: "sistertika-uty-api"
+    destructive_allowed: true
     stack: "golang"
     build:
       dockerfile: "Dockerfile"
       workflow: "deploy.yml"
     app_port: 8080
     health_endpoint: "/health"
-    env_template: "roles/applications/rebrand-uty-api-setup/templates/.env.j2"
+    env_template: "roles/applications/sistertika-uty-api-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network", "postgres_network"]
     proxy:
       domain: "sistertika-api.alfian-gading.my.id"
       scheme: "http"
-      forward_host: "rebrand-uty-api"
+      forward_host: "sistertika-uty-api"
       forward_port: 8080
       caching_enabled: true
       websocket_support: false
       generate_ssl: false
       cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["sistertika-api"]
+    databases:
+      postgres: ["sistertika_uty"]
 
-  - name: "rebrand-uty-web"
+  - name: "sistertika-uty-web"
     enabled: true
-    repo: "rebrand-uty-web"
+    repo: "sistertika-uty-web"
+    destructive_allowed: true
     stack: "nextjs"
     env_contract:
       required: false
@@ -679,17 +686,20 @@ portfolio_apps:
       dockerfile: "Dockerfile"
       workflow: "deploy.yml"
     app_port: 3000
-    env_template: "roles/applications/rebrand-uty-web-setup/templates/.env.j2"
+    env_template: "roles/applications/sistertika-uty-web-setup/templates/.env.j2"
     networks: ["nginx_proxy_manager_network"]
     proxy:
       domain: "sistertika.alfian-gading.my.id"
       scheme: "http"
-      forward_host: "rebrand-uty-web"
+      forward_host: "sistertika-uty-web"
       forward_port: 3000
       caching_enabled: true
       websocket_support: false
       generate_ssl: false
       cloudflare_flexible: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["sistertika"]
 
   - name: "tugas-backend-api"
     enabled: false
@@ -801,14 +811,13 @@ postgres_databases: >-
         | map(attribute='postgres') | select('defined') | flatten | list
       )
       + (pui_app.databases.postgres | default([]))
-      + ["rebrand_uty"]
     )
     | unique | list
   }}
 postgres_database_users:
-  - database: "rebrand_uty"
-    username: "{{ vault_rebrand_uty_api_db_username }}"
-    password: "{{ vault_rebrand_uty_api_db_password }}"
+  - database: "sistertika_uty"
+    username: "{{ vault_sistertika_uty_api_db_username }}"
+    password: "{{ vault_sistertika_uty_api_db_password }}"
   - database: "pui"
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
