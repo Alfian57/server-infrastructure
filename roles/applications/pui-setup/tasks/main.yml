@@ -1,5 +1,5 @@
 ---
-- name: Validate PUI deployment variables
+- name: Validate Hashbox PUI deployment variables
   ansible.builtin.assert:
     that:
       - pui_db_username is defined
@@ -8,10 +8,10 @@
       - pui_db_password | length >= 16
       - github_token is defined
       - github_token | length > 0
-    fail_msg: "PUI requires vault_pui_db_username, vault_pui_db_password, and vault_github_token."
+    fail_msg: "Hashbox PUI requires vault_pui_db_username, vault_pui_db_password, and vault_github_token."
     quiet: true
 
-- name: Set PUI deployment facts
+- name: Set Hashbox PUI deployment facts
   ansible.builtin.set_fact:
     pui_admin_user: "{{ deploy_user | default(ansible_user | default('root')) }}"
     pui_ci_user: "{{ ci_deploy_user | default(deploy_user | default(ansible_user | default('root'))) }}"
@@ -21,7 +21,7 @@
       - "{{ pui_api_image }}"
       - "{{ pui_vault_image }}"
 
-- name: Create PUI application directory
+- name: Create Hashbox PUI application directory
   ansible.builtin.file:
     path: "{{ pui_install_dir }}"
     state: directory
@@ -29,7 +29,7 @@
     owner: "{{ pui_admin_user }}"
     group: "{{ pui_runtime_group }}"
 
-- name: Create PUI update log directory
+- name: Create Hashbox PUI update log directory
   ansible.builtin.file:
     path: "/var/log/docker-updates"
     state: directory
@@ -37,12 +37,12 @@
     owner: "{{ pui_admin_user }}"
     group: "{{ pui_runtime_group }}"
 
-- name: Check PUI update log file
+- name: Check Hashbox PUI update log file
   ansible.builtin.stat:
     path: "/var/log/docker-updates/{{ pui_app_name }}.log"
   register: pui_update_log_file
 
-- name: Create PUI update log file
+- name: Create Hashbox PUI update log file
   ansible.builtin.file:
     path: "/var/log/docker-updates/{{ pui_app_name }}.log"
     state: touch
@@ -51,7 +51,7 @@
     group: "{{ pui_runtime_group }}"
   when: not pui_update_log_file.stat.exists
 
-- name: Ensure PUI update log file is group writable
+- name: Ensure Hashbox PUI update log file is group writable
   ansible.builtin.file:
     path: "/var/log/docker-updates/{{ pui_app_name }}.log"
     mode: "0664"
@@ -59,7 +59,7 @@
     group: "{{ pui_runtime_group }}"
   when: pui_update_log_file.stat.exists
 
-- name: Log in to GitHub Container Registry for PUI
+- name: Log in to GitHub Container Registry for Hashbox PUI
   community.docker.docker_login:
     registry_url: "{{ docker_registry | default('ghcr.io') }}"
     username: "{{ github_username }}"
@@ -67,14 +67,14 @@
     reauthorize: true
   no_log: true
 
-- name: Validate PUI images exist
+- name: Validate Hashbox PUI images exist
   ansible.builtin.command: "docker manifest inspect {{ item }}"
   loop: "{{ pui_images }}"
   register: pui_ghcr_access_check
   failed_when: pui_ghcr_access_check.rc != 0
   changed_when: false
 
-- name: Copy PUI update helper
+- name: Copy Hashbox PUI update helper
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../roles/common/files/update.sh"
     dest: "{{ pui_install_dir }}/update.sh"
@@ -82,7 +82,7 @@
     owner: "{{ pui_admin_user }}"
     group: "{{ pui_runtime_group }}"
 
-- name: Render PUI environment
+- name: Render Hashbox PUI environment
   ansible.builtin.template:
     src: ".env.j2"
     dest: "{{ pui_install_dir }}/.env"
@@ -92,7 +92,7 @@
   register: pui_env_render
   no_log: true
 
-- name: Render PUI docker compose
+- name: Render Hashbox PUI docker compose
   ansible.builtin.template:
     src: docker-compose.yml.j2
     dest: "{{ pui_install_dir }}/docker-compose.yml"
@@ -101,7 +101,7 @@
     group: "{{ pui_runtime_group }}"
   register: pui_compose_render
 
-- name: Ensure PUI external networks exist
+- name: Ensure Hashbox PUI external networks exist
   community.docker.docker_network:
     name: "{{ item }}"
     state: present
@@ -109,7 +109,7 @@
     - "{{ nginx_proxy_network }}"
     - "{{ postgres_network }}"
 
-- name: Pull PUI images
+- name: Pull Hashbox PUI images
   community.docker.docker_image:
     name: "{{ item }}"
     source: pull
@@ -117,7 +117,7 @@
     state: present
   loop: "{{ pui_images }}"
 
-- name: Deploy PUI compose stack
+- name: Deploy Hashbox PUI compose stack
   community.docker.docker_compose_v2:
     project_src: "{{ pui_install_dir }}"
     pull: always
@@ -126,7 +126,7 @@
     state: present
   register: pui_deployment
 
-- name: Wait for PUI API to become healthy
+- name: Wait for Hashbox PUI API to become healthy
   community.docker.docker_container_info:
     name: pui-api-service
   register: pui_api_container_info
@@ -137,7 +137,7 @@
   retries: "{{ pui_api_health_retries }}"
   delay: "{{ pui_api_health_delay }}"
 
-- name: Wait for PUI web client to become healthy
+- name: Wait for Hashbox PUI web client to become healthy
   community.docker.docker_container_info:
     name: pui-web-client
   register: pui_web_container_info
@@ -148,7 +148,7 @@
   retries: 10
   delay: 6
 
-- name: Copy PUI dev seed SQL
+- name: Copy Hashbox PUI dev seed SQL
   ansible.builtin.copy:
     src: dev_admin.sql
     dest: "{{ pui_install_dir }}/dev_admin.sql"
@@ -157,7 +157,7 @@
     group: "{{ pui_runtime_group }}"
   when: pui_seed_dev_users | bool
 
-- name: Seed PUI dev users
+- name: Seed Hashbox PUI dev users
   ansible.builtin.command:
     argv:
       - docker
@@ -179,7 +179,7 @@
   no_log: true
   when: pui_seed_dev_users | bool
 
-- name: Verify PUI dependency status
+- name: Verify Hashbox PUI dependency status
   ansible.builtin.command:
     argv:
       - docker
@@ -193,9 +193,9 @@
   register: pui_status_check
   changed_when: false
 
-- name: Display PUI deployment status
+- name: Display Hashbox PUI deployment status
   ansible.builtin.debug:
     msg: >-
-      PUI deployed at https://{{ pui_web_domain }} with API https://{{ pui_api_domain }}.
+      Hashbox PUI deployed at https://{{ pui_web_domain }} with API https://{{ pui_api_domain }}.
       API container={{ pui_api_container_info.container.State.Health.Status | default('unknown') }};
       web container={{ pui_web_container_info.container.State.Health.Status | default('unknown') }}.

@@ -108,7 +108,7 @@ def cmd_list(_: argparse.Namespace) -> int:
     for app in apps():
         proxy = app.get("proxy", {})
         domain = proxy.get("domain") or proxy.get("subdomain", "-")
-        print(f"{app['name']:32} {app['stack']:10} {repo_ref(app):42} {image_name(app):42} {domain}")
+        print(f"{app.get('display_name', app['name']):32} {app['stack']:10} {repo_ref(app):42} {image_name(app):42} {domain}")
     return 0
 
 

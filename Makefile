@@ -270,12 +270,6 @@ posyandu: check ## Posyandu app
 solvo: check ## Solvo app
 	@$(MAKE) app APP=solvo
 
-demo-sql-injection: check ## Demo SQL Injection app
-	@$(MAKE) app APP=demo-sql-injection
-
-challenge-sql-injection: check ## Challenge SQL Injection app
-	@$(MAKE) app APP=challenge-sql-injection
-
 presensi-skansaba-web: check ## Presensi Skansaba Web app
 	@$(MAKE) app APP=presensi-skansaba-web
 
@@ -308,15 +302,6 @@ lelang-fashion-web: check ## Lelang Fashion Web
 pos-soto-saben: check ## POS Soto Saben
 	@$(MAKE) app APP=pos-soto-saben
 
-
-tugas-backend: check ## Tugas Backend
-	@$(MAKE) app APP=tugas-backend
-
-
-tugas-backend-api: check ## Tugas Backend API
-	@$(MAKE) app APP=tugas-backend-api
-
-
 sistertika-uty-api: check ## Sistertika UTY API
 	@$(MAKE) app APP=sistertika-uty-api
 
@@ -325,7 +310,7 @@ sistertika-uty-web: check ## Sistertika UTY Web
 	@$(MAKE) app APP=sistertika-uty-web
 
 
-pui: check ## PUI / HashBox
+pui: check ## Hashbox PUI
 	@ansible-playbook $(PLAYBOOK) $(OPTS) --tags pui-setup
 
 ##@ GitHub Actions (Local - No SSH to Server)

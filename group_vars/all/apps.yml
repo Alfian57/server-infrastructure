@@ -25,6 +25,7 @@ github_actions_defaults:
 
 pui_app:
   name: "pui"
+  display_name: "Hashbox PUI"
   enabled: true
   repo: "PUI"
   stack: "compose"
@@ -33,6 +34,9 @@ pui_app:
   env_template: "roles/applications/pui-setup/templates/.env.j2"
   env_contract:
     path: ".env.example"
+    ignore_keys:
+      - "PGADMIN_DEFAULT_EMAIL"
+      - "PGADMIN_DEFAULT_PASSWORD"
   images:
     web: "ghcr.io/alfian57/pui-web-client:latest"
     api: "ghcr.io/alfian57/pui-api-service:latest"
@@ -43,6 +47,8 @@ pui_app:
         value: "https://pui-api.alfian-gading.my.id"
       VITE_ENVIRONMENT_NAME:
         value: "production"
+      VITE_SECURITY_LAB_ENABLED:
+        value: "false"
   proxy_hosts:
     - subdomain: "pui"
       scheme: "http"
@@ -146,6 +152,7 @@ portfolio_apps:
       mysql: ["ruang_istirahat"]
 
   - name: "tech-talk"
+    enabled: false
     repo: "tech-talk"
     stack: "laravel"
     run_seeder: true
@@ -238,9 +245,9 @@ portfolio_apps:
     ci:
       variables:
         NEXT_PUBLIC_APP_URL:
-          value: "https://solvo-tech.site"
+          value: "https://solvo.alfian-gading.my.id"
         NEXTAUTH_URL:
-          value: "https://solvo-tech.site"
+          value: "https://solvo.alfian-gading.my.id"
     networks: ["nginx_proxy_manager_network", "postgres_network"]
     volumes:
       - "solvo_uploads:/app/public/uploads"
@@ -250,7 +257,7 @@ portfolio_apps:
     run_seeder: true
     seed_on: "fresh"
     proxy:
-      domain: "solvo-tech.site"
+      domain: "solvo.alfian-gading.my.id"
       scheme: "http"
       forward_host: "solvo"
       forward_port: 3000
@@ -258,8 +265,8 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "solvo-tech.site"
-      records: ["@"]
+      domain: "alfian-gading.my.id"
+      records: ["solvo"]
     databases:
       postgres: ["solvo_tech"]
 
@@ -279,7 +286,7 @@ portfolio_apps:
     run_seeder: true
     seed_on: "fresh"
     proxy:
-      domain: "location-based-presence.solvo-tech.site"
+      domain: "location-based-presence.alfian-gading.my.id"
       scheme: "http"
       forward_host: "location-based-presence-web"
       forward_port: 80
@@ -287,7 +294,7 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "solvo-tech.site"
+      domain: "alfian-gading.my.id"
       records: ["location-based-presence"]
     databases:
       mysql: ["location_based_presence"]
@@ -314,7 +321,7 @@ portfolio_apps:
       - "lelang_fashion_web_storage:/var/www/html/storage"
     env_mount_path: "/var/www/html/.env"
     proxy:
-      domain: "lelang-fashion.solvo-tech.site"
+      domain: "lelang-fashion.alfian-gading.my.id"
       scheme: "http"
       forward_host: "lelang-fashion-web"
       forward_port: 80
@@ -322,7 +329,7 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "solvo-tech.site"
+      domain: "alfian-gading.my.id"
       records: ["lelang-fashion"]
     databases:
       mysql: ["pelelangan_produk_fashion"]
@@ -354,7 +361,7 @@ portfolio_apps:
     run_seeder: true
     seed_on: "fresh"
     proxy:
-      domain: "pos-soto-saben.solvo-tech.site"
+      domain: "pos-soto-saben.alfian-gading.my.id"
       scheme: "http"
       forward_host: "pos-soto-saben"
       forward_port: 80
@@ -362,72 +369,10 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "solvo-tech.site"
+      domain: "alfian-gading.my.id"
       records: ["pos-soto-saben"]
     databases:
       mysql: ["pos_soto_saben"]
-
-  - name: "demo-sql-injection"
-    enabled: false
-    repo_owner: "Alfian57"
-    repo: "demo-sql-injection"
-    image: "ghcr.io/alfian57/demo-sql-injection:latest"
-    stack: "php"
-    build:
-      dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
-    app_port: 80
-    health_endpoint: "/"
-    env_template: "roles/applications/demo-sql-injection-setup/templates/.env.j2"
-    networks: ["nginx_proxy_manager_network", "mysql_network"]
-    run_mysql_seed: true
-    mysql_seed_on: "always"
-    mysql_seed_destructive: true
-    mysql_seed_template: "roles/applications/demo-sql-injection-setup/templates/mysql-seed.sql.j2"
-    proxy:
-      subdomain: "demo-sql-injection"
-      scheme: "http"
-      forward_host: "demo-sql-injection"
-      forward_port: 80
-      caching_enabled: false
-      websocket_support: false
-      cloudflare_flexible: true
-    dns:
-      domain: "alfian-gading.my.id"
-      records: ["demo-sql-injection"]
-    databases:
-      mysql: ["bank_lab"]
-
-  - name: "challenge-sql-injection"
-    enabled: false
-    repo_owner: "Alfian57"
-    repo: "challenge-sql-injection"
-    image: "ghcr.io/alfian57/challenge-sql-injection:latest"
-    stack: "php"
-    build:
-      dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
-    app_port: 80
-    health_endpoint: "/"
-    env_template: "roles/applications/challenge-sql-injection-setup/templates/.env.j2"
-    networks: ["nginx_proxy_manager_network", "mysql_network"]
-    run_mysql_seed: true
-    mysql_seed_on: "always"
-    mysql_seed_destructive: true
-    mysql_seed_template: "roles/applications/challenge-sql-injection-setup/templates/mysql-seed.sql.j2"
-    proxy:
-      subdomain: "challenge-sql-injection"
-      scheme: "http"
-      forward_host: "challenge-sql-injection"
-      forward_port: 80
-      caching_enabled: false
-      websocket_support: false
-      cloudflare_flexible: true
-    dns:
-      domain: "alfian-gading.my.id"
-      records: ["challenge-sql-injection"]
-    databases:
-      mysql: ["academic_lab"]
 
   - name: "campus-project-hub-api"
     enabled: false
@@ -485,7 +430,7 @@ portfolio_apps:
       NO_PROXY: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
       no_proxy: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
     proxy:
-      domain: "api.ruang-tenang.site"
+      domain: "ruang-tenang-api.alfian-gading.my.id"
       scheme: "http"
       forward_host: "ruang-tenang-api"
       forward_port: 8080
@@ -493,8 +438,8 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "ruang-tenang.site"
-      records: ["api"]
+      domain: "alfian-gading.my.id"
+      records: ["ruang-tenang-api"]
     databases:
       postgres: ["ruang_tenang"]
 
@@ -566,12 +511,14 @@ portfolio_apps:
         NEXT_PUBLIC_APP_TIMEZONE:
           value: "Asia/Jakarta"
         NEXT_PUBLIC_ALLOWED_IMAGE_HOSTS:
-          value: "api.ruang-tenang.site"
+          value: "ruang-tenang-api.alfian-gading.my.id"
         NEXT_PUBLIC_MIDTRANS_ENV:
           value: "production"
+        NEXT_PUBLIC_DUITKU_ENV:
+          value: "sandbox"
     networks: ["nginx_proxy_manager_network"]
     proxy:
-      domain: "ruang-tenang.site"
+      domain: "ruang-tenang.alfian-gading.my.id"
       scheme: "http"
       forward_host: "ruang-tenang-web"
       forward_port: 3000
@@ -579,8 +526,8 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "ruang-tenang.site"
-      records: ["@"]
+      domain: "alfian-gading.my.id"
+      records: ["ruang-tenang"]
 
   - name: "file-pod-api"
     enabled: false
@@ -617,37 +564,6 @@ portfolio_apps:
     databases:
       postgres: ["file_pod"]
 
-  - name: "tugas-backend"
-    enabled: false
-    repo: "tugas-backend-frontend"
-    stack: "express"
-    build:
-      dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
-    app_port: 80
-    health_endpoint: "/"
-    env_contract:
-      ignore_keys: ["VITE_API_URL"]
-    networks: ["nginx_proxy_manager_network"]
-    use_prisma: false
-    run_migrate: false
-    run_fresh_migrate: false
-    run_seeder: false
-    ci:
-      variables:
-        VITE_API_URL:
-          value: "https://tugas-backend-api.alfian-gading.my.id"
-    proxy:
-      domain: "tugas-backend.alfian-gading.my.id"
-      scheme: "http"
-      forward_host: "tugas-backend"
-      forward_port: 80
-      caching_enabled: false
-      websocket_support: false
-      cloudflare_flexible: true
-    dns:
-      domain: "alfian-gading.my.id"
-      records: ["tugas-backend"]
   - name: "sistertika-uty-api"
     enabled: true
     repo: "sistertika-uty-api"
@@ -701,35 +617,6 @@ portfolio_apps:
       domain: "alfian-gading.my.id"
       records: ["sistertika"]
 
-  - name: "tugas-backend-api"
-    enabled: false
-    repo: "tugas-backend-api"
-    stack: "express"
-    build:
-      dockerfile: "Dockerfile"
-      workflow: "build-and-deploy.yml"
-    app_port: 3000
-    health_endpoint: "/health"
-    env_template: "roles/applications/tugas-backend-api-setup/templates/.env.j2"
-    networks: ["nginx_proxy_manager_network", "mysql_network"]
-    use_prisma: true
-    run_migrate: true
-    run_fresh_migrate: false
-    run_seeder: false
-    proxy:
-      domain: "tugas-backend-api.alfian-gading.my.id"
-      scheme: "http"
-      forward_host: "tugas-backend-api"
-      forward_port: 3000
-      caching_enabled: false
-      websocket_support: false
-      cloudflare_flexible: true
-    dns:
-      domain: "alfian-gading.my.id"
-      records: ["tugas-backend-api"]
-    databases:
-      mysql: ["tugas_backend"]
-
 mobile_repositories:
   - name: "file-pod-mobile"
     variables:
@@ -744,7 +631,7 @@ mobile_repositories:
     build:
       workflow: "mobile.yml"
     variables:
-      API_BASE_URL: "https://location-based-presence.solvo-tech.site/api/mobile"
+      API_BASE_URL: "https://location-based-presence.alfian-gading.my.id/api/mobile"
       API_BASE_URL_DEBUG: "https://thankful-midge-noble.ngrok-free.app/api/mobile"
     ci:
       variables:
@@ -758,7 +645,7 @@ mobile_repositories:
     build:
       workflow: "mobile.yml"
     variables:
-      API_BASE_URL: "https://lelang-fashion.solvo-tech.site/api"
+      API_BASE_URL: "https://lelang-fashion.alfian-gading.my.id/api"
       API_BASE_URL_DEBUG: "https://handwoven-ramp-avid.ngrok-free.dev/api"
     ci:
       variables:
@@ -772,7 +659,7 @@ mobile_repositories:
     build:
       workflow: "build-and-deploy.yml"
     variables:
-      API_BASE_URL: "https://pos-soto-saben.solvo-tech.site/api"
+      API_BASE_URL: "https://pos-soto-saben.alfian-gading.my.id/api"
       API_BASE_URL_DEBUG: "https://thankful-midge-noble.ngrok-free.app/api"
     ci:
       variables:
@@ -794,15 +681,6 @@ mysql_database_users:
   - database: "pos_soto_saben"
     username: "{{ vault_pos_soto_saben_db_username }}"
     password: "{{ vault_pos_soto_saben_db_password }}"
-  - database: "bank_lab"
-    username: "{{ vault_demo_sql_injection_db_username }}"
-    password: "{{ vault_demo_sql_injection_db_password }}"
-  - database: "academic_lab"
-    username: "{{ vault_challenge_sql_injection_db_username }}"
-    password: "{{ vault_challenge_sql_injection_db_password }}"
-  - database: "tugas_backend"
-    username: "{{ vault_tugas_backend_db_username }}"
-    password: "{{ vault_tugas_backend_db_password }}"
 postgres_databases: >-
   {{
     (

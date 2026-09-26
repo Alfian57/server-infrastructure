@@ -43,7 +43,7 @@ vault_materi_ku:
 
 # Location Based Presence Web
 vault_location_based_presence_web_app_key: "base64:generate-with-php-artisan-key:generate"
-vault_location_based_presence_web_app_url: "https://location-based-presence.solvo-tech.site"
+vault_location_based_presence_web_app_url: "https://location-based-presence.alfian-gading.my.id"
 vault_location_based_presence_web_db_host: "mysql-db"
 vault_location_based_presence_web_db_port: "3306"
 vault_location_based_presence_web_db_database: "location_based_presence"
@@ -51,38 +51,36 @@ vault_location_based_presence_web_db_username: "location_based_presence"
 vault_location_based_presence_web_db_password: "change-this-db-password"
 
 # Location Based Presence Mobile
-vault_location_based_presence_mobile_api_base_url: "https://location-based-presence.solvo-tech.site/api/mobile"
+vault_location_based_presence_mobile_api_base_url: "https://location-based-presence.alfian-gading.my.id/api/mobile"
 
 # Lelang Fashion Web
 vault_lelang_fashion_web_app_key: "base64:generate-with-php-artisan-key:generate"
-vault_lelang_fashion_web_app_url: "https://lelang-fashion.solvo-tech.site"
+vault_lelang_fashion_web_app_url: "https://lelang-fashion.alfian-gading.my.id"
 vault_lelang_fashion_web_db_host: "mysql-db"
 vault_lelang_fashion_web_db_port: "3306"
 vault_lelang_fashion_web_db_database: "pelelangan_produk_fashion"
 vault_lelang_fashion_web_db_username: "lelang_fashion"
 vault_lelang_fashion_web_db_password: "change-this-db-password"
 vault_lelang_fashion_web_fonnte_token: ""
+vault_lelang_fashion_web_duitku_api_key: ""
+vault_lelang_fashion_web_duitku_merchant_code: ""
+
+# POS Soto Saben
+vault_pos_soto_saben_duitku_api_key: ""
+vault_pos_soto_saben_duitku_merchant_code: ""
+
+# Ruang Tenang API
+vault_ruang_tenang_api_deepseek_api_key: ""
+vault_ruang_tenang_api_duitku_api_key: ""
+vault_ruang_tenang_api_duitku_merchant_code: ""
+vault_ruang_tenang_api_fonnte_token: ""
 
 # Lelang Fashion Mobile
-vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.solvo-tech.site/api"
-
-# Demo SQL Injection
-vault_demo_sql_injection_db_host: "mysql-db"
-vault_demo_sql_injection_db_port: "3306"
-vault_demo_sql_injection_db_database: "bank_lab"
-vault_demo_sql_injection_db_username: "demo_sql_injection"
-vault_demo_sql_injection_db_password: "change-this-db-password"
-
-# Challenge SQL Injection
-vault_challenge_sql_injection_db_host: "mysql-db"
-vault_challenge_sql_injection_db_port: "3306"
-vault_challenge_sql_injection_db_database: "academic_lab"
-vault_challenge_sql_injection_db_username: "challenge_sql_injection"
-vault_challenge_sql_injection_db_password: "change-this-db-password"
+vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.alfian-gading.my.id/api"
 
 # Solvo Tech Next.js
-vault_solvo_app_url: "https://solvo-tech.site"
-vault_solvo_nextauth_url: "https://solvo-tech.site"
+vault_solvo_app_url: "https://solvo.alfian-gading.my.id"
+vault_solvo_nextauth_url: "https://solvo.alfian-gading.my.id"
 vault_solvo_auth_secret: "change-this-auth-secret"
 vault_solvo_cron_secret: "change-this-cron-secret"
 vault_solvo_db_host: "postgres-db"
@@ -90,15 +88,16 @@ vault_solvo_db_port: "5432"
 vault_solvo_db_database: "solvo_tech"
 vault_solvo_db_username: "solvo_tech"
 vault_solvo_db_password: "change-this-db-password"
-vault_solvo_seed_admin_email: "admin@solvo-tech.site"
+vault_solvo_seed_admin_email: "admin@solvo.alfian-gading.my.id"
 vault_solvo_seed_admin_password: "change-this-admin-password"
 vault_solvo_smtp_host: ""
 vault_solvo_smtp_port: "587"
 vault_solvo_smtp_user: ""
 vault_solvo_smtp_password: ""
-vault_solvo_smtp_from: "Solvo Tech <no-reply@solvo-tech.site>"
-vault_solvo_whatsapp_api_url: ""
+vault_solvo_smtp_from: "Solvo Tech <no-reply@solvo.alfian-gading.my.id>"
+vault_solvo_whatsapp_api_url: "https://api.fonnte.com/send"
 vault_solvo_whatsapp_api_key: ""
+
 
 # Add more as needed...
 

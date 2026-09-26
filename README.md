@@ -69,7 +69,7 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
     │   ├── materi-ku-setup/       # Laravel app
     │   ├── panca-trivia-setup/    # Laravel app
     │   ├── ruang-istirahat-setup/ # Laravel app
-    │   └── tech-talk-setup/       # Laravel app
+    │   └── tech-talk-setup/       # Laravel app (disabled in app catalog)
     │
     └── optimization/              # 💰 Optimization
         └── cost-optimization/     # Cleanup, monitoring, limits
@@ -460,7 +460,7 @@ Semua aplikasi menggunakan **shared deployment tasks** untuk consistency:
 - **materi-ku-setup**: Laravel application (menggunakan `deploy-laravel-app.yml`)
 - **panca-trivia-setup**: Laravel application (menggunakan `deploy-laravel-app.yml`)
 - **ruang-istirahat-setup**: Laravel application (menggunakan `deploy-laravel-app.yml`)
-- **tech-talk-setup**: Laravel application (menggunakan `deploy-laravel-app.yml`)
+- **tech-talk-setup**: Laravel application (disabled in app catalog; menggunakan `deploy-laravel-app.yml`)
 
 ### 📦 Common/Shared
 
