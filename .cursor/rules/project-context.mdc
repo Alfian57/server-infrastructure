@@ -1,0 +1,8 @@
+---
+description: Instruksi project kanonik untuk repository Ansible ini
+alwaysApply: true
+---
+
+Ikuti instruksi project di `AGENTS.md` pada root repository.
+
+@AGENTS.md
