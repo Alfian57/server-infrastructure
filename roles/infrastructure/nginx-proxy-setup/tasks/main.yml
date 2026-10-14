@@ -307,8 +307,12 @@
     - name: Build list of desired domain names
       ansible.builtin.set_fact:
         npm_desired_domains_full: >-
-          {{ proxy_hosts | selectattr('domain', 'defined') | map(attribute='domain') | list
-          + proxy_hosts | selectattr('subdomain', 'defined') | map(attribute='subdomain') | map('regex_replace', '^(.+)$', '\1.' + npm_domain_name) | list }}
+          {{
+            (proxy_hosts | selectattr('domains', 'defined') | map(attribute='domains') | flatten | list)
+            + (proxy_hosts | selectattr('domain', 'defined') | map(attribute='domain') | list)
+            + (proxy_hosts | selectattr('subdomain', 'defined') | map(attribute='subdomain') | map('regex_replace', '^(.+)$', '\1.' + npm_domain_name) | list)
+            | unique | list
+          }}
       when: proxy_hosts is defined
 
     - name: Remove proxy hosts for disabled apps
@@ -347,13 +351,16 @@
         body: "{{ npm_proxy_host_body }}"
         status_code: [200, 201]
       vars:
-        target_domain: "{{ item.domain if item.domain is defined else (item.subdomain + '.' + npm_domain_name) }}"
+        target_domains: >-
+          {{ item.domains if item.domains is defined
+             else [item.domain] if item.domain is defined
+             else [item.subdomain + '.' + npm_domain_name] }}
+        target_domain: "{{ target_domains | first }}"
         existing_host: "{{ existing_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
         existing_host_id: "{{ existing_host.id | default('') }}"
         cloudflare_edge: "{{ item.cloudflare_flexible | default(false) | bool }}"
         npm_proxy_host_base_body:
-          domain_names:
-            - "{{ target_domain }}"
+          domain_names: "{{ target_domains }}"
           forward_scheme: "{{ item.scheme }}"
           forward_host: "{{ item.forward_host }}"
           forward_port: "{{ item.forward_port | int }}"
@@ -839,7 +846,11 @@
         dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
         mode: "0644"
       vars:
-        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        target_domains: >-
+          {{ item.domains if item.domains is defined
+             else [item.domain] if item.domain is defined
+             else [item.subdomain + '.' + npm_domain_name] }}
+        target_domain: "{{ target_domains | first }}"
         host_id: "{{ cloudflare_domain_proxy_hosts[target_domain].id | default(0) }}"
         forward_host: "{{ item.forward_host }}"
         forward_port: "{{ item.forward_port }}"
@@ -862,7 +873,11 @@
         dest: "/var/lib/docker/volumes/nginx-proxy-manager_npm_data/_data/nginx/proxy_host/{{ host_id }}.conf"
         mode: "0644"
       vars:
-        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        target_domains: >-
+          {{ item.domains if item.domains is defined
+             else [item.domain] if item.domain is defined
+             else [item.subdomain + '.' + npm_domain_name] }}
+        target_domain: "{{ target_domains | first }}"
         host_id: "{{ failed_domain_proxy_hosts[target_domain].id | default(0) }}"
         forward_host: "{{ item.forward_host }}"
         forward_port: "{{ item.forward_port }}"
@@ -910,15 +925,18 @@
         body: "{{ npm_proxy_host_ssl_body }}"
         status_code: [200, 201]
       vars:
-        target_domain: "{% if item.domain is defined %}{{ item.domain }}{% else %}{{ item.subdomain }}.{{ npm_domain_name }}{% endif %}"
+        target_domains: >-
+          {{ item.domains if item.domains is defined
+             else [item.domain] if item.domain is defined
+             else [item.subdomain + '.' + npm_domain_name] }}
+        target_domain: "{{ target_domains | first }}"
         current_host: "{{ current_proxy_hosts.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
         proxy_host_id: "{{ current_host.id | default('') }}"
         cert_for_domain: "{{ updated_certificates.json | selectattr('domain_names', 'contains', target_domain) | list | first | default({}) }}"
         certificate_id: "{{ cert_for_domain.id | default(0) }}"
         cloudflare_edge: "{{ item.cloudflare_flexible | default(false) | bool }}"
         npm_proxy_host_ssl_body:
-          domain_names:
-            - "{{ target_domain }}"
+          domain_names: "{{ target_domains }}"
           forward_scheme: "{{ item.scheme }}"
           forward_host: "{{ item.forward_host }}"
           forward_port: "{{ item.forward_port | int }}"

@@ -1,5 +1,0 @@
----
-# Internal variables
-npm_api_base_url: "http://{{ ansible_default_ipv4.address }}:81/api"
-npm_default_admin_email: "admin@example.com"
-npm_default_admin_password: "changeme"

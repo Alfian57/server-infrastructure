@@ -115,7 +115,7 @@ for domain in "${!DOMAINS_CONFIG[@]}"; do
   fi
   
   # Get A records
-  records=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A")
+  records=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?type=A&per_page=100")
 
   record_list=()
   read -r -a record_list <<< "${DOMAINS_CONFIG[$domain]}"

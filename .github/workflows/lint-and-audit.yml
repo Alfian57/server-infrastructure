@@ -1,0 +1,64 @@
+---
+name: Lint and Audit
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lint-and-audit:
+    name: Lint, Syntax & Catalog Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible ansible-lint yamllint pyyaml
+
+      - name: Install Ansible Galaxy collections
+        run: |
+          if [ -f requirements.yml ]; then
+            ansible-galaxy collection install -r requirements.yml
+          fi
+
+      - name: Run yamllint
+        run: |
+          yamllint -c .yamllint .
+
+      - name: Setup dummy vault password for syntax checks
+        run: |
+          echo "ci-dummy-vault-pass" > .vault_pass
+
+      - name: Check Ansible Playbook syntax
+        run: |
+          ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --vault-password-file=.vault_pass --syntax-check
+
+      - name: Run ansible-lint
+        run: |
+          ANSIBLE_VAULT_PASSWORD_FILE=.vault_pass ansible-lint playbooks/server-setup.yml
+
+      - name: Check Shell scripts syntax
+        run: |
+          find scripts roles group_vars -name "*.sh" -print0 | xargs -0 -n1 bash -n
+
+      - name: Validate Application Catalog Integrity
+        run: |
+          ./scripts/app-catalog.py doctor
+
+      - name: Check Application Environment Templates
+        run: |
+          ./scripts/app-catalog.py env-check

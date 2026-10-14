@@ -17,8 +17,9 @@ vault.yml.decrypted
 !**/.env.example
 !**/.env.j2
 
-# Codex local state and credentials
+# Codex and Agent local state
 .codex/
+.agents/
 app/
 
 # SSH keys (in case accidentally placed here)

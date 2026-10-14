@@ -112,23 +112,22 @@
       when: docker_users | length > 0
       register: docker_group_added
 
+    - name: Ensure /etc/docker directory exists
+      ansible.builtin.file:
+        path: /etc/docker
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+
     - name: Configure Docker daemon
-      ansible.builtin.copy:
+      ansible.builtin.template:
+        src: daemon.json.j2
         dest: /etc/docker/daemon.json
-        content: "{{ docker_daemon_config | to_nice_json }}"
         mode: "0644"
-        owner: "root"
-        group: "root"
-      vars:
-        docker_daemon_config:
-          log-driver: "json-file"
-          log-opts:
-            max-size: "10m"
-            max-file: "3"
-          storage-driver: "overlay2"
-          live-restore: true
+        owner: root
+        group: root
       notify: Restart Docker
-      when: not (setup_security | default(false) | bool)
 
     - name: Flush handlers to restart Docker if needed
       ansible.builtin.meta: flush_handlers

@@ -16,7 +16,7 @@ server {
   listen 80;
   listen 443 ssl;
 
-  server_name {{ target_domain }};
+  server_name {{ target_domains | default([target_domain]) | join(' ') }};
   http2 on;
 
   # Self-signed SSL (for Cloudflare Flexible SSL mode)

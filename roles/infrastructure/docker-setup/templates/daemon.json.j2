@@ -1,0 +1,26 @@
+{
+  "log-driver": "{{ docker_log_driver | default('json-file') }}",
+  "log-opts": {
+    "max-size": "{{ docker_log_max_size | default('10m') }}",
+    "max-file": "{{ docker_log_max_file | default('3') }}",
+    "compress": "{{ docker_log_compress | default('true') }}"
+  },
+  "storage-driver": "{{ docker_storage_driver | default('overlay2') }}",
+{% if (docker_userns_remap | default('disabled')) != 'disabled' %}
+  "userns-remap": "{{ docker_userns_remap }}",
+{% endif %}
+  "no-new-privileges": {{ docker_no_new_privileges | default(false) | bool | lower }},
+{% if docker_use_seccomp | default(false) | bool %}
+  "seccomp-profile": "/etc/docker/seccomp/default.json",
+{% endif %}
+  "icc": {{ docker_icc | default(false) | bool | lower }},
+  "userland-proxy": {{ docker_userland_proxy | default(false) | bool | lower }},
+  "live-restore": {{ docker_live_restore | default(true) | bool | lower }},
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Hard": {{ docker_ulimits_nofile_hard | default(64000) }},
+      "Soft": {{ docker_ulimits_nofile_soft | default(64000) }}
+    }
+  }
+}

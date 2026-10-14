@@ -92,6 +92,55 @@
     - users_defined | default(false)
     - not (item.sudo_nopasswd | default(false) | bool)
 
+- name: Manage systemd linger for active users
+  ansible.builtin.command: >-
+    loginctl {{ 'enable-linger' if (item.linger | default(false) | bool) else 'disable-linger' }} {{ item.name }}
+  args:
+    creates: "{{ ('/var/lib/systemd/linger/' ~ item.name) if (item.linger | default(false) | bool) else omit }}"
+    removes: "{{ omit if (item.linger | default(false) | bool) else ('/var/lib/systemd/linger/' ~ item.name) }}"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }} (linger={{ item.linger | default(false) }})"
+  when:
+    - users_defined | default(false)
+    - item.state | default('present') == 'present'
+    - item.linger is defined
+
+- name: Disable systemd linger for removed users
+  ansible.builtin.command: "loginctl disable-linger {{ item.name }}"
+  args:
+    removes: "/var/lib/systemd/linger/{{ item.name }}"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - users_defined | default(false)
+    - item.state | default('present') == 'absent'
+
+- name: Enforce directory isolation permissions on user home directories
+  ansible.builtin.file:
+    path: "/home/{{ item.name }}"
+    state: directory
+    owner: "{{ item.name }}"
+    group: "{{ item.name }}"
+    mode: "0700"
+  loop: "{{ users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - users_defined | default(false)
+    - item.state | default('present') == 'present'
+    - not item.system | default(false)
+
+- name: Enforce directory isolation on application stack directory
+  ansible.builtin.file:
+    path: "{{ docker_stack_base | default('/opt/docker-stack') }}"
+    state: directory
+    owner: "{{ deploy_user | default('deployer') }}"
+    group: docker
+    mode: "0770"
+  when: docker_stack_base is defined
+
 # NOTE: Reboot is NOT needed for user changes
 # Removed automatic reboot - it was causing unnecessary restarts
 # User changes take effect immediately for new sessions

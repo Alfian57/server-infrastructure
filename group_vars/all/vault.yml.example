@@ -16,10 +16,10 @@ vault_github_token: "REPLACE_WITH_GITHUB_PAT"
 vault_docker_password: "your-github-personal-access-token"
 
 # User Management Secrets
-vault_users:
-  - username: "deploy"
-    password: "$6$rounds=656000$... (use mkpasswd --method=sha-512)"
-    ssh_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
+vault_user_deployer_password: "$6$rounds=656000$... (use mkpasswd --method=sha-512)"
+vault_user_alfiang_password: "$6$rounds=656000$... (use mkpasswd --method=sha-512)"
+vault_user_dery_password: "$6$rounds=656000$... (temporary user - use mkpasswd or openssl passwd -6)"
+vault_server_ssh_public_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... user@host"
 
 # Database Credentials - MySQL
 vault_mysql_root_password: "change-this-strong-password-min-20-chars"

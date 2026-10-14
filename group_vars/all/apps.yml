@@ -232,22 +232,23 @@ portfolio_apps:
     databases:
       mysql: ["presensi_skansaba"]
 
-  - name: "solvo"
-    repo_owner: "SolvoTech"
-    repo: "solvo-tech"
-    image: "ghcr.io/solvotech/solvo-tech:latest"
+  - name: "aldera"
+    display_name: "Aldera Tech"
+    repo_owner: "AlderaTech"
+    repo: "aldera-tech"
+    image: "ghcr.io/alderatech/aldera-tech:latest"
     stack: "nextjs"
     build:
-      dockerfile: "Dockerfile"
+      dockerfile: "docker/Dockerfile"
       workflow: "build-and-deploy.yml"
     app_port: 3000
-    env_template: "roles/applications/solvo-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/aldera.env.j2"
     ci:
       variables:
         NEXT_PUBLIC_APP_URL:
-          value: "https://solvo.alfian-gading.my.id"
+          value: "https://aldera.tech"
         NEXTAUTH_URL:
-          value: "https://solvo.alfian-gading.my.id"
+          value: "https://aldera.tech"
     networks: ["nginx_proxy_manager_network", "postgres_network"]
     volumes:
       - "solvo_uploads:/app/public/uploads"
@@ -257,28 +258,28 @@ portfolio_apps:
     run_seeder: true
     seed_on: "fresh"
     proxy:
-      domain: "solvo.alfian-gading.my.id"
+      domain: "aldera.tech"
       scheme: "http"
-      forward_host: "solvo"
+      forward_host: "aldera"
       forward_port: 3000
       caching_enabled: true
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "alfian-gading.my.id"
-      records: ["solvo"]
+      domain: "aldera.tech"
+      records: ["@"]
     databases:
       postgres: ["solvo_tech"]
 
   - name: "location-based-presence-web"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     repo: "location-based-presence-web"
-    image: "ghcr.io/solvotech/location-based-presence-web:latest"
+    image: "ghcr.io/alderatech/location-based-presence-web:latest"
     stack: "laravel"
     build:
       dockerfile: "docker/Dockerfile"
       workflow: "web.yml"
-    env_template: "roles/applications/location-based-presence-web-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/location-based-presence-web.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]
     volumes:
       - "location_based_presence_web_storage:/var/www/html/storage"
@@ -300,15 +301,15 @@ portfolio_apps:
       mysql: ["location_based_presence"]
 
   - name: "lelang-fashion-web"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     repo: "lelang-fashion-web"
-    image: "ghcr.io/solvotech/lelang-fashion-web:latest"
+    image: "ghcr.io/alderatech/lelang-fashion-web:latest"
     stack: "laravel"
     run_seeder: true
     build:
       dockerfile: "docker/Dockerfile"
       workflow: "web.yml"
-    env_template: "roles/applications/lelang-fashion-web-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/lelang-fashion-web.env.j2"
     ci:
       secrets:
         APP_KEY:
@@ -335,9 +336,9 @@ portfolio_apps:
       mysql: ["pelelangan_produk_fashion"]
 
   - name: "pos-soto-saben"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     repo: "pos-soto-saben"
-    image: "ghcr.io/solvotech/pos-soto-saben:latest"
+    image: "ghcr.io/alderatech/pos-soto-saben:latest"
     stack: "laravel"
     build:
       dockerfile: "web/docker/Dockerfile"
@@ -352,7 +353,7 @@ portfolio_apps:
         API_BASE_URL_DEBUG:
           value: "https://thankful-midge-noble.ngrok-free.app/api"
     app_port: 80
-    env_template: "roles/applications/pos-soto-saben-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/pos-soto-saben.env.j2"
     networks: ["nginx_proxy_manager_network", "mysql_network"]
     volumes:
       - "pos_soto_saben_storage:/var/www/storage"
@@ -430,7 +431,7 @@ portfolio_apps:
       NO_PROXY: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
       no_proxy: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
     proxy:
-      domain: "ruang-tenang-api.alfian-gading.my.id"
+      domain: "api.ruang-tenang.my.id"
       scheme: "http"
       forward_host: "ruang-tenang-api"
       forward_port: 8080
@@ -438,8 +439,8 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "alfian-gading.my.id"
-      records: ["ruang-tenang-api"]
+      domain: "ruang-tenang.my.id"
+      records: ["api"]
     databases:
       postgres: ["ruang_tenang"]
 
@@ -511,14 +512,14 @@ portfolio_apps:
         NEXT_PUBLIC_APP_TIMEZONE:
           value: "Asia/Jakarta"
         NEXT_PUBLIC_ALLOWED_IMAGE_HOSTS:
-          value: "ruang-tenang-api.alfian-gading.my.id"
+          value: "api.ruang-tenang.my.id"
         NEXT_PUBLIC_MIDTRANS_ENV:
           value: "production"
         NEXT_PUBLIC_DUITKU_ENV:
           value: "sandbox"
     networks: ["nginx_proxy_manager_network"]
     proxy:
-      domain: "ruang-tenang.alfian-gading.my.id"
+      domain: "ruang-tenang.my.id"
       scheme: "http"
       forward_host: "ruang-tenang-web"
       forward_port: 3000
@@ -526,8 +527,8 @@ portfolio_apps:
       websocket_support: false
       cloudflare_flexible: true
     dns:
-      domain: "alfian-gading.my.id"
-      records: ["ruang-tenang"]
+      domain: "ruang-tenang.my.id"
+      records: ["@"]
 
   - name: "file-pod-api"
     enabled: false
@@ -574,10 +575,13 @@ portfolio_apps:
       workflow: "deploy.yml"
     app_port: 8080
     health_endpoint: "/health"
-    env_template: "roles/applications/sistertika-uty-api-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/sistertika-uty-api.env.j2"
     networks: ["nginx_proxy_manager_network", "postgres_network"]
     proxy:
       domain: "sistertika-api.alfian-gading.my.id"
+      domains:
+        - "sistertika-api.alfian-gading.my.id"
+        - "api.sistertika.com"
       scheme: "http"
       forward_host: "sistertika-uty-api"
       forward_port: 8080
@@ -586,8 +590,10 @@ portfolio_apps:
       generate_ssl: false
       cloudflare_flexible: true
     dns:
-      domain: "alfian-gading.my.id"
-      records: ["sistertika-api"]
+      - domain: "alfian-gading.my.id"
+        records: ["sistertika-api"]
+      - domain: "sistertika.com"
+        records: ["api"]
     databases:
       postgres: ["sistertika_uty"]
 
@@ -601,11 +607,18 @@ portfolio_apps:
     build:
       dockerfile: "Dockerfile"
       workflow: "deploy.yml"
+    ci:
+      secrets:
+        NEXT_PUBLIC_API_URL:
+          source: "vault:vault_sistertika_uty_web_api_url"
     app_port: 3000
-    env_template: "roles/applications/sistertika-uty-web-setup/templates/.env.j2"
+    env_template: "roles/applications/portfolio-apps/templates/sistertika-uty-web.env.j2"
     networks: ["nginx_proxy_manager_network"]
     proxy:
       domain: "sistertika.alfian-gading.my.id"
+      domains:
+        - "sistertika.alfian-gading.my.id"
+        - "sistertika.com"
       scheme: "http"
       forward_host: "sistertika-uty-web"
       forward_port: 3000
@@ -614,8 +627,10 @@ portfolio_apps:
       generate_ssl: false
       cloudflare_flexible: true
     dns:
-      domain: "alfian-gading.my.id"
-      records: ["sistertika"]
+      - domain: "alfian-gading.my.id"
+        records: ["sistertika"]
+      - domain: "sistertika.com"
+        records: ["@"]
 
 mobile_repositories:
   - name: "file-pod-mobile"
@@ -627,7 +642,7 @@ mobile_repositories:
           source: "vault:vault_file_pod_mobile_base_url"
 
   - name: "location-based-presence-mobile"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     build:
       workflow: "mobile.yml"
     variables:
@@ -641,7 +656,7 @@ mobile_repositories:
           value: "https://thankful-midge-noble.ngrok-free.app/api/mobile"
 
   - name: "lelang-fashion-mobile"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     build:
       workflow: "mobile.yml"
     variables:
@@ -655,7 +670,7 @@ mobile_repositories:
           value: "https://handwoven-ramp-avid.ngrok-free.dev/api"
 
   - name: "pos-soto-saben"
-    repo_owner: "SolvoTech"
+    repo_owner: "AlderaTech"
     build:
       workflow: "build-and-deploy.yml"
     variables:
@@ -700,8 +715,8 @@ postgres_database_users:
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
   - database: "solvo_tech"
-    username: "{{ vault_solvo_db_username }}"
-    password: "{{ vault_solvo_db_password }}"
+    username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
+    password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
 portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
 portfolio_proxy_hosts: >-
   {{

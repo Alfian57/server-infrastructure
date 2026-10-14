@@ -1,0 +1,30 @@
+---
+# Role Metadata: swap-setup
+
+galaxy_info:
+  author: "Alfian"
+  description: "Configure swap space and swappiness to prevent OOM errors"
+  company: ""
+  license: "MIT"
+  min_ansible_version: "2.12"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+        - noble
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+  galaxy_tags:
+    - system
+    - swap
+    - performance
+    - memory
+
+dependencies: []
+
+# Required collections
+collections:
+  - ansible.posix

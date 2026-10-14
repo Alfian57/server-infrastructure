@@ -11,3 +11,18 @@ docker_supported_os_families:
   - RedHat
 docker_apt_distribution: "{{ 'debian' if ansible_distribution == 'Debian' else 'ubuntu' }}"
 docker_apt_codename: "{{ ansible_distribution_release }}"
+
+# Docker daemon configuration defaults
+docker_log_driver: "json-file"
+docker_log_max_size: "{{ cost_docker_log_max_size | default(security_docker_log_max_size | default('10m')) }}"
+docker_log_max_file: "{{ cost_docker_log_max_files | default(security_docker_log_max_file | default('3')) }}"
+docker_log_compress: "true"
+docker_storage_driver: "{{ security_docker_storage_driver | default('overlay2') }}"
+docker_live_restore: "{{ security_docker_live_restore | default(true) }}"
+docker_userland_proxy: false
+docker_icc: false
+docker_no_new_privileges: "{{ security_docker_no_new_privileges | default(false) }}"
+docker_use_seccomp: "{{ security_docker_use_seccomp | default(false) }}"
+docker_userns_remap: "{{ security_docker_userns_remap | default('disabled') }}"
+docker_ulimits_nofile_soft: 64000
+docker_ulimits_nofile_hard: 64000

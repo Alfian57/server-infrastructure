@@ -138,11 +138,17 @@ def cmd_domains_shell(_: argparse.Namespace) -> int:
         dns = app.get("dns")
         if not dns:
             continue
-        domain = dns["domain"]
-        domains.setdefault(domain, [])
-        for record in dns.get("records", []):
-            if record not in domains[domain]:
-                domains[domain].append(record)
+        dns_entries = dns if isinstance(dns, list) else [dns]
+        for entry in dns_entries:
+            if not isinstance(entry, dict):
+                continue
+            domain = entry.get("domain")
+            if not domain:
+                continue
+            domains.setdefault(domain, [])
+            for record in entry.get("records", []):
+                if record not in domains[domain]:
+                    domains[domain].append(record)
     for domain, records in domains.items():
         print(f"{domain}:{' '.join(records)}")
     return 0

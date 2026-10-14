@@ -119,3 +119,13 @@ users:
     state: "present"
     system: false
     sudo_nopasswd: true
+
+  - name: "dery"
+    comment: "Temporary User - Dery"
+    groups: []
+    shell: "/bin/bash"
+    password: "{{ vault_user_dery_password }}"
+    state: "present"
+    system: false
+    sudo_nopasswd: false
+    linger: true

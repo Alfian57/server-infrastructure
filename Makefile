@@ -267,8 +267,10 @@ tech-talk: check ## Tech Talk app
 posyandu: check ## Posyandu app
 	@$(MAKE) app APP=posyandu
 
-solvo: check ## Solvo app
-	@$(MAKE) app APP=solvo
+aldera: check ## Aldera Tech app
+	@$(MAKE) app APP=aldera
+
+solvo: aldera ## Backward-compatible alias for aldera
 
 presensi-skansaba-web: check ## Presensi Skansaba Web app
 	@$(MAKE) app APP=presensi-skansaba-web
@@ -349,6 +351,9 @@ update-github-secrets-y: ## 🔑 Update GitHub secrets (auto-confirm)
 
 update-cloudflare-dns-y: ## 🌐 Update Cloudflare DNS (auto-confirm)
 	@./scripts/update-cloudflare-dns-local.sh -y
+
+update-cloudflare-dns-dry-run: ## 🌐 Simulate Cloudflare DNS sync & pruning
+	@./scripts/update-cloudflare-dns-local.sh --dry-run
 
 ##@ Security Operations
 

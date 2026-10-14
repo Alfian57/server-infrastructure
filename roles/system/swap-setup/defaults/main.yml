@@ -1,0 +1,15 @@
+---
+# Default variables for swap-setup
+
+# Swap file location on the system
+swap_file_path: "/swapfile"
+
+# Swap size in Megabytes (MB)
+swap_size_mb: 2048
+
+# Swappiness control (0-100). Lower value reduces swapping.
+# Default 10 avoids unnecessary swapping while providing emergency memory headroom.
+swap_swappiness: 10
+
+# Sysctl drop-in file for swap configuration
+swap_sysctl_file: "/etc/sysctl.d/99-swap.conf"

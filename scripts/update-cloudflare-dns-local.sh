@@ -65,6 +65,15 @@ update_dns_record() {
     --argjson proxied "$proxied" \
     '{type:"A",name:$name,content:$content,proxied:$proxied,ttl:1,comment:$comment}')
   
+  if [ "$DRY_RUN" = "true" ]; then
+    if [ -n "$existing" ]; then
+      echo -e "${YELLOW}[DRY RUN] Would update:${NC} $full_name → $vps_ip (proxied: $proxied)"
+    else
+      echo -e "${YELLOW}[DRY RUN] Would create:${NC} $full_name → $vps_ip (proxied: $proxied)"
+    fi
+    return 0
+  fi
+
   if [ -n "$existing" ]; then
     # Update existing record
     local result
@@ -96,6 +105,85 @@ update_dns_record() {
   fi
   
   return 0
+}
+
+prune_obsolete_dns_records() {
+  local zone_id=$1
+  local domain=$2
+  local records=$3
+  
+  # Build list of desired FQDNs
+  local desired_fqdns=()
+  local record_list=()
+  read -r -a record_list <<< "$records"
+  for name in "${record_list[@]}"; do
+    if [ "$name" == "@" ]; then
+      desired_fqdns+=("$domain")
+    elif [ "$name" == "*" ]; then
+      desired_fqdns+=("*.$domain")
+    else
+      desired_fqdns+=("$name.$domain")
+    fi
+  done
+
+  echo -e "  ${BLUE}Auditing obsolete A/CNAME records in ${domain}...${NC}"
+
+  local page=1
+  local total_pages=1
+  local pruned_count=0
+
+  while [ "$page" -le "$total_pages" ]; do
+    local response
+    response=$(cloudflare_request GET "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records?per_page=100&page=${page}")
+    
+    total_pages=$(echo "$response" | jq -r '.result_info.total_pages // 1' 2>/dev/null || echo 1)
+    
+    while IFS= read -r record; do
+      [ -z "$record" ] && continue
+      local id type name content
+      id=$(echo "$record" | jq -r '.id')
+      type=$(echo "$record" | jq -r '.type')
+      name=$(echo "$record" | jq -r '.name')
+      content=$(echo "$record" | jq -r '.content')
+
+      # Safeguard: strictly ignore non-HTTP records (MX, TXT, SPF, DKIM, SRV, NS, SOA, CAA)
+      if [ "$type" != "A" ] && [ "$type" != "CNAME" ]; then
+        continue
+      fi
+
+      local is_desired=false
+      for desired in "${desired_fqdns[@]}"; do
+        if [ "${name,,}" = "${desired,,}" ]; then
+          is_desired=true
+          break
+        fi
+      done
+
+      if [ "$is_desired" = "false" ]; then
+        if [ "$DRY_RUN" = "true" ]; then
+          echo -e "    ${YELLOW}[DRY RUN] Would delete obsolete record:${NC} $name ($type → $content)"
+          ((pruned_count++))
+        else
+          local del_res
+          del_res=$(cloudflare_request DELETE "https://api.cloudflare.com/client/v4/zones/${zone_id}/dns_records/${id}")
+          if [ "$(echo "$del_res" | jq -r '.success')" == "true" ]; then
+            echo -e "    ${YELLOW}🗑 Deleted obsolete record:${NC} $name ($type → $content)"
+            ((pruned_count++))
+          else
+            echo -e "    ${RED}✗ Failed to delete:${NC} $name - $(echo "$del_res" | jq -r '.errors[0].message // "Unknown error"')"
+          fi
+        fi
+      fi
+    done < <(echo "$response" | jq -c '.result[]?' 2>/dev/null)
+
+    ((page++))
+  done
+
+  if [ "$pruned_count" -eq 0 ]; then
+    echo -e "  ${GREEN}✓ No obsolete A/CNAME records found${NC}"
+  else
+    echo -e "  ${GREEN}✓ Audited and pruned $pruned_count obsolete record(s)${NC}"
+  fi
 }
 
 update_domain() {
@@ -134,7 +222,11 @@ update_domain() {
   done
   
   echo ""
-  echo "  Records: $success success, $failed failed"
+  echo "  Sync: $success success, $failed failed"
+  echo ""
+
+  # Prune obsolete A/CNAME records that are no longer declared in apps.yml
+  prune_obsolete_dns_records "$zone_id" "$domain" "$records"
   echo ""
   
   if [ "$failed" -gt 0 ]; then
@@ -197,7 +289,7 @@ fi
 echo ""
 
 # Show loaded configuration
-echo -e "${BLUE}Domains loaded from vars.yml:${NC}"
+echo -e "${BLUE}Domains loaded from apps.yml:${NC}"
 for domain in "${!DOMAINS_CONFIG[@]}"; do
   echo "  - $domain"
 done
@@ -206,6 +298,7 @@ echo ""
 # Parse arguments
 SINGLE_DOMAIN=""
 AUTO_CONFIRM=""
+DRY_RUN=""
 while [[ $# -gt 0 ]]; do
   case $1 in
     --domain|-d)
@@ -216,11 +309,21 @@ while [[ $# -gt 0 ]]; do
       AUTO_CONFIRM=true
       shift
       ;;
+    --dry-run)
+      DRY_RUN=true
+      AUTO_CONFIRM=true
+      shift
+      ;;
     *)
       shift
       ;;
   esac
 done
+
+if [ "$DRY_RUN" = "true" ]; then
+  echo -e "${YELLOW}Mode: DRY RUN (Simulating changes, no Cloudflare mutations will occur)${NC}"
+  echo ""
+fi
 
 # Determine domains to update
 if [ -n "$SINGLE_DOMAIN" ]; then

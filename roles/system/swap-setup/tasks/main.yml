@@ -8,33 +8,33 @@
 
 - name: Check if swap file exists
   ansible.builtin.stat:
-    path: /swapfile
+    path: "{{ swap_file_path }}"
   register: swap_file_check
 
 - name: Create swap file if not exists
-  ansible.builtin.command: "fallocate -l {{ swap_size_mb | default(2048) }}M /swapfile"
+  ansible.builtin.command: "fallocate -l {{ swap_size_mb }}M {{ swap_file_path }}"
   when: not swap_file_check.stat.exists
 
 - name: Set permissions on swap file
   ansible.builtin.file:
-    path: /swapfile
+    path: "{{ swap_file_path }}"
     mode: "0600"
     owner: root
     group: root
   when: not swap_file_check.stat.exists or (swap_enabled.stdout == '')
 
 - name: Format swap file
-  ansible.builtin.command: mkswap /swapfile
+  ansible.builtin.command: "mkswap {{ swap_file_path }}"
   when: not swap_file_check.stat.exists
-  
+
 - name: Enable swap
-  ansible.builtin.command: swapon /swapfile
+  ansible.builtin.command: "swapon {{ swap_file_path }}"
   when: swap_enabled.stdout == ''
 
 - name: Add swap to fstab
-  ansible.builtin.mount:
+  ansible.posix.mount:
     name: none
-    src: /swapfile
+    src: "{{ swap_file_path }}"
     fstype: swap
     opts: sw
     passno: 0
@@ -44,7 +44,7 @@
 - name: Configure swappiness (prevent aggressive swapping)
   ansible.posix.sysctl:
     name: vm.swappiness
-    value: "10"
+    value: "{{ swap_swappiness | string }}"
     state: present
     reload: true
-    sysctl_file: /etc/sysctl.d/99-swap.conf
+    sysctl_file: "{{ swap_sysctl_file }}"

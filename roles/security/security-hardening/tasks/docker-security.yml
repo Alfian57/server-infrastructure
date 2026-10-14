@@ -13,24 +13,12 @@
     msg: "Docker not installed yet, skipping Docker security hardening"
   when: docker_check.rc != 0
 
-- name: Ensure Docker daemon.json exists
+- name: Ensure /etc/docker directory exists
   ansible.builtin.file:
     path: /etc/docker
     state: directory
     mode: "0755"
   when: docker_check.rc == 0
-
-- name: Configure Docker daemon security settings
-  ansible.builtin.template:
-    src: docker-daemon.json.j2
-    dest: /etc/docker/daemon.json
-    mode: "0644"
-    owner: root
-    group: root
-  notify: Restart docker
-  when: 
-    - docker_check.rc == 0
-    - security_docker_harden | default(true)
 
 - name: Create Docker security profile directory
   ansible.builtin.file:

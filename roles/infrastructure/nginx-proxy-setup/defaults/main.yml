@@ -33,3 +33,8 @@ npm_cloudflare_forwarded_proto_config: |
 
 # Proxy hosts are derived from group_vars/all/apps.yml by default.
 proxy_hosts: "{{ portfolio_proxy_hosts | default([]) }}"
+
+# Internal bootstrap variables (migrated from vars/main.yml)
+npm_api_base_url: "http://{{ ansible_default_ipv4.address }}:81/api"
+npm_default_admin_email: "admin@example.com"
+npm_default_admin_password: "changeme"
