@@ -1,0 +1,28 @@
+# ============================================================================
+# Ansible Inventory Example Template
+# ============================================================================
+# Salin file ini ke inventory/hosts.ini dan sesuaikan dengan server Anda:
+#   cp inventory/hosts.ini.example inventory/hosts.ini
+#
+# JANGAN commit inventory/hosts.ini ke Git jika berisi IP produksi nyata atau
+# parameter koneksi sensitif. File inventory/hosts.ini sudah diabaikan (.gitignore).
+# ============================================================================
+
+[all]
+192.0.2.1 ansible_user=deployer ansible_port=22 ansible_ssh_private_key_file=~/.ssh/server_ed25519
+
+# ============================================================================
+# Referensi Format & Skenario Umum:
+#
+# Format:
+# <IP/HOSTNAME> ansible_user=<username> ansible_port=<port> ansible_ssh_private_key_file=<path>
+#
+# 1. Server Produksi / Staging Standar (user deployer dengan SSH key):
+#    192.0.2.1 ansible_user=deployer ansible_port=22 ansible_ssh_private_key_file=~/.ssh/server_ed25519
+#
+# 2. Bootstrap Server Baru (pertama kali setup menggunakan root):
+#    192.0.2.1 ansible_user=root ansible_port=22
+#
+# 3. Port SSH Kustom (setelah hardening SSH):
+#    192.0.2.1 ansible_user=deployer ansible_port=2222 ansible_ssh_private_key_file=~/.ssh/server_ed25519
+# ============================================================================

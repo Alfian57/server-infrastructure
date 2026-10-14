@@ -29,6 +29,9 @@ vault_mysql_databases:
     user: "materi_ku_user"
     password: "change-this-db-password"
 
+# Database Credentials - PostgreSQL
+vault_postgres_password: "change-this-postgres-password"
+
 # Database Credentials - Redis
 vault_redis_password: "change-this-redis-password"
 
@@ -78,26 +81,52 @@ vault_ruang_tenang_api_fonnte_token: ""
 # Lelang Fashion Mobile
 vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.alfian-gading.my.id/api"
 
-# Solvo Tech Next.js
-vault_solvo_app_url: "https://solvo.alfian-gading.my.id"
-vault_solvo_nextauth_url: "https://solvo.alfian-gading.my.id"
-vault_solvo_auth_secret: "change-this-auth-secret"
-vault_solvo_cron_secret: "change-this-cron-secret"
-vault_solvo_db_host: "postgres-db"
-vault_solvo_db_port: "5432"
-vault_solvo_db_database: "solvo_tech"
-vault_solvo_db_username: "solvo_tech"
-vault_solvo_db_password: "change-this-db-password"
-vault_solvo_seed_admin_email: "admin@solvo.alfian-gading.my.id"
-vault_solvo_seed_admin_password: "change-this-admin-password"
-vault_solvo_smtp_host: ""
-vault_solvo_smtp_port: "587"
-vault_solvo_smtp_user: ""
-vault_solvo_smtp_password: ""
-vault_solvo_smtp_from: "Solvo Tech <no-reply@solvo.alfian-gading.my.id>"
-vault_solvo_whatsapp_api_url: "https://api.fonnte.com/send"
-vault_solvo_whatsapp_api_key: ""
+# Aldera Tech (formerly Solvo)
+vault_aldera_app_url: "https://aldera.tech"
+vault_aldera_nextauth_url: "https://aldera.tech"
+vault_aldera_auth_secret: "change-this-auth-secret"
+vault_aldera_cron_secret: "change-this-cron-secret"
+vault_aldera_db_host: "postgres-db"
+vault_aldera_db_port: "5432"
+vault_aldera_db_database: "solvo_tech"
+vault_aldera_db_username: "solvo_tech"
+vault_aldera_db_password: "change-this-db-password"
+vault_aldera_seed_admin_email: "admin@aldera.tech"
+vault_aldera_seed_admin_password: "change-this-admin-password"
+vault_aldera_smtp_host: ""
+vault_aldera_smtp_port: "587"
+vault_aldera_smtp_user: ""
+vault_aldera_smtp_password: ""
+vault_aldera_smtp_from: "Aldera Tech <no-reply@aldera.tech>"
+vault_aldera_whatsapp_api_url: "https://api.fonnte.com/send"
+vault_aldera_whatsapp_api_key: ""
+vault_aldera_midtrans_server_key: ""
+vault_aldera_midtrans_client_key: ""
+vault_aldera_midtrans_is_production: "false"
+vault_aldera_turnstile_site_key: ""
+vault_aldera_turnstile_secret_key: ""
 
+# ============================================================================
+# Gamblock-AI Secrets
+# ============================================================================
+vault_gamblock_backend_db_username: "gamblock"
+vault_gamblock_backend_db_password: "change-this-gamblock-db-password"
+vault_gamblock_backend_jwt_access_secret: "generate-with-openssl-rand-hex-32"
+vault_gamblock_backend_journal_encryption_key: "generate-with-openssl-rand-hex-32"
+vault_gamblock_backend_protection_grant_signing_private_key: "base64-pkcs8-der-p256-private-key"
+vault_gamblock_backend_protection_grant_signing_key_id: "grant-2026-01"
+vault_gamblock_backend_fonnte_token: ""
+vault_gamblock_backend_fonnte_base_url: "https://api.fonnte.com"
+vault_gamblock_backend_fonnte_country_code: "62"
+vault_gamblock_backend_deepseek_api_key: ""
+vault_gamblock_backend_vapid_public_key: "BJa71prmSZVxNWcWczYLgXi2PWnniFjc_Fv83CvLD3vnRT0f0fU_VgdBwJW7NFaXtXnorE_6KY0F28XWVYkMXyc"
+vault_gamblock_backend_vapid_private_key: ""
+vault_gamblock_backend_vapid_subject: "mailto:support@gamblock-ai.com"
+
+# Gamblock-AI Website Variables (Optional overrides)
+# vault_gamblock_website_api_url: "https://api.gamblock-ai.com"
+# vault_gamblock_website_app_url: "https://gamblock-ai.com"
+# vault_gamblock_website_vapid_public_key: "BJa71prmSZVxNWcWczYLgXi2PWnniFjc_Fv83CvLD3vnRT0f0fU_VgdBwJW7NFaXtXnorE_6KY0F28XWVYkMXyc"
 
 # Add more as needed...
 
@@ -114,4 +143,6 @@ vault_sistertika_uty_api_upload_dir: "./uploads"
 vault_sistertika_uty_api_allowed_origins: "https://sistertika.alfian-gading.my.id,https://sistertika-api.alfian-gading.my.id"
 
 vault_sistertika_uty_web_api_url: "https://sistertika-api.alfian-gading.my.id"
+vault_sistertika_uty_web_app_url: "https://sistertika.alfian-gading.my.id"
+vault_sistertika_uty_web_app_name: "Sistertika UTY"
 vault_sistertika_uty_web_tz: "Asia/Jakarta"

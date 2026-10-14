@@ -17,4 +17,3 @@ pui_db_password: "{{ vault_pui_db_password }}"
 pui_seed_dev_users: true
 pui_api_health_retries: 18
 pui_api_health_delay: 10
-github_token: "{{ vault_github_token }}"

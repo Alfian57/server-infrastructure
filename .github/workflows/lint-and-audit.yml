@@ -43,6 +43,12 @@ jobs:
         run: |
           echo "ci-dummy-vault-pass" > .vault_pass
 
+      - name: Ensure inventory exists from example
+        run: |
+          if [ ! -f inventory/hosts.ini ] && [ -f inventory/hosts.ini.example ]; then
+            cp inventory/hosts.ini.example inventory/hosts.ini
+          fi
+
       - name: Check Ansible Playbook syntax
         run: |
           ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --vault-password-file=.vault_pass --syntax-check

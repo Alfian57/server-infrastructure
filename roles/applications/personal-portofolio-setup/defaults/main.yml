@@ -1,3 +1,0 @@
----
-github_username: "{{ vault_github_username }}"
-github_token: "{{ vault_github_token }}"

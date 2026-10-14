@@ -17,6 +17,10 @@ vault.yml.decrypted
 !**/.env.example
 !**/.env.j2
 
+# Inventory with production hosts / credentials
+inventory/hosts.ini
+!inventory/hosts.ini.example
+
 # Codex and Agent local state
 .codex/
 .agents/

@@ -1,5 +1,0 @@
----
-github_username: "{{ vault_github_username }}"
-github_owner: "alfian57"
-github_repo: "file-pod-mobile"
-file_pod_api_url: "{{ vault_file_pod_mobile_base_url | default('https://file-pod-api.alfian-gading.my.id') }}"

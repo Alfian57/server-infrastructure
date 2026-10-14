@@ -632,6 +632,68 @@ portfolio_apps:
       - domain: "sistertika.com"
         records: ["@"]
 
+  - name: "gamblock-ai-backend"
+    display_name: "Gamblock AI Backend"
+    repo_owner: "Gamblock-AI"
+    repo: "Gamblock-AI-Backend"
+    image: "ghcr.io/gamblock-ai/gamblock-ai-backend:latest"
+    stack: "golang"
+    app_port: 8080
+    health_endpoint: "/healthz"
+    run_migrate: false
+    env_template: "roles/applications/portfolio-apps/templates/gamblock-ai-backend.env.j2"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "ci.yml"
+    networks:
+      - "nginx_proxy_manager_network"
+      - "postgres_network"
+    volumes:
+      - "gamblock_ai_backend_artifacts:/app/var/artifacts"
+      - "gamblock_ai_backend_exports:/app/var/exports"
+      - "gamblock_ai_backend_media:/app/var/media"
+    proxy:
+      domain: "api.gamblock-ai.com"
+      scheme: "http"
+      forward_host: "gamblock-ai-backend"
+      forward_port: 8080
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "gamblock-ai.com"
+      records: ["api"]
+    databases:
+      postgres: ["gamblock"]
+
+  - name: "gamblock-ai-website"
+    display_name: "Gamblock AI Website"
+    repo_owner: "Gamblock-AI"
+    repo: "Gamblock-AI-Website"
+    image: "ghcr.io/gamblock-ai/gamblock-ai-website:latest"
+    stack: "nextjs"
+    app_port: 3000
+    env_template: "roles/applications/portfolio-apps/templates/gamblock-ai-website.env.j2"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "ci.yml"
+    networks:
+      - "nginx_proxy_manager_network"
+    proxy:
+      domain: "gamblock-ai.com"
+      domains:
+        - "gamblock-ai.com"
+        - "www.gamblock-ai.com"
+      scheme: "http"
+      forward_host: "gamblock-ai-website"
+      forward_port: 3000
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "gamblock-ai.com"
+      records: ["@", "www"]
+
 mobile_repositories:
   - name: "file-pod-mobile"
     variables:
@@ -683,6 +745,20 @@ mobile_repositories:
         API_BASE_URL_DEBUG:
           value: "https://thankful-midge-noble.ngrok-free.app/api"
 
+  - name: "Gamblock-AI-Apps"
+    repo_owner: "Gamblock-AI"
+    build:
+      workflow: "ci.yml"
+    variables:
+      API_BASE_URL: "https://api.gamblock-ai.com"
+      WEB_BASE_URL: "https://gamblock-ai.com"
+    ci:
+      variables:
+        API_BASE_URL:
+          value: "https://api.gamblock-ai.com"
+        WEB_BASE_URL:
+          value: "https://gamblock-ai.com"
+
 mysql_databases: >-
   {{ portfolio_apps | map(attribute='databases') | select('defined')
   | map(attribute='mysql') | select('defined') | flatten | unique | list }}
@@ -717,6 +793,9 @@ postgres_database_users:
   - database: "solvo_tech"
     username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
     password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
+  - database: "gamblock"
+    username: "{{ vault_gamblock_backend_db_username | default('gamblock') }}"
+    password: "{{ vault_gamblock_backend_db_password | default(vault_postgres_password) }}"
 portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
 portfolio_proxy_hosts: >-
   {{

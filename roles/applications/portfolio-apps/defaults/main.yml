@@ -3,4 +3,5 @@ portfolio_app_filter: "{{ app | default('') }}"
 portfolio_confirm_destroy_data: "{{ confirm_destroy_data | default('no') }}"
 portfolio_default_image_tag: "latest"
 portfolio_verify_health: true
-github_token: "{{ vault_github_token }}"
+github_username: "alfian57"
+github_token: "{{ vault_github_token | default('') }}"
