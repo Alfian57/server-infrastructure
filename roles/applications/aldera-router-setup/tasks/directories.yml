@@ -1,0 +1,83 @@
+---
+# =============================================================================
+# roles/applications/aldera-router-setup/tasks/directories.yml
+# =============================================================================
+
+- name: Create Aldera Router application directory
+  ansible.builtin.file:
+    path: "{{ aldera_router_install_dir }}"
+    state: directory
+    mode: "0750"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Create Aldera Router update log directory
+  ansible.builtin.file:
+    path: "/var/log/docker-updates"
+    state: directory
+    mode: "0775"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Check Aldera Router update log file
+  ansible.builtin.stat:
+    path: "/var/log/docker-updates/{{ aldera_router_app_name }}.log"
+  register: aldera_router_update_log_file
+
+- name: Create Aldera Router update log file
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ aldera_router_app_name }}.log"
+    state: touch
+    mode: "0664"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+  when: not aldera_router_update_log_file.stat.exists
+
+- name: Ensure Aldera Router update log file is group writable
+  ansible.builtin.file:
+    path: "/var/log/docker-updates/{{ aldera_router_app_name }}.log"
+    mode: "0664"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+  when: aldera_router_update_log_file.stat.exists
+
+- name: Copy Aldera Router update helper
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../roles/common/files/update.sh"
+    dest: "{{ aldera_router_install_dir }}/update.sh"
+    mode: "0750"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Copy database bootstrap SQL script
+  ansible.builtin.copy:
+    src: init.sql
+    dest: "{{ aldera_router_install_dir }}/init.sql"
+    mode: "0640"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Ensure Aldera Router src directory exists
+  ansible.builtin.file:
+    path: "{{ aldera_router_install_dir }}/src"
+    state: directory
+    mode: "0755"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Copy billing-proxy source code for local build
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../billing-proxy/"
+    dest: "{{ aldera_router_install_dir }}/src/billing-proxy/"
+    mode: "preserve"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+
+- name: Copy router-telegram-bot source code for local build
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../router-telegram-bot/"
+    dest: "{{ aldera_router_install_dir }}/src/router-telegram-bot/"
+    mode: "preserve"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+

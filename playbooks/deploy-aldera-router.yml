@@ -1,0 +1,28 @@
+---
+# =============================================================================
+# Dedicated Playbook: Deploy Aldera Router API Relay Platform
+# Usage:
+#   ansible-playbook playbooks/deploy-aldera-router.yml -i inventory/hosts.ini
+# =============================================================================
+- name: Deploy Aldera Router API Relay Platform
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - ../group_vars/all/vars.yml
+    - ../group_vars/all/apps.yml
+    - ../group_vars/all/vault.yml
+
+  pre_tasks:
+    - name: Validate minimum Ansible version
+      ansible.builtin.assert:
+        that:
+          - ansible_version.full is version('2.12', '>=')
+        fail_msg: "This playbook requires Ansible 2.12 or higher"
+        quiet: true
+      tags: always
+
+  roles:
+    - role: aldera-router-setup
+      tags: [application, aldera-router-setup]

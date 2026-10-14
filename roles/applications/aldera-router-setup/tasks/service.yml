@@ -1,0 +1,134 @@
+---
+# =============================================================================
+# roles/applications/aldera-router-setup/tasks/service.yml
+# =============================================================================
+
+- name: Render Aldera Router environment file
+  ansible.builtin.template:
+    src: .env.j2
+    dest: "{{ aldera_router_install_dir }}/.env"
+    mode: "0600"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+  register: aldera_router_env_render
+  no_log: true
+
+- name: Render Aldera Router docker compose file
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ aldera_router_install_dir }}/docker-compose.yml"
+    mode: "0644"
+    owner: "{{ aldera_router_admin_user }}"
+    group: "{{ aldera_router_runtime_group }}"
+  register: aldera_router_compose_render
+
+- name: Ensure Aldera Router external networks exist
+  community.docker.docker_network:
+    name: "{{ aldera_router_proxy_network }}"
+    state: present
+
+- name: Log in to GitHub Container Registry for Aldera Router
+  community.docker.docker_login:
+    registry_url: "{{ docker_registry | default('ghcr.io') }}"
+    username: "{{ github_username }}"
+    password: "{{ github_token }}"
+    reauthorize: true
+  no_log: true
+  when:
+    - github_token is defined
+    - github_token | length > 0
+
+- name: Deploy Aldera Router compose stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ aldera_router_install_dir }}"
+    build: "{{ aldera_router_compose_build | default('policy') }}"
+    pull: policy
+    remove_orphans: true
+    recreate: "{{ 'always' if (aldera_router_env_render.changed | default(false)) or (aldera_router_compose_render.changed | default(false)) else 'auto' }}"
+    state: present
+  register: aldera_router_deployment
+
+- name: Wait for PostgreSQL container to become healthy
+  community.docker.docker_container_info:
+    name: "{{ aldera_router_postgres_container_name }}"
+  register: aldera_router_postgres_info
+  until:
+    - aldera_router_postgres_info.container is defined
+    - aldera_router_postgres_info.container.State.Health.Status is defined
+    - aldera_router_postgres_info.container.State.Health.Status == 'healthy'
+  retries: "{{ aldera_router_health_retries }}"
+  delay: "{{ aldera_router_health_delay }}"
+
+- name: Wait for Billing Proxy container to become healthy
+  community.docker.docker_container_info:
+    name: "{{ aldera_router_billing_proxy_container_name }}"
+  register: aldera_router_proxy_info
+  until:
+    - aldera_router_proxy_info.container is defined
+    - aldera_router_proxy_info.container.State.Health.Status is defined
+    - aldera_router_proxy_info.container.State.Health.Status == 'healthy'
+  retries: "{{ aldera_router_health_retries }}"
+  delay: "{{ aldera_router_health_delay }}"
+
+- name: Wait for Telegram Bot container to be running
+  community.docker.docker_container_info:
+    name: "{{ aldera_router_bot_container_name }}"
+  register: aldera_router_bot_info
+  until:
+    - aldera_router_bot_info.container is defined
+    - aldera_router_bot_info.container.State.Running | default(false) | bool
+  retries: 10
+  delay: 3
+
+- name: Apply idempotent schema migrations & seeds
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ aldera_router_db_password }}"
+      - "{{ aldera_router_postgres_container_name }}"
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ aldera_router_db_user }}"
+      - -d
+      - "{{ aldera_router_db_name }}"
+    stdin: "{{ lookup('file', 'init.sql') }}"
+  register: aldera_router_migration_result
+  changed_when: "'CREATE TABLE' in (aldera_router_migration_result.stdout | default('')) or 'INSERT 0' in (aldera_router_migration_result.stdout | default(''))"
+  failed_when: aldera_router_migration_result.rc != 0
+  no_log: true
+  when: aldera_router_run_migration | bool
+
+- name: Verify Billing Proxy healthz endpoint internally
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ aldera_router_billing_proxy_container_name }}"
+      - wget
+      - -q
+      - -O
+      - "-"
+      - "http://localhost:{{ aldera_router_billing_proxy_port }}/healthz"
+  register: aldera_router_healthz_check
+  changed_when: false
+  retries: 5
+  delay: 3
+  until: aldera_router_healthz_check.rc == 0
+
+- name: Display Aldera Router deployment status
+  ansible.builtin.debug:
+    msg:
+      - "═══════════════════════════════════════════════════════════"
+      - "  Aldera AI API Relay Stack Deployed Successfully"
+      - "═══════════════════════════════════════════════════════════"
+      - "  API Gateway: https://{{ aldera_router_api_domain }} (internal :{{ aldera_router_billing_proxy_port }})"
+      - "  9Router Admin: https://{{ aldera_router_admin_domain }} (internal :{{ aldera_router_9router_port }})"
+      - "  PostgreSQL: {{ aldera_router_postgres_container_name }}:5432 (database: {{ aldera_router_db_name }})"
+      - "  Billing Proxy Status: {{ aldera_router_proxy_info.container.State.Health.Status | default('unknown') }}"
+      - "  Telegram Bot Status: {{ 'running' if (aldera_router_bot_info.container.State.Running | default(false)) else 'stopped' }}"
+      - "═══════════════════════════════════════════════════════════"

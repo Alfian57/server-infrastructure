@@ -1,0 +1,93 @@
+---
+# =============================================================================
+# Defaults for roles/applications/aldera-router-setup
+# =============================================================================
+
+# Role activation and filesystem paths
+aldera_router_enabled: "{{ enable_aldera_router | default(true) }}"
+aldera_router_app_name: "aldera-router"
+aldera_router_project_name: "aldera-router"
+aldera_router_install_dir: "{{ docker_stack_applications }}/aldera-router"
+aldera_router_admin_user: "{{ deploy_user | default(ansible_user | default('root')) }}"
+aldera_router_runtime_group: "docker"
+
+# Registry and Container Images
+aldera_router_repo_owner: "AlderaTech"
+aldera_router_image_tag: "latest"
+aldera_router_postgres_image: "postgres:16-alpine"
+aldera_router_9router_image: "decolua/9router:latest"
+aldera_router_billing_proxy_image: "ghcr.io/alderatech/billing-proxy:{{ aldera_router_image_tag }}"
+aldera_router_bot_image: "ghcr.io/alderatech/router-telegram-bot:{{ aldera_router_image_tag }}"
+
+# Container Names
+aldera_router_postgres_container_name: "aldera-router-postgres"
+aldera_router_9router_container_name: "aldera-router-9router"
+aldera_router_billing_proxy_container_name: "aldera-router-billing-proxy"
+aldera_router_bot_container_name: "aldera-router-telegram-bot"
+
+# Internal Ports
+aldera_router_billing_proxy_port: 8080
+aldera_router_9router_port: 20128
+aldera_router_postgres_port: 5432
+
+# Docker Networks
+aldera_router_internal_network: "aldera_router_internal"
+aldera_router_proxy_network: "{{ nginx_proxy_network | default('nginx_proxy_manager_network') }}"
+
+# Persistent Volumes
+aldera_router_postgres_volume: "aldera_router_postgres_data"
+aldera_router_9router_volume: "aldera_router_9router_data"
+
+# Domain Names & Endpoints
+aldera_router_domain: "aldera.tech"
+aldera_router_api_domain: "api.aldera.tech"
+aldera_router_admin_domain: "router.aldera.tech"
+aldera_router_public_api_url: "https://{{ aldera_router_api_domain }}"
+
+# Upstream LLM Router (9router)
+aldera_router_upstream_url: "http://9router:{{ aldera_router_9router_port }}"
+aldera_router_upstream_timeout: "120s"
+aldera_router_shutdown_timeout: "15s"
+
+# PostgreSQL Configuration
+aldera_router_db_host: "postgres"
+aldera_router_db_port: 5432
+aldera_router_db_name: "{{ vault_aldera_router_db_name | default('aldera_router') }}"
+aldera_router_db_user: "{{ vault_aldera_router_db_user | default('aldera') }}"
+aldera_router_db_password: "{{ vault_aldera_router_db_password | default(vault_postgres_password | default('change_me_super_secret_db_pass')) }}"
+aldera_router_db_sslmode: "disable"
+aldera_router_db_min_conns: 5
+aldera_router_db_max_conns: 25
+aldera_router_db_max_idle_time: "5m"
+aldera_router_pgdata: "/var/lib/postgresql/data/pgdata"
+
+# Billing & Financial Policies
+aldera_router_min_balance_threshold: "500.0000"
+aldera_router_auth_cache_ttl: "60s"
+
+# Telegram Bot & Payment Configuration
+aldera_router_bot_token: "{{ vault_aldera_router_bot_token | default(vault_aldera_router_telegram_bot_token | default('')) }}"
+aldera_router_admin_telegram_ids: "{{ vault_aldera_router_admin_telegram_ids | default(vault_aldera_router_telegram_admin_ids | default('')) }}"
+aldera_router_bank_name: "{{ vault_aldera_router_bank_name | default('BCA / Mandiri / QRIS') }}"
+aldera_router_bank_account_number: "{{ vault_aldera_router_bank_account_number | default('1234567890') }}"
+aldera_router_bank_account_name: "{{ vault_aldera_router_bank_account_name | default('PT Aldera Solusi Teknologi') }}"
+aldera_router_qris_image_url: "{{ vault_aldera_router_qris_image_url | default('') }}"
+
+# Resource Constraints
+aldera_router_postgres_memory_limit: "1G"
+aldera_router_postgres_memory_reservation: "256M"
+aldera_router_9router_memory_limit: "512M"
+aldera_router_9router_memory_reservation: "128M"
+aldera_router_billing_proxy_memory_limit: "512M"
+aldera_router_billing_proxy_memory_reservation: "128M"
+aldera_router_bot_memory_limit: "512M"
+aldera_router_bot_memory_reservation: "128M"
+
+# Runtime & Health
+aldera_router_app_env: "production"
+aldera_router_log_level: "info"
+aldera_router_health_retries: 15
+aldera_router_health_delay: 5
+aldera_router_run_migration: true
+aldera_router_enable_admin_proxy: true
+aldera_router_admin_access_list_id: 0

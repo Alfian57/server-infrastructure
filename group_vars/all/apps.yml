@@ -72,7 +72,23 @@ pui_app:
   databases:
     postgres: ["pui"]
 
-manual_proxy_hosts: []
+manual_proxy_hosts:
+  - domain: "api.aldera.tech"
+    scheme: "http"
+    forward_host: "billing-proxy"
+    forward_port: 8080
+    caching_enabled: false
+    websocket_support: true
+    cloudflare_flexible: true
+    force_ssl: true
+  - domain: "router.aldera.tech"
+    scheme: "http"
+    forward_host: "9router"
+    forward_port: 20128
+    caching_enabled: false
+    websocket_support: false
+    cloudflare_flexible: true
+    force_ssl: true
 
 portfolio_apps:
   - name: "materi-ku"
@@ -270,7 +286,7 @@ portfolio_apps:
       cloudflare_flexible: true
     dns:
       domain: "aldera.tech"
-      records: ["@"]
+      records: ["@", "api", "router"]
     databases:
       postgres: ["solvo_tech"]
 

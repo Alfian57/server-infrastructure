@@ -188,7 +188,7 @@
 
     - name: Test SSH key authentication
       ansible.builtin.command:
-        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -i {{ ssh_private_key_path }} root@{{ inventory_hostname }} echo 'SSH key auth works'"
+        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no -p {{ ansible_port | default(22) }} -i {{ ssh_private_key_path }} root@{{ inventory_hostname }} echo 'SSH key auth works'"
       delegate_to: localhost
       become: false
       register: ssh_test
@@ -219,7 +219,7 @@
     # =========================================================================
     - name: Test SSH key authentication for deploy user
       ansible.builtin.command:
-        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -i {{ ssh_private_key_path }} {{ deploy_user }}@{{ inventory_hostname }} echo 'Deploy user SSH auth works'"
+        cmd: "ssh -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no -p {{ ansible_port | default(22) }} -i {{ ssh_private_key_path }} {{ deploy_user }}@{{ inventory_hostname }} echo 'Deploy user SSH auth works'"
       delegate_to: localhost
       become: false
       register: deployer_ssh_test

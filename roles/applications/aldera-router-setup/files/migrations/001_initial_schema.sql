@@ -1,0 +1,478 @@
+-- =============================================================================
+-- Aldera AI API Relay Platform - Initial Database Schema
+-- Migration: 001_initial_schema.sql
+-- Engine: PostgreSQL 14+ (Target: PostgreSQL 16/17)
+-- Monetary Precision: NUMERIC(16, 4)
+-- =============================================================================
+
+\set ON_ERROR_STOP on
+
+-- Ensure required extensions are available
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- -----------------------------------------------------------------------------
+-- Helper Functions & Trigger Procedures
+-- -----------------------------------------------------------------------------
+
+-- 1. Auto-update updated_at timestamp using wall-clock time
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = clock_timestamp();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 2. Enforce strict append-only immutability on financial and telemetry audit tables
+CREATE OR REPLACE FUNCTION prevent_audit_tampering()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'balance_transactions' THEN
+        RAISE EXCEPTION 'Audit records in table % are strictly append-only and immutable. Modification (UPDATE) or deletion (DELETE) is forbidden for audit compliance.', TG_TABLE_NAME
+            USING ERRCODE = 'integrity_constraint_violation';
+    ELSIF TG_TABLE_NAME = 'usage_logs' THEN
+        IF TG_OP = 'DELETE' THEN
+            RAISE EXCEPTION 'Deletion of usage logs in table % is forbidden for audit compliance.', TG_TABLE_NAME
+                USING ERRCODE = 'integrity_constraint_violation';
+        ELSIF TG_OP = 'UPDATE' THEN
+            -- Allow foreign key ON DELETE SET NULL on api_key_id, but prevent any tampering of id, tokens, cost, user_id, model, duration, stream, timestamps
+            IF (NEW.id IS DISTINCT FROM OLD.id) OR
+               (NEW.user_id IS DISTINCT FROM OLD.user_id) OR
+               (NEW.model IS DISTINCT FROM OLD.model) OR
+               (NEW.prompt_tokens IS DISTINCT FROM OLD.prompt_tokens) OR
+               (NEW.completion_tokens IS DISTINCT FROM OLD.completion_tokens) OR
+               (NEW.total_cost IS DISTINCT FROM OLD.total_cost) OR
+               (NEW.duration_ms IS DISTINCT FROM OLD.duration_ms) OR
+               (NEW.is_stream IS DISTINCT FROM OLD.is_stream) OR
+               (NEW.created_at IS DISTINCT FROM OLD.created_at) THEN
+                RAISE EXCEPTION 'Audit records in table % are strictly immutable. Only api_key_id nullification on key deletion is permitted.', TG_TABLE_NAME
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            -- Only allow setting api_key_id to NULL, not changing to another key_id
+            IF NEW.api_key_id IS NOT NULL AND NEW.api_key_id IS DISTINCT FROM OLD.api_key_id THEN
+                RAISE EXCEPTION 'Modification of api_key_id in % is not permitted.', TG_TABLE_NAME
+                    USING ERRCODE = 'integrity_constraint_violation';
+            END IF;
+            RETURN NEW;
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'Table % is strictly append-only and immutable.', TG_TABLE_NAME
+            USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. Enforce strict prohibition of TRUNCATE on audit tables
+CREATE OR REPLACE FUNCTION prevent_truncate_audit()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'TRUNCATE on audit table % is strictly forbidden for regulatory and financial compliance.', TG_TABLE_NAME
+        USING ERRCODE = 'integrity_constraint_violation';
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. Enforce state terminality and immutability on topup requests
+CREATE OR REPLACE FUNCTION prevent_topup_tampering()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        -- 1. Status Terminality: Once approved or rejected, status can never transition
+        IF OLD.status IN ('approved', 'rejected') AND NEW.status <> OLD.status THEN
+            RAISE EXCEPTION 'Finalized topup request (%) status is terminal and immutable.', OLD.id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+
+        -- 2. Financial & User Integrity: Financial parameters cannot be mutated once finalized
+        IF OLD.status IN ('approved', 'rejected') AND (
+            (NEW.amount <> OLD.amount) OR
+            (NEW.user_id <> OLD.user_id) OR
+            (NEW.unique_code <> OLD.unique_code) OR
+            (NEW.total_transfer <> OLD.total_transfer)
+        ) THEN
+            RAISE EXCEPTION 'Finalized topup request (%) financial details are immutable.', OLD.id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+
+        -- 3. Audit Accountability: Approver and timestamp cannot be altered on approved tickets
+        IF OLD.status = 'approved' AND (
+            (NEW.admin_id IS DISTINCT FROM OLD.admin_id) OR
+            (NEW.approved_at IS DISTINCT FROM OLD.approved_at)
+        ) THEN
+            RAISE EXCEPTION 'Finalized topup request (%) approval audit metadata is immutable.', OLD.id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+
+        -- 4. Proof Immutability: Transfer proof cannot be swapped on finalized tickets
+        IF OLD.status IN ('approved', 'rejected') AND (NEW.proof_file_id IS DISTINCT FROM OLD.proof_file_id) THEN
+            RAISE EXCEPTION 'Finalized topup request (%) transfer proof is immutable.', OLD.id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+
+        -- 5. Primary Key & Creation Genesis Immutability: ID and created_at are permanently immutable
+        IF (NEW.id IS DISTINCT FROM OLD.id) OR (NEW.created_at IS DISTINCT FROM OLD.created_at) THEN
+            RAISE EXCEPTION 'Topup request (%) primary key and created_at are immutable.', OLD.id
+                USING ERRCODE = 'integrity_constraint_violation';
+        END IF;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- =============================================================================
+-- 1. USERS TABLE
+-- Stores end-user accounts, Telegram identities, and available balances.
+-- Invariant: balance must NEVER be negative (balance >= 0.0000).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    telegram_id BIGINT NOT NULL UNIQUE,
+    username VARCHAR(255),
+    full_name VARCHAR(255) NOT NULL,
+    balance NUMERIC(16, 4) NOT NULL DEFAULT 0.0000,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_users_balance_non_negative CHECK (balance >= 0.0000),
+    CONSTRAINT chk_users_balance_not_nan CHECK (balance <> 'NaN'::numeric),
+    CONSTRAINT chk_users_full_name_non_empty CHECK (length(trim(full_name)) > 0)
+);
+
+-- Indexes for users
+CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
+
+-- Trigger for users.updated_at
+DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
+CREATE TRIGGER trg_users_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================================================
+-- 2. API_KEYS TABLE
+-- Stores virtual API keys (sk-toko-...). Raw keys are NEVER stored in plaintext.
+-- Only SHA-256 lowercase hex digests (key_hash) are stored.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS api_keys (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    key_hash VARCHAR(64) NOT NULL UNIQUE,
+    key_prefix VARCHAR(16) NOT NULL,
+    label VARCHAR(100) NOT NULL DEFAULT 'default',
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    total_spent NUMERIC(16, 4) NOT NULL DEFAULT 0.0000,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_api_keys_user_id FOREIGN KEY (user_id) 
+        REFERENCES users(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT chk_api_keys_hash_hex CHECK (key_hash ~ '^[0-9a-f]{64}$'),
+    CONSTRAINT chk_api_keys_prefix_pattern CHECK (key_prefix ~ '^sk-toko-[a-zA-Z0-9]{8}$'),
+    CONSTRAINT chk_api_keys_total_spent_non_negative CHECK (total_spent >= 0.0000),
+    CONSTRAINT chk_api_keys_spent_not_nan CHECK (total_spent <> 'NaN'::numeric)
+);
+
+-- Indexes for api_keys
+CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON api_keys(user_id);
+CREATE INDEX IF NOT EXISTS idx_api_keys_is_active ON api_keys(is_active);
+CREATE INDEX IF NOT EXISTS idx_api_keys_hash_active ON api_keys(key_hash, is_active);
+
+-- Trigger for api_keys.updated_at
+DROP TRIGGER IF EXISTS trg_api_keys_updated_at ON api_keys;
+CREATE TRIGGER trg_api_keys_updated_at
+BEFORE UPDATE ON api_keys
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================================================
+-- 3. MODEL_PRICING TABLE
+-- Catalog of AI models with pricing in IDR per 1,000,000 (1M) tokens.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS model_pricing (
+    id SERIAL PRIMARY KEY,
+    model_name VARCHAR(100) NOT NULL UNIQUE,
+    display_name VARCHAR(255) NOT NULL,
+    input_price_per_m NUMERIC(16, 4) NOT NULL,
+    output_price_per_m NUMERIC(16, 4) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_pricing_model_name_non_empty CHECK (length(trim(model_name)) > 0),
+    CONSTRAINT chk_pricing_input_non_negative CHECK (input_price_per_m >= 0.0000),
+    CONSTRAINT chk_pricing_input_not_nan CHECK (input_price_per_m <> 'NaN'::numeric),
+    CONSTRAINT chk_pricing_output_non_negative CHECK (output_price_per_m >= 0.0000),
+    CONSTRAINT chk_pricing_output_not_nan CHECK (output_price_per_m <> 'NaN'::numeric)
+);
+
+-- Indexes for model_pricing
+CREATE INDEX IF NOT EXISTS idx_model_pricing_model_name ON model_pricing(model_name);
+CREATE INDEX IF NOT EXISTS idx_model_pricing_is_active ON model_pricing(is_active);
+CREATE INDEX IF NOT EXISTS idx_model_pricing_lookup ON model_pricing(model_name, is_active);
+
+-- Trigger for model_pricing.updated_at
+DROP TRIGGER IF EXISTS trg_model_pricing_updated_at ON model_pricing;
+CREATE TRIGGER trg_model_pricing_updated_at
+BEFORE UPDATE ON model_pricing
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- =============================================================================
+-- 4. USAGE_LOGS TABLE
+-- Granular log of every relayed LLM request, token counts, cost, and latency.
+-- Referential integrity: ON DELETE RESTRICT on user_id to protect billing audit.
+-- ON DELETE SET NULL on api_key_id allows key de-provisioning without log destruction.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS usage_logs (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    api_key_id BIGINT,
+    model VARCHAR(100) NOT NULL,
+    prompt_tokens INT NOT NULL DEFAULT 0,
+    completion_tokens INT NOT NULL DEFAULT 0,
+    total_cost NUMERIC(16, 4) NOT NULL DEFAULT 0.0000,
+    duration_ms INT NOT NULL DEFAULT 0,
+    is_stream BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_usage_logs_user_id FOREIGN KEY (user_id) 
+        REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT fk_usage_logs_api_key_id FOREIGN KEY (api_key_id) 
+        REFERENCES api_keys(id) ON DELETE SET NULL ON UPDATE CASCADE,
+    CONSTRAINT chk_usage_prompt_tokens_non_negative CHECK (prompt_tokens >= 0),
+    CONSTRAINT chk_usage_completion_tokens_non_negative CHECK (completion_tokens >= 0),
+    CONSTRAINT chk_usage_total_cost_non_negative CHECK (total_cost >= 0.0000),
+    CONSTRAINT chk_usage_cost_not_nan CHECK (total_cost <> 'NaN'::numeric),
+    CONSTRAINT chk_usage_duration_non_negative CHECK (duration_ms >= 0)
+);
+
+-- Indexes for usage_logs
+CREATE INDEX IF NOT EXISTS idx_usage_logs_user_id ON usage_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_api_key_id ON usage_logs(api_key_id);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_model ON usage_logs(model);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_created_at ON usage_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_user_created ON usage_logs(user_id, created_at DESC);
+
+-- Trigger for usage_logs immutability
+DROP TRIGGER IF EXISTS trg_usage_logs_immutable ON usage_logs;
+CREATE TRIGGER trg_usage_logs_immutable
+BEFORE UPDATE OR DELETE ON usage_logs
+FOR EACH ROW
+EXECUTE FUNCTION prevent_audit_tampering();
+
+-- Statement-level trigger to prevent TRUNCATE on usage_logs
+DROP TRIGGER IF EXISTS trg_prevent_truncate_usage_logs ON usage_logs;
+CREATE TRIGGER trg_prevent_truncate_usage_logs
+BEFORE TRUNCATE ON usage_logs
+FOR EACH STATEMENT
+EXECUTE FUNCTION prevent_truncate_audit();
+
+-- =============================================================================
+-- 5. TOPUP_REQUESTS TABLE
+-- Tracks manual topup requests, 3-digit verification codes, receipt proof,
+-- and approval workflow.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS topup_requests (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount NUMERIC(16, 4) NOT NULL,
+    unique_code INT NOT NULL,
+    total_transfer NUMERIC(16, 4) NOT NULL,
+    proof_file_id TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    admin_id BIGINT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    approved_at TIMESTAMPTZ,
+    CONSTRAINT fk_topup_requests_user_id FOREIGN KEY (user_id) 
+        REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT chk_topup_amount_positive CHECK (amount > 0.0000),
+    CONSTRAINT chk_topup_amount_not_nan CHECK (amount <> 'NaN'::numeric),
+    CONSTRAINT chk_topup_unique_code_range CHECK (unique_code >= 100 AND unique_code <= 999),
+    CONSTRAINT chk_topup_total_transfer_positive CHECK (total_transfer > 0.0000),
+    CONSTRAINT chk_topup_total_not_nan CHECK (total_transfer <> 'NaN'::numeric),
+    CONSTRAINT chk_topup_total_transfer_calc CHECK (total_transfer = amount + unique_code),
+    CONSTRAINT chk_topup_status_enum CHECK (status IN ('pending', 'approved', 'rejected')),
+    CONSTRAINT chk_topup_approval_metadata CHECK (status <> 'approved' OR (admin_id IS NOT NULL AND approved_at IS NOT NULL))
+);
+
+-- Indexes for topup_requests
+CREATE INDEX IF NOT EXISTS idx_topup_requests_user_id ON topup_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_topup_requests_status ON topup_requests(status);
+CREATE INDEX IF NOT EXISTS idx_topup_requests_created_at ON topup_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_topup_requests_user_status ON topup_requests(user_id, status);
+
+-- Trigger for topup_requests state machine & immutability
+DROP TRIGGER IF EXISTS trg_topup_requests_immutable ON topup_requests;
+CREATE TRIGGER trg_topup_requests_immutable
+BEFORE UPDATE ON topup_requests
+FOR EACH ROW
+EXECUTE FUNCTION prevent_topup_tampering();
+
+-- =============================================================================
+-- 6. BALANCE_TRANSACTIONS TABLE (Audit Ledger)
+-- Immutable financial ledger recording every balance mutation.
+-- Mathematical Invariant: balance_after = balance_before + amount.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS balance_transactions (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    amount NUMERIC(16, 4) NOT NULL,
+    transaction_type VARCHAR(32) NOT NULL,
+    balance_before NUMERIC(16, 4) NOT NULL,
+    balance_after NUMERIC(16, 4) NOT NULL,
+    reference_id TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_balance_transactions_user_id FOREIGN KEY (user_id) 
+        REFERENCES users(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    CONSTRAINT chk_bt_type_enum CHECK (transaction_type IN ('topup', 'usage', 'manual_adjust')),
+    CONSTRAINT chk_bt_amount_not_nan CHECK (amount <> 'NaN'::numeric),
+    CONSTRAINT chk_bt_balance_before_non_negative CHECK (balance_before >= 0.0000),
+    CONSTRAINT chk_bt_before_not_nan CHECK (balance_before <> 'NaN'::numeric),
+    CONSTRAINT chk_bt_balance_after_non_negative CHECK (balance_after >= 0.0000),
+    CONSTRAINT chk_bt_after_not_nan CHECK (balance_after <> 'NaN'::numeric),
+    CONSTRAINT chk_bt_balance_math CHECK (balance_after = balance_before + amount),
+    CONSTRAINT chk_bt_polarity CHECK (
+        (transaction_type = 'topup' AND amount > 0.0000) OR
+        (transaction_type = 'usage' AND amount < 0.0000) OR
+        (transaction_type = 'manual_adjust' AND amount <> 0.0000)
+    )
+);
+
+-- Indexes for balance_transactions
+CREATE INDEX IF NOT EXISTS idx_balance_transactions_user_id ON balance_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_balance_transactions_type ON balance_transactions(transaction_type);
+CREATE INDEX IF NOT EXISTS idx_balance_transactions_reference_id ON balance_transactions(reference_id);
+CREATE INDEX IF NOT EXISTS idx_balance_transactions_created_at ON balance_transactions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_balance_transactions_user_created ON balance_transactions(user_id, created_at DESC);
+
+-- Trigger for balance_transactions immutability
+DROP TRIGGER IF EXISTS trg_balance_transactions_immutable ON balance_transactions;
+CREATE TRIGGER trg_balance_transactions_immutable
+BEFORE UPDATE OR DELETE ON balance_transactions
+FOR EACH ROW
+EXECUTE FUNCTION prevent_audit_tampering();
+
+-- Statement-level trigger to prevent TRUNCATE on balance_transactions
+DROP TRIGGER IF EXISTS trg_prevent_truncate_balance_transactions ON balance_transactions;
+CREATE TRIGGER trg_prevent_truncate_balance_transactions
+BEFORE TRUNCATE ON balance_transactions
+FOR EACH STATEMENT
+EXECUTE FUNCTION prevent_truncate_audit();
+
+-- =============================================================================
+-- 7. AUDIT RECONCILIATION DIAGNOSTIC STORED FUNCTION
+-- Runs full invariant diagnostic suite across all financial and telemetry data.
+-- =============================================================================
+CREATE OR REPLACE FUNCTION verify_ledger_invariants()
+RETURNS TABLE (
+    check_name VARCHAR(64),
+    status VARCHAR(16),
+    violation_count BIGINT,
+    details TEXT
+) AS $$
+DECLARE
+    v_row_math_errors BIGINT;
+    v_balance_drift_errors BIGINT;
+    v_polarity_errors BIGINT;
+    v_usage_mismatch_errors BIGINT;
+    v_topup_mismatch_errors BIGINT;
+BEGIN
+    -- Check 1: Row-level arithmetic invariant (balance_after = balance_before + amount)
+    SELECT count(*) INTO v_row_math_errors
+    FROM balance_transactions
+    WHERE balance_after <> (balance_before + amount);
+
+    check_name := 'ROW_ARITHMETIC_INVARIANT';
+    violation_count := v_row_math_errors;
+    IF v_row_math_errors = 0 THEN
+        status := 'PASS';
+        details := 'All rows satisfy balance_after = balance_before + amount';
+    ELSE
+        status := 'FAIL';
+        details := FORMAT('%s rows have arithmetic discrepancies', v_row_math_errors);
+    END IF;
+    RETURN NEXT;
+
+    -- Check 2: Cumulative balance sum reconciliation against users.balance
+    WITH drift AS (
+        SELECT u.id, (u.balance - COALESCE(SUM(bt.amount), 0.0000)) AS diff
+        FROM users u
+        LEFT JOIN balance_transactions bt ON u.id = bt.user_id
+        GROUP BY u.id, u.balance
+        HAVING u.balance <> COALESCE(SUM(bt.amount), 0.0000)
+    )
+    SELECT count(*) INTO v_balance_drift_errors FROM drift;
+
+    check_name := 'LIFETIME_SUM_INVARIANT';
+    violation_count := v_balance_drift_errors;
+    IF v_balance_drift_errors = 0 THEN
+        status := 'PASS';
+        details := 'users.balance exactly matches SUM(balance_transactions.amount) for all users';
+    ELSE
+        status := 'FAIL';
+        details := FORMAT('%s users exhibit balance drift vs ledger sum', v_balance_drift_errors);
+    END IF;
+    RETURN NEXT;
+
+    -- Check 3: Polarity integrity
+    SELECT count(*) INTO v_polarity_errors
+    FROM balance_transactions
+    WHERE NOT (
+        (transaction_type = 'topup' AND amount > 0.0000) OR
+        (transaction_type = 'usage' AND amount < 0.0000) OR
+        (transaction_type = 'manual_adjust' AND amount <> 0.0000)
+    );
+
+    check_name := 'TRANSACTION_POLARITY_INVARIANT';
+    violation_count := v_polarity_errors;
+    IF v_polarity_errors = 0 THEN
+        status := 'PASS';
+        details := 'All transaction amounts conform to transaction_type polarity rules';
+    ELSE
+        status := 'FAIL';
+        details := FORMAT('%s rows violate transaction polarity rules', v_polarity_errors);
+    END IF;
+    RETURN NEXT;
+
+    -- Check 4: Usage log synchronization
+    SELECT count(*) INTO v_usage_mismatch_errors
+    FROM balance_transactions bt
+    LEFT JOIN usage_logs ul ON bt.reference_id = ul.id::text
+    WHERE bt.transaction_type = 'usage'
+      AND (ul.id IS NULL OR (-bt.amount) <> ul.total_cost);
+
+    check_name := 'USAGE_LOG_RECONCILIATION';
+    violation_count := v_usage_mismatch_errors;
+    IF v_usage_mismatch_errors = 0 THEN
+        status := 'PASS';
+        details := 'All usage debits match recorded usage log totals';
+    ELSE
+        status := 'FAIL';
+        details := FORMAT('%s mismatched or unlinked usage ledger entries', v_usage_mismatch_errors);
+    END IF;
+    RETURN NEXT;
+
+    -- Check 5: Approved topup synchronization
+    SELECT count(*) INTO v_topup_mismatch_errors
+    FROM topup_requests tr
+    LEFT JOIN balance_transactions bt 
+        ON bt.reference_id = tr.id::text 
+       AND bt.transaction_type = 'topup'
+    WHERE tr.status = 'approved'
+      AND (bt.id IS NULL OR bt.amount <> tr.amount);
+
+    check_name := 'TOPUP_REQUEST_RECONCILIATION';
+    violation_count := v_topup_mismatch_errors;
+    IF v_topup_mismatch_errors = 0 THEN
+        status := 'PASS';
+        details := 'All approved topup requests have matching ledger credits';
+    ELSE
+        status := 'FAIL';
+        details := FORMAT('%s approved topup tickets missing or mismatched in ledger', v_topup_mismatch_errors);
+    END IF;
+    RETURN NEXT;
+
+END;
+$$ LANGUAGE plpgsql;

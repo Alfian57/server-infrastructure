@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# roles/applications/aldera-router-setup/tasks/main.yml
+# =============================================================================
+
+- name: Validate Aldera Router deployment variables
+  ansible.builtin.assert:
+    that:
+      - aldera_router_db_password is defined
+      - aldera_router_db_password | length >= 8
+    fail_msg: "aldera-router-setup requires vault_aldera_router_db_password (or vault_postgres_password) with minimum 8 characters."
+    quiet: true
+
+- name: Warn if Telegram Bot Token is not set
+  ansible.builtin.debug:
+    msg: "WARNING: aldera_router_bot_token is not configured. Telegram bot service may exit or fail to poll."
+  when: aldera_router_bot_token | default('') | length == 0
+
+- name: Include directory setup tasks
+  ansible.builtin.include_tasks: directories.yml
+
+- name: Include service deployment tasks
+  ansible.builtin.include_tasks: service.yml

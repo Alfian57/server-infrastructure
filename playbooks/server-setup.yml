@@ -206,6 +206,13 @@
         - enable_pui_app | bool
         - portfolio_app_filter | length == 0 or portfolio_app_filter == "pui"
 
+    - role: aldera-router-setup
+      tags: [application, aldera-router-setup]
+      when:
+        - setup_applications | bool
+        - enable_aldera_router | default(true) | bool
+        - portfolio_app_filter | length == 0 or portfolio_app_filter == "aldera-router"
+
     # ═══════════════════════════════════════════════════════════
     # OPTIMIZATION
     # Cost optimization, cleanup, monitoring

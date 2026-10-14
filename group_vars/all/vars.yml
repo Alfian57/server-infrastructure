@@ -36,6 +36,7 @@ enable_redis: true
 # Applications
 enable_portfolio_apps: true
 enable_pui_app: true
+enable_aldera_router: true
 
 # Optimization
 enable_cost_optimization: true
