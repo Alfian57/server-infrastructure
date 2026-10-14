@@ -50,14 +50,16 @@ pui_app:
       VITE_SECURITY_LAB_ENABLED:
         value: "false"
   proxy_hosts:
-    - subdomain: "pui"
+    - domain: "pui.alfian-gading.my.id"
+      subdomain: "pui"
       scheme: "http"
       forward_host: "pui-web-client"
       forward_port: 80
       caching_enabled: true
       websocket_support: false
       cloudflare_flexible: true
-    - subdomain: "pui-api"
+    - domain: "pui-api.alfian-gading.my.id"
+      subdomain: "pui-api"
       scheme: "http"
       forward_host: "pui-api-service"
       forward_port: 8080
@@ -100,6 +102,7 @@ portfolio_apps:
       mysql: ["materi_ku"]
 
   - name: "panca-trivia"
+    enabled: false
     repo: "panca-trivia"
     stack: "laravel"
     run_seeder: true
@@ -272,6 +275,7 @@ portfolio_apps:
       postgres: ["solvo_tech"]
 
   - name: "location-based-presence-web"
+    enabled: false
     repo_owner: "AlderaTech"
     repo: "location-based-presence-web"
     image: "ghcr.io/alderatech/location-based-presence-web:latest"
@@ -301,6 +305,7 @@ portfolio_apps:
       mysql: ["location_based_presence"]
 
   - name: "lelang-fashion-web"
+    enabled: false
     repo_owner: "AlderaTech"
     repo: "lelang-fashion-web"
     image: "ghcr.io/alderatech/lelang-fashion-web:latest"
@@ -336,6 +341,7 @@ portfolio_apps:
       mysql: ["pelelangan_produk_fashion"]
 
   - name: "pos-soto-saben"
+    enabled: false
     repo_owner: "AlderaTech"
     repo: "pos-soto-saben"
     image: "ghcr.io/alderatech/pos-soto-saben:latest"
@@ -696,6 +702,7 @@ portfolio_apps:
 
 mobile_repositories:
   - name: "file-pod-mobile"
+    enabled: false
     variables:
       BASE_URL: "https://file-pod-api.alfian-gading.my.id"
     ci:
@@ -704,6 +711,7 @@ mobile_repositories:
           source: "vault:vault_file_pod_mobile_base_url"
 
   - name: "location-based-presence-mobile"
+    enabled: false
     repo_owner: "AlderaTech"
     build:
       workflow: "mobile.yml"
@@ -718,6 +726,7 @@ mobile_repositories:
           value: "https://thankful-midge-noble.ngrok-free.app/api/mobile"
 
   - name: "lelang-fashion-mobile"
+    enabled: false
     repo_owner: "AlderaTech"
     build:
       workflow: "mobile.yml"
@@ -732,6 +741,7 @@ mobile_repositories:
           value: "https://handwoven-ramp-avid.ngrok-free.dev/api"
 
   - name: "pos-soto-saben"
+    enabled: false
     repo_owner: "AlderaTech"
     build:
       workflow: "build-and-deploy.yml"

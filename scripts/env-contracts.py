@@ -88,10 +88,12 @@ def enabled_apps(data: dict[str, Any]) -> list[dict[str, Any]]:
     return enabled
 
 
-def mobile_repositories(data: dict[str, Any]) -> list[dict[str, Any]]:
+def mobile_repositories(data: dict[str, Any], enabled_only: bool = True) -> list[dict[str, Any]]:
     items = data.get("mobile_repositories", [])
     if not isinstance(items, list):
         raise SystemExit("mobile_repositories must be a list")
+    if enabled_only:
+        return [item for item in items if item.get("enabled", True)]
     return items
 
 

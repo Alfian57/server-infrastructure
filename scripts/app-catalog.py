@@ -66,11 +66,13 @@ def apps() -> list[dict[str, Any]]:
     return enabled
 
 
-def mobile_repositories() -> list[dict[str, Any]]:
+def mobile_repositories(enabled_only: bool = True) -> list[dict[str, Any]]:
     data = load_yaml(APPS_FILE)
     items = data.get("mobile_repositories", [])
     if not isinstance(items, list):
         raise SystemExit("mobile_repositories must be a list")
+    if enabled_only:
+        return [item for item in items if item.get("enabled", True)]
     return items
 
 
@@ -107,7 +109,13 @@ def cmd_list(_: argparse.Namespace) -> int:
     print(f"{'APP':32} {'STACK':10} {'REPO':42} {'IMAGE':42} DOMAIN")
     for app in apps():
         proxy = app.get("proxy", {})
-        domain = proxy.get("domain") or proxy.get("subdomain", "-")
+        if not proxy and app.get("proxy_hosts"):
+            domain = ", ".join(
+                h.get("domain") or (f"{h['subdomain']}.alfian-gading.my.id" if "subdomain" in h else "-")
+                for h in app["proxy_hosts"]
+            )
+        else:
+            domain = proxy.get("domain") or proxy.get("subdomain", "-")
         print(f"{app.get('display_name', app['name']):32} {app['stack']:10} {repo_ref(app):42} {image_name(app):42} {domain}")
     return 0
 
