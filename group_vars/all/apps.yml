@@ -590,6 +590,8 @@ portfolio_apps:
     repo: "sistertika-uty-api"
     destructive_allowed: true
     run_seeder: true
+    seed_on: "always"
+    seeder_binary: "sistertika-uty-seed"
     stack: "golang"
     build:
       dockerfile: "Dockerfile"
@@ -660,6 +662,9 @@ portfolio_apps:
     app_port: 8080
     health_endpoint: "/healthz"
     run_migrate: false
+    run_seeder: true
+    seed_on: "always"
+    seeder_command: "/app/seeder"
     env_template: "roles/applications/portfolio-apps/templates/gamblock-ai-backend.env.j2"
     build:
       dockerfile: "Dockerfile"
