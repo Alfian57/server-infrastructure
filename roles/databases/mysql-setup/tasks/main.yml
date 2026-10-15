@@ -123,6 +123,7 @@
       - -u
       - root
     stdin: |
+      SET GLOBAL log_bin_trust_function_creators = 1;
       CREATE USER IF NOT EXISTS '{{ item.username | replace("'", "''") }}'@'%' IDENTIFIED BY '{{ item.password | replace("'", "''") }}';
       ALTER USER '{{ item.username | replace("'", "''") }}'@'%' IDENTIFIED BY '{{ item.password | replace("'", "''") }}';
       GRANT ALL PRIVILEGES ON `{{ item.database | replace('`', '``') }}`.* TO '{{ item.username | replace("'", "''") }}'@'%';
