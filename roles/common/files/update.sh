@@ -116,7 +116,7 @@ prepare_log_target() {
 # ---------------------------------------------------------------------------
 acquire_lock() {
     exec 9>"${LOCK_FILE}" 2>/dev/null || return 0
-    if ! flock -n 9; then
+    if ! flock -w 180 9; then
         error_exit "Another update for ${COMPOSE_PROJECT_NAME} is already running (lock: ${LOCK_FILE})"
     fi
 }
