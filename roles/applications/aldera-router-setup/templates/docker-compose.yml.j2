@@ -67,9 +67,11 @@ services:
 
   billing-proxy:
     image: {{ aldera_router_billing_proxy_image }}
+{% if aldera_router_enable_local_build | default(false) %}
     build:
       context: ./src/billing-proxy
       dockerfile: Dockerfile
+{% endif %}
     container_name: {{ aldera_router_billing_proxy_container_name }}
     restart: unless-stopped
     env_file:
@@ -107,9 +109,11 @@ services:
 
   telegram-bot:
     image: {{ aldera_router_bot_image }}
+{% if aldera_router_enable_local_build | default(false) %}
     build:
       context: ./src/router-telegram-bot
       dockerfile: Dockerfile
+{% endif %}
     container_name: {{ aldera_router_bot_container_name }}
     restart: unless-stopped
     env_file:

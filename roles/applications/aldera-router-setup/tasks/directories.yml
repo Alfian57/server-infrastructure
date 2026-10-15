@@ -64,6 +64,7 @@
     mode: "0755"
     owner: "{{ aldera_router_admin_user }}"
     group: "{{ aldera_router_runtime_group }}"
+  when: aldera_router_enable_local_build | default(false)
 
 - name: Copy billing-proxy source code for local build
   ansible.builtin.copy:
@@ -72,6 +73,7 @@
     mode: "preserve"
     owner: "{{ aldera_router_admin_user }}"
     group: "{{ aldera_router_runtime_group }}"
+  when: aldera_router_enable_local_build | default(false)
 
 - name: Copy router-telegram-bot source code for local build
   ansible.builtin.copy:
@@ -80,4 +82,5 @@
     mode: "preserve"
     owner: "{{ aldera_router_admin_user }}"
     group: "{{ aldera_router_runtime_group }}"
+  when: aldera_router_enable_local_build | default(false)
 

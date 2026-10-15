@@ -91,3 +91,4 @@ aldera_router_health_delay: 5
 aldera_router_run_migration: true
 aldera_router_enable_admin_proxy: true
 aldera_router_admin_access_list_id: 0
+aldera_router_enable_local_build: false
