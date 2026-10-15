@@ -286,7 +286,7 @@ portfolio_apps:
       domain: "aldera.tech"
       records: ["@", "api", "router"]
     databases:
-      postgres: ["solvo_tech"]
+      postgres: ["aldera_tech", "solvo_tech"]
 
   - name: "location-based-presence-web"
     enabled: false
@@ -885,6 +885,9 @@ postgres_database_users:
   - database: "pui"
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
+  - database: "aldera_tech"
+    username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
+    password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
   - database: "solvo_tech"
     username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
     password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
