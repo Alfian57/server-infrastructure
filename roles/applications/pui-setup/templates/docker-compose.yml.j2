@@ -50,7 +50,8 @@ services:
         mkdir -p /var/run/pui/uds /var/lib/pui/badger /var/lib/pui/chunks &&
         chown 10002:20000 /var/run/pui/uds &&
         chown -R 10002:20000 /var/lib/pui/badger /var/lib/pui/chunks &&
-        chmod 0750 /var/run/pui/uds /var/lib/pui/badger /var/lib/pui/chunks &&
+        chmod 0770 /var/run/pui/uds &&
+        chmod 0750 /var/lib/pui/badger /var/lib/pui/chunks &&
         exec su-exec 10002:20000 vault-core
     network_mode: "none"
     restart: unless-stopped
