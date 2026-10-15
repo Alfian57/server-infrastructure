@@ -267,8 +267,10 @@ tech-talk: check ## Tech Talk app
 posyandu: check ## Posyandu app
 	@$(MAKE) app APP=posyandu
 
-aldera: check ## Aldera Tech app
-	@$(MAKE) app APP=aldera
+aldera-tech: check ## Aldera Tech app
+	@$(MAKE) app APP=aldera-tech
+
+aldera: aldera-tech ## Alias for aldera-tech
 
 presensi-skansaba-web: check ## Presensi Skansaba Web app
 	@$(MAKE) app APP=presensi-skansaba-web

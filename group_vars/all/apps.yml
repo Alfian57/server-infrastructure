@@ -251,7 +251,7 @@ portfolio_apps:
     databases:
       mysql: ["presensi_skansaba"]
 
-  - name: "aldera"
+  - name: "aldera-tech"
     display_name: "Aldera Tech"
     repo_owner: "AlderaTech"
     repo: "aldera-tech"
@@ -277,7 +277,7 @@ portfolio_apps:
     proxy:
       domain: "aldera.tech"
       scheme: "http"
-      forward_host: "aldera"
+      forward_host: "aldera-tech"
       forward_port: 3000
       caching_enabled: true
       websocket_support: false
