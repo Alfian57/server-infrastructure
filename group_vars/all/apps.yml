@@ -689,6 +689,16 @@ portfolio_apps:
       records: ["api"]
     databases:
       postgres: ["gamblock"]
+    ci:
+      variables:
+        ENABLE_CI_TESTS:
+          value: "false"
+        ENABLE_VPS_DEPLOY:
+          value: "false"
+        VPS_HOST:
+          source: "runtime:vps_host"
+        VPS_HOST_FINGERPRINT:
+          value: ""
 
   - name: "gamblock-ai-website"
     display_name: "Gamblock AI Website"
@@ -717,6 +727,26 @@ portfolio_apps:
     dns:
       domain: "gamblock-ai.com"
       records: ["@", "www"]
+    ci:
+      variables:
+        ENABLE_CI_TESTS:
+          value: "false"
+        ENABLE_VPS_DEPLOY:
+          value: "false"
+        VPS_HOST:
+          source: "runtime:vps_host"
+        VPS_HOST_FINGERPRINT:
+          value: ""
+        NEXT_PUBLIC_API_URL:
+          value: "https://api.gamblock-ai.com"
+        NEXT_PUBLIC_API_URL_STAGING:
+          value: "https://api-staging.gamblock-ai.com"
+        NEXT_PUBLIC_APP_URL:
+          value: "https://gamblock-ai.com"
+        NEXT_PUBLIC_APP_URL_STAGING:
+          value: "https://staging.gamblock-ai.com"
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY:
+          value: ""
 
 mobile_repositories:
   - name: "file-pod-mobile"
