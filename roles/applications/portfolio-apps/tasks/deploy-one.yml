@@ -393,11 +393,11 @@
       {% elif app_stack == 'php' %}
       php -r "exit(@fsockopen('127.0.0.1', {{ app_port }}) ? 0 : 1);"
       {% else %}
-      wget -q -O - http://localhost:{{ app_port }}{{ app_health_endpoint }}
+      wget -Y off -q -O - -T 5 http://localhost:{{ app_port }}{{ app_health_endpoint }}
       {% endif %}
   register: app_health
-  retries: 10
-  delay: 5
+  retries: 5
+  delay: 2
   until: app_health.rc == 0
   changed_when: false
   failed_when: false

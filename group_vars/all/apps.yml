@@ -589,6 +589,7 @@ portfolio_apps:
     enabled: true
     repo: "sistertika-uty-api"
     destructive_allowed: true
+    run_seeder: true
     stack: "golang"
     build:
       dockerfile: "Dockerfile"
