@@ -83,4 +83,3 @@
     owner: "{{ aldera_router_admin_user }}"
     group: "{{ aldera_router_runtime_group }}"
   when: aldera_router_enable_local_build | default(false)
-

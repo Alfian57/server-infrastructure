@@ -23,6 +23,7 @@ enable_list:
 skip_list:
   - yaml[line-length]  # Allow long lines in YAML
   - yaml[trailing-spaces]  # Legacy files will be cleaned incrementally
+  - yaml[empty-lines]  # Allow flexible empty lines
   - yaml[braces]       # Legacy Jinja formatting debt
   - name[casing]       # Allow flexible naming
   - name[template]     # Catalog loop tasks include app names dynamically

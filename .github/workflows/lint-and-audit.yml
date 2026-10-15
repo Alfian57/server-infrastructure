@@ -1,7 +1,7 @@
 ---
 name: Lint and Audit
 
-on:
+'on':
   push:
     branches:
       - main
@@ -39,9 +39,20 @@ jobs:
         run: |
           yamllint -c .yamllint .
 
-      - name: Setup dummy vault password for syntax checks
+      - name: Setup vault password and mock vault for CI syntax check
+        env:
+          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
         run: |
-          echo "ci-dummy-vault-pass" > .vault_pass
+          if [ -n "$VAULT_PASSWORD" ]; then
+            echo "$VAULT_PASSWORD" > .vault_pass
+          else
+            echo "ci-dummy-vault-pass" > .vault_pass
+            ansible-vault encrypt group_vars/all/vault.yml.example \
+              --vault-password-file=.vault_pass \
+              --output=group_vars/all/vault.yml \
+              --encrypt-vault-id=default
+          fi
+          chmod 600 .vault_pass
 
       - name: Ensure inventory exists from example
         run: |
