@@ -270,8 +270,6 @@ posyandu: check ## Posyandu app
 aldera: check ## Aldera Tech app
 	@$(MAKE) app APP=aldera
 
-solvo: aldera ## Backward-compatible alias for aldera
-
 presensi-skansaba-web: check ## Presensi Skansaba Web app
 	@$(MAKE) app APP=presensi-skansaba-web
 

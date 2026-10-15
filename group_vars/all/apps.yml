@@ -270,7 +270,7 @@ portfolio_apps:
           value: "https://aldera.tech"
     networks: ["nginx_proxy_manager_network", "postgres_network"]
     volumes:
-      - "solvo_uploads:/app/public/uploads"
+      - "aldera_uploads:/app/public/uploads"
     use_prisma: false
     run_migrate: false
     run_seeder: false
@@ -286,7 +286,7 @@ portfolio_apps:
       domain: "aldera.tech"
       records: ["@", "api", "router"]
     databases:
-      postgres: ["aldera_tech", "solvo_tech"]
+      postgres: ["aldera_tech"]
 
   - name: "location-based-presence-web"
     enabled: false
@@ -886,11 +886,8 @@ postgres_database_users:
     username: "{{ vault_pui_db_username }}"
     password: "{{ vault_pui_db_password }}"
   - database: "aldera_tech"
-    username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
-    password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
-  - database: "solvo_tech"
-    username: "{{ vault_aldera_db_username | default(vault_solvo_db_username) }}"
-    password: "{{ vault_aldera_db_password | default(vault_solvo_db_password) }}"
+    username: "{{ vault_aldera_db_username }}"
+    password: "{{ vault_aldera_db_password }}"
   - database: "gamblock"
     username: "{{ vault_gamblock_backend_db_username | default('gamblock') }}"
     password: "{{ vault_gamblock_backend_db_password | default(vault_postgres_password) }}"

@@ -81,15 +81,15 @@ vault_ruang_tenang_api_fonnte_token: ""
 # Lelang Fashion Mobile
 vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.alfian-gading.my.id/api"
 
-# Aldera Tech (formerly Solvo)
+# Aldera Tech
 vault_aldera_app_url: "https://aldera.tech"
 vault_aldera_nextauth_url: "https://aldera.tech"
 vault_aldera_auth_secret: "change-this-auth-secret"
 vault_aldera_cron_secret: "change-this-cron-secret"
 vault_aldera_db_host: "postgres-db"
 vault_aldera_db_port: "5432"
-vault_aldera_db_database: "solvo_tech"
-vault_aldera_db_username: "solvo_tech"
+vault_aldera_db_database: "aldera_tech"
+vault_aldera_db_username: "aldera_tech"
 vault_aldera_db_password: "change-this-db-password"
 vault_aldera_seed_admin_email: "admin@aldera.tech"
 vault_aldera_seed_admin_password: "change-this-admin-password"

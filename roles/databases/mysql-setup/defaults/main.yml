@@ -34,5 +34,4 @@ mysql_databases:
   - posyandu
   - presensi_skansaba
   - ruang_istirahat
-  - solvo
   - tech_talk
