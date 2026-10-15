@@ -60,7 +60,7 @@ ssh_key_name: "server_ed25519"
 ssh_key_path: "~/.ssh/{{ ssh_key_name }}"
 deploy_user: "deployer"
 ci_deploy_user: "deployer"
-ssh_port: 22
+ssh_port: 20193
 
 # ============================================================================
 # Docker Configuration

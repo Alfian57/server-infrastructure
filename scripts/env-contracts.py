@@ -407,6 +407,12 @@ def runtime_value(name: str, vault: dict[str, Any], variables: dict[str, Any]) -
     if name in {"vps_user", "ci_deploy_user"}:
         return str(variables.get("ci_deploy_user") or variables.get("deploy_user", "deployer"))
     if name == "vps_ssh_port":
+        for line in (PROJECT_DIR / "inventory" / "hosts.ini").read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped and not stripped.startswith("[") and not stripped.startswith("#"):
+                for part in stripped.split():
+                    if part.startswith("ansible_port="):
+                        return part.split("=", 1)[1]
         return str(variables.get("ssh_port", "22"))
     if name == "vps_key":
         key_name = str(variables.get("ssh_key_name", "server_ed25519"))
