@@ -16,7 +16,7 @@ aldera_router_repo_owner: "AlderaTech"
 aldera_router_image_tag: "latest"
 aldera_router_postgres_image: "postgres:16-alpine"
 aldera_router_9router_image: "decolua/9router:latest"
-aldera_router_billing_proxy_image: "ghcr.io/alderatech/billing-proxy:{{ aldera_router_image_tag }}"
+aldera_router_billing_proxy_image: "ghcr.io/alderatech/router-billing-proxy:{{ aldera_router_image_tag }}"
 aldera_router_bot_image: "ghcr.io/alderatech/router-telegram-bot:{{ aldera_router_image_tag }}"
 
 # Container Names
