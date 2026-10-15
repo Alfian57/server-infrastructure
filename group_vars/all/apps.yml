@@ -866,7 +866,7 @@ mysql_database_users:
     password: "{{ vault_ruang_tenang_api_db_password | default(vault_mysql_root_password) }}"
   - database: "satu_platform"
     username: "{{ vault_satu_platform_db_username | default('satu_platform') }}"
-    password: "{{ vault_satu_platform_db_password | default(vault_mysql_password) }}"
+    password: "{{ vault_satu_platform_db_password | default(vault_mysql_root_password) }}"
 postgres_databases: >-
   {{
     (
