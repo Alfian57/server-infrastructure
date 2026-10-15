@@ -341,6 +341,7 @@ cleanup_images() {
 # Main
 # ---------------------------------------------------------------------------
 main() {
+    cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     prepare_log_target
     acquire_lock
     log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
