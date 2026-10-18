@@ -43,6 +43,9 @@ services:
     environment:
       DATA_DIR: /app/data
       PORT: "{{ aldera_router_9router_port }}"
+{% if aldera_router_9router_initial_password | default('') %}
+      INITIAL_PASSWORD: "{{ aldera_router_9router_initial_password }}"
+{% endif %}
     volumes:
       - {{ aldera_router_9router_volume }}:/app/data
     networks:
