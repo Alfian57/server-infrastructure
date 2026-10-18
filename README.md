@@ -12,6 +12,7 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
 - [Penggunaan dengan Makefile](#-penggunaan-dengan-makefile)
 - [Security](#-security)
 - [Konfigurasi](#️-konfigurasi)
+- [Aldera Multi-Stack Staging Architecture](#-aldera-multi-stack-staging-architecture)
 
 ## ✨ Features
 
@@ -40,6 +41,8 @@ Ansible playbooks dan roles untuk automasi setup dan management server infrastru
 │       ├── apps.yml           # App catalog, env contracts, CI mappings
 │       ├── vars.yml           # Non-sensitive variables
 │       └── vault.yml          # Encrypted credentials (Ansible Vault)
+├── deploy-aldera-router-staging.yml # Staging router deployment playbook
+├── deploy-aldera-web-staging.yml    # Staging web deployment playbook
 ├── playbooks/
 │   └── server-setup.yml       # Main playbook
 └── roles/
@@ -151,6 +154,44 @@ make deploy
 | `make deploy-fresh` | Fresh deployment dengan database seeders |
 | `make deploy-script` | Interactive deployment dengan script |
 | `make deploy-dry-run` | Preview perubahan tanpa eksekusi |
+
+## 🚀 Aldera Multi-Stack Staging Architecture
+
+Infrastruktur mendukung lingkungan **Staging** dan **Production** multi-stack yang terisolasi pada VPS yang sama (`45.66.153.149`):
+
+### 1. Dedicated Staging Playbooks
+- **`deploy-aldera-router-staging.yml`**:
+  Deploy stack staging untuk Aldera Router (Telegram bot `@aldera_tech_staging_bot`, database `aldera_router_staging`, billing proxy, dan 9router).
+  ```bash
+  ansible-playbook -i inventory/hosts.ini deploy-aldera-router-staging.yml
+  ```
+- **`deploy-aldera-web-staging.yml`**:
+  Deploy stack staging untuk Aldera Web App (`staging.aldera.tech`, database `aldera_tech_staging`).
+  ```bash
+  ansible-playbook -i inventory/hosts.ini deploy-aldera-web-staging.yml
+  ```
+
+### 2. Multi-Stack Topology & Token Mappings
+| Parameter | Staging (`staging`) | Production (`main`) |
+|---|---|---|
+| **Web App Domain** | `https://staging.aldera.tech` | `https://aldera.tech` |
+| **Web Directory** | `/opt/docker-stack/applications/aldera-tech-staging` | `/opt/docker-stack/applications/aldera-tech` |
+| **Web Database** | `aldera_tech_staging` | `solvo_tech` / `aldera_tech` |
+| **Telegram Bot** | `@aldera_tech_staging_bot` | `@aldera_tech_bot` |
+| **Bot Token Vault Key** | `vault_aldera_router_staging_bot_token` (`[REDACTED]`) | `vault_aldera_router_bot_token` (`[REDACTED]`) |
+| **Router Directory** | `/opt/docker-stack/applications/aldera-router-staging` | `/opt/docker-stack/applications/aldera-router` |
+| **Router Database** | `aldera_router_staging` | `aldera_router` |
+| **Network Isolation** | `aldera_router_staging_internal` (strictly isolated) | `aldera_router_internal` |
+
+### 3. Git Branching Model: `main` <- `staging` <- `feat/*`, `fix/*`
+- **`main`**: Protected Production branch. Otomatisasi CI/CD deploy ke production VPS stack.
+- **`staging`**: Integration branch. Otomatisasi CI/CD deploy ke staging VPS stack.
+- **`feat/*`, `fix/*`**: Branch pengerjaan fitur/bugfix. Wajib dicabangkan dari `origin/staging`:
+  ```bash
+  git fetch origin
+  git checkout -b feat/<nama-fitur> origin/staging
+  ```
+- Seluruh Pull Request ditargetkan ke branch **`staging`** menggunakan strategi **Squash and Merge**. Dilarang melakukan commit langsung ke `main` atau `staging`, dan dilarang membuat PR langsung ke `main` untuk task reguler.
 
 ### Script Options
 ```bash
@@ -762,12 +803,12 @@ ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --step
 Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
+2. Create feature branch: `git checkout -b feat/<nama-fitur> origin/staging`
 3. Run lint: `make lint`
 4. Test changes: `make setup-dry-run`
 5. Commit: `git commit -m 'Add amazing feature'`
-6. Push: `git push origin feature/amazing-feature`
-7. Create Pull Request
+6. Push: `git push origin feat/<nama-fitur>`
+7. Open a Pull Request to staging
 
 ## 📚 Additional Resources
 

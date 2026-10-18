@@ -43,15 +43,15 @@
 
 - name: Copy Aldera Router update helper
   ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../roles/common/files/update.sh"
+    src: "{{ role_path }}/../../common/files/update.sh"
     dest: "{{ aldera_router_install_dir }}/update.sh"
     mode: "0750"
     owner: "{{ aldera_router_admin_user }}"
     group: "{{ aldera_router_runtime_group }}"
 
-- name: Copy database bootstrap SQL script
-  ansible.builtin.copy:
-    src: init.sql
+- name: Render database bootstrap SQL script
+  ansible.builtin.template:
+    src: init.sql.j2
     dest: "{{ aldera_router_install_dir }}/init.sql"
     mode: "0640"
     owner: "{{ aldera_router_admin_user }}"

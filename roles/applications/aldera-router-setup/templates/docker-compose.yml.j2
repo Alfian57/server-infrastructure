@@ -36,7 +36,7 @@ services:
     labels:
       - "autoheal=true"
 
-  9router:
+  {{ aldera_router_9router_service_name }}:
     image: {{ aldera_router_9router_image }}
     container_name: {{ aldera_router_9router_container_name }}
     restart: unless-stopped
@@ -52,7 +52,9 @@ services:
           - {{ aldera_router_9router_container_name }}
       {{ aldera_router_proxy_network }}:
         aliases:
+{% if aldera_router_enable_generic_proxy_aliases | default(not (aldera_router_is_staging | default(false) | bool)) | bool %}
           - 9router
+{% endif %}
           - {{ aldera_router_9router_container_name }}
     security_opt:
       - no-new-privileges:true
@@ -65,7 +67,7 @@ services:
     labels:
       - "autoheal=true"
 
-  billing-proxy:
+  {{ aldera_router_billing_proxy_service_name }}:
     image: {{ aldera_router_billing_proxy_image }}
 {% if aldera_router_enable_local_build | default(false) %}
     build:
@@ -79,7 +81,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      9router:
+      {{ aldera_router_9router_service_name }}:
         condition: service_started
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:{{ aldera_router_billing_proxy_port }}/healthz"]
@@ -94,7 +96,9 @@ services:
           - {{ aldera_router_billing_proxy_container_name }}
       {{ aldera_router_proxy_network }}:
         aliases:
+{% if aldera_router_enable_generic_proxy_aliases | default(not (aldera_router_is_staging | default(false) | bool)) | bool %}
           - billing-proxy
+{% endif %}
           - {{ aldera_router_billing_proxy_container_name }}
     security_opt:
       - no-new-privileges:true
@@ -121,7 +125,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      billing-proxy:
+      {{ aldera_router_billing_proxy_service_name }}:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python3", "-c", "import bot.config; print('OK')"]

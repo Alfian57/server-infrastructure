@@ -129,7 +129,8 @@ $$ LANGUAGE plpgsql;
 -- 3.1 USERS TABLE
 CREATE TABLE IF NOT EXISTS users (
     id BIGSERIAL PRIMARY KEY,
-    telegram_id BIGINT NOT NULL UNIQUE,
+    telegram_id BIGINT UNIQUE,
+    web_user_id VARCHAR(64) UNIQUE,
     username VARCHAR(255),
     full_name VARCHAR(255) NOT NULL,
     balance NUMERIC(16, 4) NOT NULL DEFAULT 0.0000,
@@ -141,7 +142,10 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT chk_users_full_name_non_empty CHECK (length(trim(full_name)) > 0)
 );
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS web_user_id VARCHAR(64) UNIQUE;
+ALTER TABLE users ALTER COLUMN telegram_id DROP NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_users_web_user_id ON users(web_user_id);
 CREATE INDEX IF NOT EXISTS idx_users_is_active ON users(is_active);
 
 DROP TRIGGER IF EXISTS trg_users_updated_at ON users;
@@ -332,6 +336,69 @@ CREATE TRIGGER trg_prevent_truncate_balance_transactions
     FOR EACH STATEMENT
     EXECUTE FUNCTION prevent_truncate_audit();
 
+-- 3.7 ACCOUNT_BINDING_TOKENS TABLE
+CREATE TABLE IF NOT EXISTS account_binding_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    code VARCHAR(10) NOT NULL UNIQUE,
+    aldera_user_id VARCHAR(64) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_binding_token_non_empty CHECK (length(trim(token)) >= 16),
+    CONSTRAINT chk_binding_code_format CHECK (code ~ '^[0-9]{6}$'),
+    CONSTRAINT chk_binding_user_id_non_empty CHECK (length(trim(aldera_user_id)) > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_binding_tokens_token ON account_binding_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_binding_tokens_code ON account_binding_tokens(code);
+CREATE INDEX IF NOT EXISTS idx_binding_tokens_aldera_user_id ON account_binding_tokens(aldera_user_id);
+CREATE INDEX IF NOT EXISTS idx_binding_tokens_expires_at ON account_binding_tokens(expires_at);
+
+-- 3.8 TELEGRAM_BOT_CONFIGS TABLE
+CREATE TABLE IF NOT EXISTS telegram_bot_configs (
+    id VARCHAR(64) PRIMARY KEY DEFAULT 'default',
+    ticket_template TEXT NOT NULL,
+    important_notes TEXT NOT NULL,
+    next_steps_notes TEXT NOT NULL,
+    topup_amounts JSONB NOT NULL DEFAULT '[25000, 50000, 100000, 250000, 500000]'::jsonb,
+    admin_telegram_username VARCHAR(128) NOT NULL DEFAULT 'aldera_admin',
+    welcome_text TEXT,
+    help_text TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+DROP TRIGGER IF EXISTS trg_telegram_bot_configs_updated_at ON telegram_bot_configs;
+CREATE TRIGGER trg_telegram_bot_configs_updated_at
+    BEFORE UPDATE ON telegram_bot_configs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- 3.9 PAYMENT_METHOD_SETTINGS TABLE
+CREATE TABLE IF NOT EXISTS payment_method_settings (
+    id VARCHAR(64) PRIMARY KEY,
+    type VARCHAR(32) NOT NULL DEFAULT 'BANK',
+    name VARCHAR(128) NOT NULL,
+    account_number VARCHAR(128) NOT NULL,
+    account_name VARCHAR(128) NOT NULL,
+    qris_image_url TEXT,
+    instructions TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    display_order INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_method_settings_active ON payment_method_settings(is_active);
+CREATE INDEX IF NOT EXISTS idx_payment_method_settings_display_order ON payment_method_settings(display_order);
+
+DROP TRIGGER IF EXISTS trg_payment_method_settings_updated_at ON payment_method_settings;
+CREATE TRIGGER trg_payment_method_settings_updated_at
+    BEFORE UPDATE ON payment_method_settings
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
 -- =============================================================================
 -- 4. AUDIT DIAGNOSTIC STORED FUNCTION
 -- =============================================================================
@@ -464,3 +531,45 @@ SET display_name = EXCLUDED.display_name,
     output_price_per_m = EXCLUDED.output_price_per_m,
     is_active = EXCLUDED.is_active,
     updated_at = clock_timestamp();
+
+-- =============================================================================
+-- 6. INITIAL SEED DATA: TELEGRAM BOT CONFIGS & PAYMENT METHODS
+-- =============================================================================
+INSERT INTO telegram_bot_configs (
+    id,
+    ticket_template,
+    important_notes,
+    next_steps_notes,
+    topup_amounts,
+    admin_telegram_username
+) VALUES (
+    'default',
+    '<b>TIKET TOP-UP ALDERA AI</b>\n\nID Tiket: <code>{ticket_id}</code>\nNominal: <b>Rp {amount}</b>\nKode Unik: <b>{unique_code}</b>\nTotal Transfer: <b>Rp {total_transfer}</b>\n\nSilakan transfer tepat sesuai total transfer.',
+    '⚠️ <b>PENTING:</b>\n- Transfer tepat hingga 3 digit terakhir agar deposit otomatis/cepat terverifikasi.\n- Tiket berlaku selama 2 jam sejak dibuat.',
+    '📸 <b>LANGKAH SELANJUTNYA:</b>\n1. Selesaikan pembayaran sesuai nominal di atas.\n2. Kirim bukti transfer (foto/screenshot) langsung ke chat bot ini.\n3. Saldo Anda akan dikonfirmasi oleh sistem/admin.',
+    '[25000, 50000, 100000, 250000, 500000]'::jsonb,
+    'aldera_admin'
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO payment_method_settings (
+    id,
+    type,
+    name,
+    account_number,
+    account_name,
+    qris_image_url,
+    instructions,
+    is_active,
+    display_order
+) VALUES (
+    'bca_default',
+    'BANK',
+    'Bank BCA',
+    '1234567890',
+    'PT Aldera Solusi Teknologi',
+    '',
+    'Transfer sesuai jumlah total transfer ke rekening bank tertera',
+    true,
+    1
+) ON CONFLICT (id) DO NOTHING;
+

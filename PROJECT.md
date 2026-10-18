@@ -13,6 +13,13 @@
 - **Container Infrastructure & System**:
   - `roles/infrastructure/docker-setup/`: Unified Docker daemon configuration (`daemon.json.j2`) managing logging rotation, storage drivers, live-restore, and security parameters.
   - `roles/applications/portfolio-apps/`: Consolidated portfolio application deployment managing compose execution and templated `.env` generation.
+- **Aldera Multi-Stack Staging Architecture (VPS 45.66.153.149)**:
+  - `deploy-aldera-router-staging.yml`: Dedicated playbook deploying isolated staging router stack (`/opt/docker-stack/applications/aldera-router-staging`) with bot `@aldera_tech_staging_bot`, database `aldera_router_staging`, and isolated network `aldera_router_staging_internal`.
+  - `deploy-aldera-web-staging.yml`: Dedicated playbook deploying isolated staging web application (`/opt/docker-stack/applications/aldera-tech-staging`) for `staging.aldera.tech` with database `aldera_tech_staging`.
+  - Token Mappings:
+    * Production Bot `@aldera_tech_bot`: `vault_aldera_router_bot_token` (`[REDACTED_TELEGRAM_BOT_TOKEN]`)
+    * Staging Bot `@aldera_tech_staging_bot`: `vault_aldera_router_staging_bot_token` (`[REDACTED_TELEGRAM_BOT_TOKEN]`)
+  - Zero-Downtime Isolation: Staging containers use dedicated network bridges and do not bind conflicting aliases on `nginx_proxy_manager_network`.
 
 ---
 
@@ -36,6 +43,8 @@
 | 15 | Cloud Services Checker Modernization | Update `scripts/check-cloud-services.sh` pagination and obsolete record reporting | M3 | ORIGINAL_REQUEST R3 |
 | 16 | GitHub Actions CI/CD Pipeline | Add `.github/workflows/lint-and-audit.yml` running syntax-check, lint, shell-check, doctor, env-check | M4 | ORIGINAL_REQUEST R7 |
 | 17 | Controlled Operations & Acceptance Validation | End-to-end acceptance validation across all R1-R8 criteria preserving secrets integrity | M4 | ORIGINAL_REQUEST R8 |
+| 18 | Aldera Staging Router Multi-Stack | Dedicated playbook `deploy-aldera-router-staging.yml`, token mapping, isolated DB `aldera_router_staging` | M5 | Spec Miner R1 |
+| 19 | Aldera Staging Web Multi-Stack | Dedicated playbook `deploy-aldera-web-staging.yml`, domain `staging.aldera.tech`, isolated DB `aldera_tech_staging` | M5 | Spec Miner R1 |
 
 ---
 
@@ -46,6 +55,7 @@
 | M2 | App Catalog Modernization, Rebranding & Multi-Domain Routing | R1, R2, R4 (Features 7-11): AlderaTech rebrand, repo migration, Ruang Tenang dedicated domains, Sistertika dual routing, contract sync | M1 | IN_PROGRESS |
 | M3 | Cloudflare DNS Multi-Zone Synchronization & Record Pruning | R3 (Features 12-15): app-catalog.py multi-zone parsing, update-cloudflare-dns-local.sh multi-zone sync, safe record pruning, non-HTTP safeguard | M2 | PLANNED |
 | M4 | GitHub Actions CI/CD Pipeline & Acceptance Validation | R7, R8 (Features 16-17): .github/workflows/lint-and-audit.yml, automated verification suite (make check, make lint, make shell-check, doctor, env-check, dns dry-run) | M3 | PLANNED |
+| M5 | Multi-Stack Staging Architecture & Dual-Bot Deployment | Features 18-19: Dedicated staging playbooks, isolated container networks, dual-bot credentials | M1 | IN_PROGRESS |
 
 ---
 
