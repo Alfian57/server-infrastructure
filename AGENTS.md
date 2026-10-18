@@ -26,25 +26,23 @@ Pemilik project telah memberi AI agent izin untuk membaca credential di project 
 
 ## Alur kerja perubahan & Aturan Git Branching Model
 
-Repositori ini menerapkan model percabangan 3-tingkat: `main` (Production) $\leftarrow$ `staging` (Staging) $\leftarrow$ `feat/*`, `fix/*`, `refactor/*`, `docs/*`.
+Repositori ini mengelola konfigurasi infrastruktur VPS secara terpusat pada branch `main`. Seluruh playbook (baik untuk stack production maupun staging) dikelola pada branch `main`.
 
-### 1. Larangan Commit Langsung ke `main` dan `staging`
-- **DILARANG KERAS** melakukan commit langsung ke branch `main` maupun branch `staging`.
-- **DILARANG KERAS** membuka Pull Request (PR) langsung ke `main` untuk task reguler.
+### 1. Larangan Commit Langsung ke `main`
+- **DILARANG KERAS** melakukan commit langsung ke branch `main`.
+- Seluruh perubahan konfigurasi dan playbook wajib dikerjakan pada feature/fix branch.
 
-### 2. Alur Branching & Deployment
-1. **Branch dari `origin/staging`**:
+### 2. Alur Branching & Pull Request
+1. **Branch dari `origin/main`**:
    ```bash
    git fetch origin
-   git checkout -b feat/<nama-fitur> origin/staging
+   git checkout -b feat/<nama-fitur> origin/main
    # atau
-   git checkout -b fix/<deskripsi-bug> origin/staging
+   git checkout -b fix/<deskripsi-bug> origin/main
    ```
 2. **Commit & Pull Request**:
    - Lakukan commit pada branch kerja menggunakan pesan Conventional Commits.
-   - Ajukan Pull Request ke branch **`staging`** (`base: staging`, `compare: feat/...`) dengan strategi **Squash and Merge**.
-3. **Promosi ke `main`**:
-   - Penggabungan ke `main` hanya dilakukan melalui Release PR setelah seluruh playbook dan deployment staging terverifikasi stabil.
+   - Ajukan Pull Request ke branch **`main`** (`base: main`, `compare: feat/...`) dengan strategi **Squash and Merge**.
 
 ### 3. Langkah Operasional Perubahan
 1. Periksa `git status --short` sebelum mengedit. Kenali perubahan lokal yang sudah ada dan pertahankan; jangan melakukan reset, checkout massal, atau penghapusan perubahan yang bukan bagian dari tugas.
