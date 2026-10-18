@@ -40,6 +40,9 @@ aldera_router_volume_prefix: "{{ aldera_router_instance_name | replace('-', '_')
 aldera_router_internal_network: "{{ aldera_router_volume_prefix }}_internal"
 aldera_router_proxy_network: "{{ nginx_proxy_network | default('nginx_proxy_manager_network') }}"
 aldera_router_enable_generic_proxy_aliases: "{{ not (aldera_router_is_staging | default(false) | bool) }}"
+aldera_router_9router_service_name: "{{ '9router' if (aldera_router_enable_generic_proxy_aliases | bool) else aldera_router_9router_container_name }}"
+aldera_router_billing_proxy_service_name: "{{ 'billing-proxy' if (aldera_router_enable_generic_proxy_aliases | bool) else aldera_router_billing_proxy_container_name }}"
+
 
 # Persistent Volumes
 aldera_router_postgres_volume: "{{ aldera_router_volume_prefix }}_postgres_data"
