@@ -1,0 +1,8 @@
+---
+# =============================================================================
+# Root Wrapper: Deploy Aldera Router API Relay Platform (Staging Stack)
+# Usage:
+#   ansible-playbook deploy-aldera-router-staging.yml -i inventory/hosts.ini
+# =============================================================================
+- name: Import Deploy Aldera Router Staging Playbook
+  ansible.builtin.import_playbook: playbooks/deploy-aldera-router-staging.yml

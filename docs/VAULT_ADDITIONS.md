@@ -61,6 +61,40 @@ vault_example_db_username: "example_user"
 vault_example_db_password: "REPLACE_WITH_STRONG_PASSWORD"
 ```
 
+## Aldera Multi-Stack Staging (Production & Staging Coexistence)
+
+```yaml
+# Production Telegram Bot (@aldera_tech_bot)
+vault_aldera_router_bot_token: "8852955622:AAEXFz4P8hMNwsW_oaExomiLJk8LDPYbkXM"
+vault_aldera_router_admin_telegram_ids: "5050275983"
+
+# Staging Telegram Bot (@aldera_tech_staging_bot)
+vault_aldera_router_staging_bot_token: "8916243706:AAEMDoEFcwexK2Mhj6ymicycBb0JsLDBSfw"
+
+# Staging Router Database (container: aldera-router-staging-postgres)
+vault_aldera_router_staging_db_name: "aldera_router_staging"
+vault_aldera_router_staging_db_user: "aldera"
+vault_aldera_router_staging_db_password: "M9xK2pT8vQ5rY7wL4nZ1sB6jC3dF0gH2"
+
+# Staging Web Platform (staging.aldera.tech)
+vault_aldera_staging_app_url: "https://staging.aldera.tech"
+vault_aldera_staging_nextauth_url: "https://staging.aldera.tech"
+vault_aldera_staging_auth_secret: "h6G8Kj2Lm9PqRs4TuVwXyZ1AbCdEfGhIjKlMnOpQrSt"
+vault_aldera_staging_cron_secret: "z8Wq3N1mK4Ls7J9xV2pT5rY0bC6jF3dH"
+vault_aldera_staging_db_host: "postgres-db"
+vault_aldera_staging_db_port: "5432"
+vault_aldera_staging_db_database: "aldera_tech_staging"
+vault_aldera_staging_db_username: "aldera_tech_staging"
+vault_aldera_staging_db_password: "W4tX7zQ9pM2kL5vR8jN1sB3dF6gH0jKl"
+vault_aldera_staging_whatsapp_api_url: "https://api.fonnte.com/send"
+vault_aldera_staging_whatsapp_api_key: "eYj3hqfUWsgCLzFDTQCc"
+vault_aldera_staging_midtrans_server_key: "SB-Mid-server-REPLACE_WITH_YOUR_KEY"
+vault_aldera_staging_midtrans_client_key: "SB-Mid-client-REPLACE_WITH_YOUR_KEY"
+vault_aldera_staging_midtrans_is_production: "false"
+vault_aldera_staging_turnstile_site_key: ""
+vault_aldera_staging_turnstile_secret_key: ""
+```
+
 ## Validation
 
 ```bash

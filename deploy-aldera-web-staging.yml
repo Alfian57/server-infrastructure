@@ -1,0 +1,8 @@
+---
+# =============================================================================
+# Root Wrapper: Deploy Aldera Tech Web Platform (Staging Stack)
+# Usage:
+#   ansible-playbook deploy-aldera-web-staging.yml -i inventory/hosts.ini
+# =============================================================================
+- name: Import Deploy Aldera Tech Web Staging Playbook
+  ansible.builtin.import_playbook: playbooks/deploy-aldera-web-staging.yml

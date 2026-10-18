@@ -52,7 +52,9 @@ services:
           - {{ aldera_router_9router_container_name }}
       {{ aldera_router_proxy_network }}:
         aliases:
+{% if aldera_router_enable_generic_proxy_aliases | default(not (aldera_router_is_staging | default(false) | bool)) | bool %}
           - 9router
+{% endif %}
           - {{ aldera_router_9router_container_name }}
     security_opt:
       - no-new-privileges:true
@@ -94,7 +96,9 @@ services:
           - {{ aldera_router_billing_proxy_container_name }}
       {{ aldera_router_proxy_network }}:
         aliases:
+{% if aldera_router_enable_generic_proxy_aliases | default(not (aldera_router_is_staging | default(false) | bool)) | bool %}
           - billing-proxy
+{% endif %}
           - {{ aldera_router_billing_proxy_container_name }}
     security_opt:
       - no-new-privileges:true
