@@ -284,9 +284,49 @@ portfolio_apps:
       cloudflare_flexible: true
     dns:
       domain: "aldera.tech"
-      records: ["@", "api", "router"]
+      records: ["@", "api", "router", "staging"]
     databases:
       postgres: ["aldera_tech"]
+
+  - name: "aldera-tech-staging"
+    display_name: "Aldera Tech Staging"
+    repo_owner: "AlderaTech"
+    repo: "aldera-tech"
+    image: "ghcr.io/alderatech/aldera-tech:staging"
+    stack: "nextjs"
+    build:
+      dockerfile: "docker/Dockerfile"
+      workflow: "build-and-deploy.yml"
+    app_port: 3000
+    env_template: "roles/applications/portfolio-apps/templates/aldera-staging.env.j2"
+    ci:
+      variables:
+        NEXT_PUBLIC_APP_URL:
+          value: "https://staging.aldera.tech"
+        NEXTAUTH_URL:
+          value: "https://staging.aldera.tech"
+    networks:
+      - "nginx_proxy_manager_network"
+      - "postgres_network"
+      - "aldera_router_staging_internal"
+    volumes:
+      - "aldera_staging_uploads:/app/public/uploads"
+    use_prisma: false
+    run_migrate: false
+    run_seeder: false
+    proxy:
+      domain: "staging.aldera.tech"
+      scheme: "http"
+      forward_host: "aldera-tech-staging"
+      forward_port: 3000
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: "aldera.tech"
+      records: ["staging"]
+    databases:
+      postgres: ["aldera_tech_staging"]
 
   - name: "location-based-presence-web"
     enabled: false
@@ -891,6 +931,9 @@ postgres_database_users:
   - database: "gamblock"
     username: "{{ vault_gamblock_backend_db_username | default('gamblock') }}"
     password: "{{ vault_gamblock_backend_db_password | default(vault_postgres_password) }}"
+  - database: "aldera_tech_staging"
+    username: "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') }}"
+    password: "{{ vault_aldera_staging_db_password | default(vault_aldera_db_password) }}"
 portfolio_repositories: "{{ portfolio_apps | map(attribute='repo') | unique | list }}"
 portfolio_proxy_hosts: >-
   {{

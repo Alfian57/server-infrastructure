@@ -1,0 +1,72 @@
+---
+# =============================================================================
+# Dedicated Playbook: Deploy Aldera Router API Relay Platform (Staging Stack)
+# Usage:
+#   ansible-playbook playbooks/deploy-aldera-router-staging.yml -i inventory/hosts.ini
+# =============================================================================
+- name: Deploy Aldera Router API Relay Platform (Staging)
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - ../group_vars/all/vars.yml
+    - ../group_vars/all/apps.yml
+    - ../group_vars/all/vault.yml
+
+  vars:
+    # Staging Stack Identifiers & Directories
+    aldera_router_instance_name: "aldera-router-staging"
+    aldera_router_app_name: "aldera-router-staging"
+    aldera_router_project_name: "aldera-router-staging"
+    aldera_router_install_dir: "{{ docker_stack_applications }}/aldera-router-staging"
+
+    # Container Names (Strict Isolation from Production)
+    aldera_router_postgres_container_name: "aldera-router-staging-postgres"
+    aldera_router_9router_container_name: "aldera-router-staging-9router"
+    aldera_router_billing_proxy_container_name: "aldera-router-staging-billing-proxy"
+    aldera_router_bot_container_name: "aldera-router-staging-telegram-bot"
+
+    # Persistent Volumes & Docker Networks
+    aldera_router_postgres_volume: "aldera_router_staging_postgres_data"
+    aldera_router_9router_volume: "aldera_router_staging_9router_data"
+    aldera_router_internal_network: "aldera_router_staging_internal"
+
+    # Database Isolation
+    aldera_router_db_name: "aldera_router_staging"
+    aldera_router_db_user: "{{ vault_aldera_router_staging_db_user | default('aldera') }}"
+    aldera_router_db_password: "{{ vault_aldera_router_staging_db_password | default(vault_aldera_router_db_password) }}"
+
+    # Dedicated Bot Token & Environment Overrides
+    aldera_router_bot_token: "{{ vault_aldera_router_staging_bot_token }}"
+    aldera_router_admin_telegram_ids: "{{ vault_aldera_router_admin_telegram_ids }}"
+    aldera_router_image_tag: "staging"
+    aldera_router_app_env: "staging"
+    aldera_router_is_staging: true
+
+    # Domains & Endpoints
+    aldera_router_api_domain: "api-staging.aldera.tech"
+    aldera_router_admin_domain: "router-staging.aldera.tech"
+    aldera_router_public_api_url: "https://api-staging.aldera.tech"
+
+  pre_tasks:
+    - name: Validate minimum Ansible version
+      ansible.builtin.assert:
+        that:
+          - ansible_version.full is version('2.12', '>=')
+        fail_msg: "This playbook requires Ansible 2.12 or higher"
+        quiet: true
+      tags: always
+
+    - name: Assert staging bot token is defined
+      ansible.builtin.assert:
+        that:
+          - vault_aldera_router_staging_bot_token is defined
+          - vault_aldera_router_staging_bot_token | length > 0
+        fail_msg: "vault_aldera_router_staging_bot_token must be configured in vault.yml"
+        quiet: true
+      tags: always
+
+  roles:
+    - role: aldera-router-setup
+      tags: [application, aldera-router-setup, staging, aldera-router-staging]

@@ -31,6 +31,23 @@ The AI API Relay Platform consists of five cooperating components organized into
 
 Deployment and lifecycle management are automated via Ansible (`roles/applications/aldera-router-setup` in `server-infra-with-ansible`) and Docker Compose.
 
+### Multi-Stack Staging Architecture (VPS 45.66.153.149)
+
+The platform runs two completely isolated multi-stack environments side-by-side on VPS `45.66.153.149`:
+
+- **Production Stack (`main`)**:
+  - Directory: `/opt/docker-stack/applications/aldera-router`
+  - Bot: `@aldera_tech_bot` (Token: `8852955622:AAEXFz4P8hMNwsW_oaExomiLJk8LDPYbkXM`)
+  - Database: `aldera_router` (in `aldera-router-postgres`)
+  - Internal Network: `aldera_router_internal`
+  - Playbook: `playbooks/server-setup.yml`
+- **Staging Stack (`staging`)**:
+  - Directory: `/opt/docker-stack/applications/aldera-router-staging`
+  - Bot: `@aldera_tech_staging_bot` (Token: `8916243706:AAEMDoEFcwexK2Mhj6ymicycBb0JsLDBSfw`)
+  - Database: `aldera_router_staging` (in `aldera-router-staging-postgres`)
+  - Internal Network: `aldera_router_staging_internal` (strictly isolated)
+  - Playbook: `deploy-aldera-router-staging.yml`
+
 ---
 
 ## Feature Inventory

@@ -1,0 +1,82 @@
+---
+# =============================================================================
+# Dedicated Playbook: Deploy Aldera Tech Web Platform (Staging Stack)
+# Usage:
+#   ansible-playbook playbooks/deploy-aldera-web-staging.yml -i inventory/hosts.ini
+# =============================================================================
+- name: Deploy Aldera Tech Web Platform (Staging)
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars_files:
+    - ../group_vars/all/vars.yml
+    - ../group_vars/all/apps.yml
+    - ../group_vars/all/vault.yml
+
+  vars:
+    portfolio_app_filter: "aldera-tech-staging"
+    portfolio_default_image_tag: "staging"
+
+  pre_tasks:
+    - name: Validate minimum Ansible version
+      ansible.builtin.assert:
+        that:
+          - ansible_version.full is version('2.12', '>=')
+        fail_msg: "This playbook requires Ansible 2.12 or higher"
+        quiet: true
+      tags: always
+
+    - name: Ensure target app is configured in portfolio_apps catalog
+      ansible.builtin.assert:
+        that:
+          - (portfolio_apps | selectattr('name', 'equalto', 'aldera-tech-staging') | list | length) > 0
+        fail_msg: "aldera-tech-staging must be defined in portfolio_apps inside group_vars/all/apps.yml"
+        quiet: true
+      tags: always
+
+    - name: Pre-provision aldera_tech_staging database and user in PostgreSQL
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - -i
+          - -e
+          - "PGPASSWORD={{ vault_postgres_password }}"
+          - postgres-db
+          - psql
+          - -v
+          - ON_ERROR_STOP=1
+          - -U
+          - "{{ vault_postgres_user }}"
+          - -d
+          - postgres
+        stdin: |
+          SELECT format('CREATE DATABASE %I', 'aldera_tech_staging')
+          WHERE NOT EXISTS (
+            SELECT FROM pg_database WHERE datname = 'aldera_tech_staging'
+          ) \gexec
+          DO $do$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT FROM pg_catalog.pg_roles WHERE rolname = '{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace("'", "''") }}'
+            ) THEN
+              CREATE ROLE "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace('"', '""') }}" LOGIN PASSWORD '{{ vault_aldera_staging_db_password | default(vault_aldera_db_password) | replace("'", "''") }}';
+            ELSE
+              ALTER ROLE "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace('"', '""') }}" WITH LOGIN PASSWORD '{{ vault_aldera_staging_db_password | default(vault_aldera_db_password) | replace("'", "''") }}';
+            END IF;
+          END
+          $do$;
+          ALTER DATABASE "aldera_tech_staging" OWNER TO "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace('"', '""') }}";
+          \connect "aldera_tech_staging"
+          ALTER SCHEMA public OWNER TO "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace('"', '""') }}";
+          GRANT ALL PRIVILEGES ON SCHEMA public TO "{{ vault_aldera_staging_db_username | default('aldera_tech_staging') | replace('"', '""') }}";
+      register: staging_db_preprovision
+      changed_when: "'CREATE DATABASE' in (staging_db_preprovision.stdout | default(''))"
+      failed_when: staging_db_preprovision.rc != 0
+      no_log: true
+      tags: [database, staging-db]
+
+  roles:
+    - role: portfolio-apps
+      tags: [application, portfolio-apps, aldera-tech-staging, staging]

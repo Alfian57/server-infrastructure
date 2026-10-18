@@ -96,7 +96,7 @@
       - "{{ aldera_router_db_user }}"
       - -d
       - "{{ aldera_router_db_name }}"
-    stdin: "{{ lookup('file', 'init.sql') }}"
+    stdin: "{{ lookup('template', 'init.sql.j2') }}"
   register: aldera_router_migration_result
   changed_when: "'CREATE TABLE' in (aldera_router_migration_result.stdout | default('')) or 'INSERT 0' in (aldera_router_migration_result.stdout | default(''))"
   failed_when: aldera_router_migration_result.rc != 0
