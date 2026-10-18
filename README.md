@@ -183,15 +183,14 @@ Infrastruktur mendukung lingkungan **Staging** dan **Production** multi-stack ya
 | **Router Database** | `aldera_router_staging` | `aldera_router` |
 | **Network Isolation** | `aldera_router_staging_internal` (strictly isolated) | `aldera_router_internal` |
 
-### 3. Git Branching Model: `main` <- `staging` <- `feat/*`, `fix/*`
-- **`main`**: Protected Production branch. Otomatisasi CI/CD deploy ke production VPS stack.
-- **`staging`**: Integration branch. Otomatisasi CI/CD deploy ke staging VPS stack.
-- **`feat/*`, `fix/*`**: Branch pengerjaan fitur/bugfix. Wajib dicabangkan dari `origin/staging`:
+### 3. Git Branching Model: `main` <- `feat/*`, `fix/*`
+- **`main`**: Protected Production & Orchestration branch. Seluruh konfigurasi dan playbook (baik untuk stack production maupun staging) dikelola pada branch `main`.
+- **`feat/*`, `fix/*`**: Branch pengerjaan fitur/perubahan playbook. Wajib dicabangkan dari `origin/main`:
   ```bash
   git fetch origin
-  git checkout -b feat/<nama-fitur> origin/staging
+  git checkout -b feat/<nama-fitur> origin/main
   ```
-- Seluruh Pull Request ditargetkan ke branch **`staging`** menggunakan strategi **Squash and Merge**. Dilarang melakukan commit langsung ke `main` atau `staging`, dan dilarang membuat PR langsung ke `main` untuk task reguler.
+- Seluruh Pull Request ditargetkan ke branch **`main`** menggunakan strategi **Squash and Merge**. Dilarang melakukan commit langsung ke `main`.
 
 ### Script Options
 ```bash
@@ -803,12 +802,12 @@ ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --step
 Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feat/<nama-fitur> origin/staging`
+2. Create feature branch: `git checkout -b feat/<nama-fitur> origin/main`
 3. Run lint: `make lint`
 4. Test changes: `make setup-dry-run`
 5. Commit: `git commit -m 'Add amazing feature'`
 6. Push: `git push origin feat/<nama-fitur>`
-7. Open a Pull Request to staging
+7. Open a Pull Request to main
 
 ## 📚 Additional Resources
 
