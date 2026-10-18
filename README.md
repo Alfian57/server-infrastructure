@@ -178,7 +178,7 @@ Infrastruktur mendukung lingkungan **Staging** dan **Production** multi-stack ya
 | **Web Directory** | `/opt/docker-stack/applications/aldera-tech-staging` | `/opt/docker-stack/applications/aldera-tech` |
 | **Web Database** | `aldera_tech_staging` | `solvo_tech` / `aldera_tech` |
 | **Telegram Bot** | `@aldera_tech_staging_bot` | `@aldera_tech_bot` |
-| **Bot Token Vault Key** | `vault_aldera_router_staging_bot_token` (`[REDACTED]`) | `vault_aldera_router_bot_token` (`[REDACTED]`) |
+| **Bot Token Vault Key** | `vault_aldera_router_staging_bot_token`  | `vault_aldera_router_bot_token`  |
 | **Router Directory** | `/opt/docker-stack/applications/aldera-router-staging` | `/opt/docker-stack/applications/aldera-router` |
 | **Router Database** | `aldera_router_staging` | `aldera_router` |
 | **Network Isolation** | `aldera_router_staging_internal` (strictly isolated) | `aldera_router_internal` |

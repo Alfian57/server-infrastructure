@@ -37,13 +37,13 @@ The platform runs two completely isolated multi-stack environments side-by-side 
 
 - **Production Stack (`main`)**:
   - Directory: `/opt/docker-stack/applications/aldera-router`
-  - Bot: `@aldera_tech_bot` (Token: `[REDACTED_TELEGRAM_BOT_TOKEN]`)
+  - Bot: `@aldera_tech_bot` (Token: `[REDACTED_IN_VAULT]`)
   - Database: `aldera_router` (in `aldera-router-postgres`)
   - Internal Network: `aldera_router_internal`
   - Playbook: `playbooks/server-setup.yml`
 - **Staging Stack (`staging`)**:
   - Directory: `/opt/docker-stack/applications/aldera-router-staging`
-  - Bot: `@aldera_tech_staging_bot` (Token: `[REDACTED_TELEGRAM_BOT_TOKEN]`)
+  - Bot: `@aldera_tech_staging_bot` (Token: `[REDACTED_IN_VAULT]`)
   - Database: `aldera_router_staging` (in `aldera-router-staging-postgres`)
   - Internal Network: `aldera_router_staging_internal` (strictly isolated)
   - Playbook: `deploy-aldera-router-staging.yml`

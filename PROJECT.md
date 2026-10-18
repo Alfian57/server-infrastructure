@@ -17,8 +17,8 @@
   - `deploy-aldera-router-staging.yml`: Dedicated playbook deploying isolated staging router stack (`/opt/docker-stack/applications/aldera-router-staging`) with bot `@aldera_tech_staging_bot`, database `aldera_router_staging`, and isolated network `aldera_router_staging_internal`.
   - `deploy-aldera-web-staging.yml`: Dedicated playbook deploying isolated staging web application (`/opt/docker-stack/applications/aldera-tech-staging`) for `staging.aldera.tech` with database `aldera_tech_staging`.
   - Token Mappings:
-    * Production Bot `@aldera_tech_bot`: `vault_aldera_router_bot_token` (`[REDACTED_TELEGRAM_BOT_TOKEN]`)
-    * Staging Bot `@aldera_tech_staging_bot`: `vault_aldera_router_staging_bot_token` (`[REDACTED_TELEGRAM_BOT_TOKEN]`)
+    * Production Bot `@aldera_tech_bot`: `vault_aldera_router_bot_token` (`[REDACTED_IN_VAULT]`)
+    * Staging Bot `@aldera_tech_staging_bot`: `vault_aldera_router_staging_bot_token` (`[REDACTED_IN_VAULT]`)
   - Zero-Downtime Isolation: Staging containers use dedicated network bridges and do not bind conflicting aliases on `nginx_proxy_manager_network`.
 
 ---

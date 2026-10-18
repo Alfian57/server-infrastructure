@@ -65,11 +65,11 @@ vault_example_db_password: "REPLACE_WITH_STRONG_PASSWORD"
 
 ```yaml
 # Production Telegram Bot (@aldera_tech_bot)
-vault_aldera_router_bot_token: "[REDACTED_TELEGRAM_BOT_TOKEN]"
+vault_aldera_router_bot_token: "[REDACTED_IN_VAULT]"
 vault_aldera_router_admin_telegram_ids: "5050275983"
 
 # Staging Telegram Bot (@aldera_tech_staging_bot)
-vault_aldera_router_staging_bot_token: "[REDACTED_TELEGRAM_BOT_TOKEN]"
+vault_aldera_router_staging_bot_token: "[REDACTED_IN_VAULT]"
 
 # Staging Router Database (container: aldera-router-staging-postgres)
 vault_aldera_router_staging_db_name: "aldera_router_staging"
