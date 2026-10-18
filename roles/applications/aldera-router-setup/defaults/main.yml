@@ -58,6 +58,7 @@ aldera_router_public_api_url: "https://{{ aldera_router_api_domain }}"
 aldera_router_upstream_url: "http://9router:{{ aldera_router_9router_port }}"
 aldera_router_upstream_timeout: "120s"
 aldera_router_shutdown_timeout: "15s"
+aldera_router_9router_initial_password: "{{ vault_aldera_router_9router_initial_password | default('') }}"
 
 # PostgreSQL Configuration
 aldera_router_db_host: "postgres"
