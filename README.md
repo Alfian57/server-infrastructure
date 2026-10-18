@@ -803,12 +803,12 @@ ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --step
 Contributions are welcome! Please:
 
 1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
+2. Create feature branch: `git checkout -b feat/<nama-fitur> origin/staging`
 3. Run lint: `make lint`
 4. Test changes: `make setup-dry-run`
 5. Commit: `git commit -m 'Add amazing feature'`
-6. Push: `git push origin feature/amazing-feature`
-7. Create Pull Request
+6. Push: `git push origin feat/<nama-fitur>`
+7. Open a Pull Request to staging
 
 ## 📚 Additional Resources
 
