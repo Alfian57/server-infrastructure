@@ -24,13 +24,41 @@ Pemilik project telah memberi AI agent izin untuk membaca credential di project 
 - Simpan credential baru di Vault dan gunakan variabel Vault dari template atau konfigurasi terkait.
 - Jangan mengubah, menghapus, atau mengganti credential saat tugas hanya meminta inspeksi atau dokumentasi.
 
-## Alur kerja perubahan
+## Alur kerja perubahan & Aturan Git Branching Model
 
+Repositori ini menerapkan model percabangan 3-tingkat: `main` (Production) $\leftarrow$ `staging` (Staging) $\leftarrow$ `feat/*`, `fix/*`, `refactor/*`, `docs/*`.
+
+### 1. Larangan Commit Langsung ke `main` dan `staging`
+- **DILARANG KERAS** melakukan commit langsung ke branch `main` maupun branch `staging`.
+- **DILARANG KERAS** membuka Pull Request (PR) langsung ke `main` untuk task reguler.
+
+### 2. Alur Branching & Deployment
+1. **Branch dari `origin/staging`**:
+   ```bash
+   git fetch origin
+   git checkout -b feat/<nama-fitur> origin/staging
+   # atau
+   git checkout -b fix/<deskripsi-bug> origin/staging
+   ```
+2. **Commit & Pull Request**:
+   - Lakukan commit pada branch kerja menggunakan pesan Conventional Commits.
+   - Ajukan Pull Request ke branch **`staging`** (`base: staging`, `compare: feat/...`) dengan strategi **Squash and Merge**.
+3. **Promosi ke `main`**:
+   - Penggabungan ke `main` hanya dilakukan melalui Release PR setelah seluruh playbook dan deployment staging terverifikasi stabil.
+
+### 3. Langkah Operasional Perubahan
 1. Periksa `git status --short` sebelum mengedit. Kenali perubahan lokal yang sudah ada dan pertahankan; jangan melakukan reset, checkout massal, atau penghapusan perubahan yang bukan bagian dari tugas.
 2. Baca README, katalog aplikasi, role, template, dan skrip yang berkaitan sebelum mengubah perilaku. Ikuti pola yang sudah dipakai repository.
 3. Untuk perubahan aplikasi, pertahankan kesesuaian antara `apps.yml`, role aplikasi, template `.env`, repository aplikasi, dan konfigurasi CI.
 4. Jika kontrak `.env.example` di repository aplikasi berubah, gunakan `make env-contract-check` atau `make env-contract-check APP=<slug>`, lalu `make env-contract-show APP=<slug>` untuk meninjau selisih. Tambahkan key yang diperlukan ke template dan mapping CI jika memang dipakai saat build atau deploy.
-5. Lakukan validasi yang sesuai dengan perubahan, lalu tinjau diff dan status Git. Jangan melaporkan pemeriksaan sebagai berhasil jika belum dijalankan.
+5. **Verifikasi Deployment Staging**:
+   - Sebelum menjalankan playbook staging ke VPS, lakukan validasi sintaks:
+     ```bash
+     ansible-playbook -i inventory/hosts.ini deploy-aldera-router-staging.yml --syntax-check
+     ansible-playbook -i inventory/hosts.ini deploy-aldera-web-staging.yml --syntax-check
+     ```
+   - Pastikan variabel vault staging (`vault_aldera_router_staging_*`, `vault_aldera_staging_*`) sudah terdaftar dan tidak menimpa kredensial produksi.
+6. Lakukan validasi lokal (`make check`, `make lint`), lalu tinjau diff dan status Git. Jangan melaporkan pemeriksaan sebagai berhasil jika belum dijalankan.
 
 ## Perintah yang berguna
 

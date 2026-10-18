@@ -95,6 +95,9 @@ vault_aldera_staging_turnstile_site_key: ""
 vault_aldera_staging_turnstile_secret_key: ""
 ```
 
+> **Best Practice**: Seluruh variabel vault di atas dikonfigurasi dalam berkas terenkripsi `group_vars/all/vault.yml` menggunakan Ansible Vault (`make vault-edit`). Dilarang menyimpan credential plaintext atau token bot nyata ke dalam berkas dokumentasi publik atau git tracking.
+
+
 ## Validation
 
 ```bash
