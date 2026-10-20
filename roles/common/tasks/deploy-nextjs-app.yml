@@ -15,6 +15,7 @@
   ansible.builtin.set_fact:
     app_install_dir: "/opt/docker-stack/applications/{{ app_name }}"
     app_image: "ghcr.io/{{ github_username }}/{{ app_name }}:latest"
+    app_previous_image: "ghcr.io/{{ github_username }}/{{ app_name }}:previous"
     app_networks: "{{ docker_networks | default(['nginx_proxy_manager_network']) }}"
     app_port: "{{ app_port | default(3000) }}"
     node_env: "{{ node_env | default('production') }}"
@@ -107,6 +108,15 @@
     - not (env_template_check.stat.exists | default(false))
     - env_file_check.stat.exists | default(false)
 
+- name: Backup current image tag as previous before pull
+  ansible.builtin.shell:
+    cmd: |
+      if docker image inspect {{ app_image }} >/dev/null 2>&1; then
+        docker tag {{ app_image }} {{ app_previous_image }}
+      fi
+  changed_when: false
+  failed_when: false
+
 - name: Pull latest Docker image
   community.docker.docker_image:
     name: "{{ app_image }}"
@@ -125,42 +135,67 @@
     name: docker-compose-plugin
     state: present
 
-- name: Deploy {{ app_name }} container with docker-compose
-  community.docker.docker_compose_v2:
-    project_src: "{{ app_install_dir }}"
-    pull: always
-    remove_orphans: true
-    recreate: auto
-    state: present
-  register: app_deployment
+- name: Deploy and verify {{ app_name }} with automatic rollback
+  block:
+    - name: Deploy {{ app_name }} container with docker-compose
+      community.docker.docker_compose_v2:
+        project_src: "{{ app_install_dir }}"
+        pull: always
+        remove_orphans: true
+        recreate: auto
+        state: present
+      register: app_deployment
 
-- name: Wait for Next.js to build and start
-  ansible.builtin.pause:
-    seconds: 15
+    - name: Wait for Next.js to build and start
+      ansible.builtin.pause:
+        seconds: 15
 
-- name: Check if container is running
-  community.docker.docker_container_info:
-    name: "{{ app_name }}"
-  register: container_info
-  retries: 5
-  delay: 5
-  until: 
-    - container_info.container is defined
-    - container_info.container.State is defined
-    - container_info.container.State.Running | bool
+    - name: Check if container is running
+      community.docker.docker_container_info:
+        name: "{{ app_name }}"
+      register: container_info
+      retries: 5
+      delay: 5
+      until: 
+        - container_info.container is defined
+        - container_info.container.State is defined
+        - container_info.container.State.Running | bool
 
-- name: Verify application is responding
-  ansible.builtin.uri:
-    url: "http://localhost:{{ app_port }}"
-    method: GET
-    status_code: [200, 301, 302, 304]
-    timeout: 10
-  register: app_health
-  retries: 15
-  delay: 5
-  failed_when: false
-  when: verify_health | default(true)
+    - name: Probe deep health endpoint (/api/health)
+      ansible.builtin.uri:
+        url: "http://localhost:{{ app_port }}/api/health"
+        method: GET
+        status_code: 200
+        timeout: 10
+      register: app_health
+      retries: 15
+      delay: 5
+      until: app_health.status == 200
+      failed_when: app_health.status != 200
+      when: verify_health | default(true)
 
-- name: Display deployment status
-  ansible.builtin.debug:
-    msg: "{{ app_name }} Next.js deployment {{ 'successful and responding' if app_health.status is defined and app_health.status in [200, 301, 302, 304] else 'completed (container running)' }}"
+    - name: Display deployment status
+      ansible.builtin.debug:
+        msg: "{{ app_name }} Next.js deployment successful and verified healthy on /api/health"
+
+  rescue:
+    - name: Log health check failure
+      ansible.builtin.debug:
+        msg: "Health check failed for {{ app_name }} on /api/health! Initiating rollback..."
+
+    - name: Execute rollback to previous container image
+      ansible.builtin.shell:
+        cmd: |
+          if docker image inspect {{ app_previous_image }} >/dev/null 2>&1; then
+            echo "Rolling back {{ app_name }} to previous image tag ({{ app_previous_image }})..."
+            docker tag {{ app_previous_image }} {{ app_image }}
+            docker compose up -d --force-recreate
+          else
+            echo "No previous image tag found for {{ app_name }}; stopping failed container..."
+            docker compose down
+          fi
+        chdir: "{{ app_install_dir }}"
+
+    - name: Fail deployment execution
+      ansible.builtin.fail:
+        msg: "CRITICAL: Post-deployment health check failed for {{ app_name }} on /api/health. Rolled back to previous image."

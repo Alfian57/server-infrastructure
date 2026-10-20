@@ -268,7 +268,10 @@ portfolio_apps:
           value: "https://aldera.tech"
         NEXTAUTH_URL:
           value: "https://aldera.tech"
-    networks: ["nginx_proxy_manager_network", "postgres_network"]
+    networks:
+      - "nginx_proxy_manager_network"
+      - "postgres_network"
+      - "aldera_router_internal"
     volumes:
       - "aldera_uploads:/app/public/uploads"
     use_prisma: false
