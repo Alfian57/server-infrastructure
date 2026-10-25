@@ -799,7 +799,7 @@ portfolio_apps:
     run_migrate: true
     run_seeder: false
     build:
-      dockerfile: "Dockerfile"
+      dockerfile: "docker/Dockerfile"
       workflow: "build-and-deploy.yml"
     env_template: "roles/applications/portfolio-apps/templates/satu-platform.env.j2"
     env_contract:
