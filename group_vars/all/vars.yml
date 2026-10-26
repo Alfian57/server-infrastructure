@@ -26,7 +26,7 @@ enable_docker_setup: true
 enable_autoheal: true
 enable_nginx_proxy: true
 enable_minio: false
-enable_cloudflare_warp: true
+enable_cloudflare_warp: false
 
 # Databases
 enable_mysql: true

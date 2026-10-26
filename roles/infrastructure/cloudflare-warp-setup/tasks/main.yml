@@ -6,9 +6,8 @@
   ansible.builtin.debug:
     msg: "Cloudflare WARP installation is {{ 'enabled' if warp_install else 'disabled' }}"
 
-- name: Skip WARP setup when disabled
-  ansible.builtin.debug:
-    msg: "Skipping Cloudflare WARP because warp_install=false"
+- name: Teardown and remove WARP when disabled
+  ansible.builtin.include_tasks: uninstall.yml
   when: not warp_install | bool
 
 - name: Validate WARP host support

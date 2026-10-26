@@ -1,0 +1,71 @@
+---
+# Teardown and uninstall Cloudflare WARP proxy from host
+
+- name: Stop and disable WARP proxy forward systemd service
+  ansible.builtin.systemd:
+    name: warp-proxy-forward
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove WARP proxy forward systemd unit
+  ansible.builtin.file:
+    path: /etc/systemd/system/warp-proxy-forward.service
+    state: absent
+  notify: Reload systemd daemon
+
+- name: Disconnect WARP client
+  ansible.builtin.command: warp-cli --accept-tos disconnect
+  failed_when: false
+  changed_when: false
+
+- name: Stop and disable Cloudflare WARP daemon service
+  ansible.builtin.systemd:
+    name: warp-svc
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Remove Cloudflare WARP package
+  ansible.builtin.apt:
+    name: cloudflare-warp
+    state: absent
+    purge: true
+  failed_when: false
+
+- name: Remove Cloudflare APT repository
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ {{ warp_apt_repo_suite }} main"
+    state: absent
+    filename: cloudflare-client
+  failed_when: false
+
+- name: Remove Cloudflare client APT list file
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/cloudflare-client.list
+    state: absent
+
+- name: Remove Cloudflare GPG keyring
+  ansible.builtin.file:
+    path: /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+    state: absent
+
+- name: Remove Cloudflare WARP data directory
+  ansible.builtin.file:
+    path: /var/lib/cloudflare-warp
+    state: absent
+
+- name: Remove UFW rules for WARP forward port
+  community.general.ufw:
+    rule: allow
+    port: "{{ warp_forward_port }}"
+    proto: tcp
+    delete: true
+  failed_when: false
+
+- name: Flush handlers to reload systemd
+  ansible.builtin.meta: flush_handlers
+
+- name: Display WARP removal complete
+  ansible.builtin.debug:
+    msg: "✓ Cloudflare WARP and proxy forwarder have been completely removed from this host."

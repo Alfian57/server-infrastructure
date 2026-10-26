@@ -472,7 +472,6 @@ portfolio_apps:
   - name: "ruang-tenang-api"
     repo: "ruang-tenang-api"
     stack: "golang"
-    requires_warp_proxy: true
     build:
       dockerfile: "Dockerfile"
       workflow: "build-and-deploy.yml"
@@ -486,13 +485,6 @@ portfolio_apps:
     run_migrate: true
     run_fresh_migrate: false
     run_seeder: false
-    extra_environment:
-      HTTP_PROXY: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
-      HTTPS_PROXY: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
-      http_proxy: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
-      https_proxy: "http://{{ warp_forward_bind_address | default('172.17.0.1', true) }}:{{ warp_forward_port | default('40001', true) }}"
-      NO_PROXY: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
-      no_proxy: "{{ warp_no_proxy | default('localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16', true) }}"
     proxy:
       domain: "api.ruang-tenang.my.id"
       scheme: "http"

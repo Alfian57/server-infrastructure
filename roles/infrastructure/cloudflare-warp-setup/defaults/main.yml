@@ -1,15 +1,15 @@
 ---
 # Cloudflare WARP Setup - Default Variables
 
-# Enable/disable this role
-warp_install: true
+# Enable/disable this role (defaults to false if enable_cloudflare_warp is false or unset)
+warp_install: "{{ enable_cloudflare_warp | default(false) | bool }}"
 
 # WARP configuration
 warp_mode: "proxy"           # Use proxy mode (safe for SSH, no system-wide VPN)
 warp_proxy_port: 40000       # Internal WARP proxy port (localhost only)
 warp_forward_port: 40001     # External port for Docker access (via socat)
 warp_forward_bind_address: ""
-warp_no_proxy: "localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+warp_no_proxy: "localhost,127.0.0.1,::1,postgres-db,redis-server,mysql-db,minio,nginx-proxy-manager,.local,.internal,api.fonnte.com,fonnte.com,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 
 # Repository configuration. Use the host distro codename because the WARP APT
 # repository publishes distro-specific suites such as `bookworm`, `jammy`,

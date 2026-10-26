@@ -162,9 +162,7 @@
       tags: [infrastructure, cloudflare-warp-setup]
       when:
         - setup_infrastructure | bool
-        - enable_cloudflare_warp | bool
         - ansible_os_family == 'Debian'
-        - warp_required_for_run | bool
 
     # ═══════════════════════════════════════════════════════════
     # DATABASES
