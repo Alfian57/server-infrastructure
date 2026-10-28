@@ -80,6 +80,11 @@ vault_ruang_tenang_api_fonnte_token: ""
 
 # SATU Platform
 vault_satu_platform_app_key: "base64:generate-with-php-artisan-key:generate"
+vault_satu_platform_db_username: "satu_platform"
+vault_satu_platform_db_password: "change-this-db-password"
+vault_satu_platform_reverb_app_id: "satu-reverb"
+vault_satu_platform_reverb_app_key: "satu-key"
+vault_satu_platform_reverb_app_secret: "satu-secret"
 vault_satu_platform_deepseek_api_key: ""
 vault_satu_platform_fonnte_token: ""
 
