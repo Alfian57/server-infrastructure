@@ -78,6 +78,11 @@ vault_ruang_tenang_api_duitku_api_key: ""
 vault_ruang_tenang_api_duitku_merchant_code: ""
 vault_ruang_tenang_api_fonnte_token: ""
 
+# SATU Platform
+vault_satu_platform_app_key: "base64:generate-with-php-artisan-key:generate"
+vault_satu_platform_deepseek_api_key: ""
+vault_satu_platform_fonnte_token: ""
+
 # Lelang Fashion Mobile
 vault_lelang_fashion_mobile_api_base_url: "https://lelang-fashion.alfian-gading.my.id/api"
 

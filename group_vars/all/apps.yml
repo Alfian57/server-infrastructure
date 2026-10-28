@@ -803,7 +803,7 @@ portfolio_apps:
       workflow: "build-and-deploy.yml"
     env_template: "roles/applications/portfolio-apps/templates/satu-platform.env.j2"
     env_contract:
-      required: false
+      path: ".env.example"
     networks: ["nginx_proxy_manager_network", "mysql_network", "redis_network"]
     volumes:
       - "satu_platform_storage:/var/www/html/storage"
