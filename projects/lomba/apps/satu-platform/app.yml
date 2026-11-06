@@ -1,0 +1,46 @@
+---
+name: satu-platform
+display_name: SATU Platform
+enabled: true
+repo: satu-platform
+stack: laravel
+run_migrate: true
+run_seeder: false
+build:
+  dockerfile: Dockerfile
+  workflow: build-and-deploy.yml
+env_template: projects/lomba/apps/satu-platform/.env.j2
+env_contract:
+  required: false
+networks:
+  - nginx_proxy_manager_network
+  - mysql_network
+  - redis_network
+volumes:
+  - satu_platform_storage:/var/www/html/storage
+env_mount_path: /var/www/html/.env
+proxy:
+  domain: satu-platform.my.id
+  scheme: http
+  forward_host: satu-platform
+  forward_port: 80
+  caching_enabled: true
+  websocket_support: true
+  cloudflare_flexible: true
+dns:
+  domain: satu-platform.my.id
+  records:
+    - '@'
+databases:
+  mysql:
+    - satu_platform
+deployment: portfolio
+group: lomba
+requires:
+  - nginx
+  - mysql
+  - redis
+database_users:
+  - database: satu_platform
+    username: '{{ vault_satu_platform_db_username | default(''satu_platform'') }}'
+    password: '{{ vault_satu_platform_db_password | default(vault_mysql_root_password) }}'

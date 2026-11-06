@@ -1,0 +1,59 @@
+---
+name: gamblock-ai-backend
+display_name: Gamblock AI Backend
+repo_owner: Gamblock-AI
+repo: Gamblock-AI-Backend
+image: ghcr.io/gamblock-ai/gamblock-ai-backend:latest
+stack: golang
+app_port: 8080
+health_endpoint: /healthz
+run_migrate: false
+run_seeder: false
+seed_on: fresh
+seeder_command: /app/seeder
+env_template: projects/gamblock-ai/apps/gamblock-ai-backend/.env.j2
+build:
+  dockerfile: Dockerfile
+  workflow: ci.yml
+networks:
+  - nginx_proxy_manager_network
+  - postgres_network
+volumes:
+  - gamblock_ai_backend_artifacts:/app/var/artifacts
+  - gamblock_ai_backend_exports:/app/var/exports
+  - gamblock_ai_backend_media:/app/var/media
+proxy:
+  domain: api.gamblock-ai.com
+  scheme: http
+  forward_host: gamblock-ai-backend
+  forward_port: 8080
+  caching_enabled: false
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: gamblock-ai.com
+  records:
+    - api
+databases:
+  postgres:
+    - gamblock
+ci:
+  variables:
+    ENABLE_CI_TESTS:
+      value: 'false'
+    ENABLE_VPS_DEPLOY:
+      value: 'false'
+    VPS_HOST:
+      source: runtime:vps_host
+    VPS_HOST_FINGERPRINT:
+      value: ''
+enabled: true
+deployment: portfolio
+group: gamblock-ai
+requires:
+  - nginx
+  - postgres
+database_users:
+  - database: gamblock
+    username: '{{ vault_gamblock_backend_db_username | default(''gamblock'') }}'
+    password: '{{ vault_gamblock_backend_db_password | default(vault_postgres_password) }}'

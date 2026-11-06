@@ -1,0 +1,38 @@
+---
+- name: Initialize Router databases on shared PostgreSQL and switch their consumers
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/catalog.yml
+    - ../projects/index.yml
+  vars:
+    groups_registry: '{{ group_registry }}'
+    deployment_group: alderatech
+    requested_apps: [aldera-router-staging, aldera-tech-staging, aldera-router, aldera-tech]
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  pre_tasks:
+    - name: Verify the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Load only the AlderaTech group
+      ansible.builtin.include_tasks: tasks/context.yml
+    - name: Reuse the shared PostgreSQL engine and provision selected databases
+      ansible.builtin.include_role:
+        name: shared-runtime
+  tasks:
+    - name: Apply staging before production with one-time initialization
+      ansible.builtin.include_tasks: tasks/deploy-one.yml
+      loop: '{{ run_apps }}'
+      loop_control:
+        loop_var: selected_app
+        label: '{{ selected_app.name }}'
+    - name: Remove the old PostgreSQL sources after application checks pass
+      ansible.builtin.command:
+        argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+        stdin: '{"operation":"cleanup-postgres"}'
+      register: postgres_cleanup
+    - name: Report the removed source volumes
+      ansible.builtin.debug:
+        msg: '{{ postgres_cleanup.stdout | from_json }}'

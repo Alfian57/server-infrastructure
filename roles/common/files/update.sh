@@ -31,6 +31,18 @@
 
 set -euo pipefail
 
+# Both repository CI and Ansible serialize VPS mutations through the same lock.
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+host_lock=/opt/docker-stack/bin/with-deployment-lock.sh
+if [[ ! -x "$host_lock" ]]; then
+  echo 'Shared deployment lock is missing; provision helpers with Ansible first.' >&2
+  exit 1
+fi
+if ! "$host_lock" --validate; then
+  exec "$host_lock" bash "$0" "$@"
+fi
+
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -44,9 +56,11 @@ LOCK_FILE="/tmp/docker-update-${COMPOSE_PROJECT_NAME}.lock"
 
 MIGRATE_ON_DEPLOY="${MIGRATE_ON_DEPLOY:-true}"
 READINESS_TIMEOUT="${READINESS_TIMEOUT:-180}"
-PRUNE_DANGLING="${PRUNE_DANGLING:-true}"
+PRUNE_DANGLING=false
 
 REGISTRY_LOGGED_IN=false
+REGISTRY_CONFIG=$(mktemp -d)
+export DOCKER_CONFIG="$REGISTRY_CONFIG"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -79,6 +93,7 @@ cleanup() {
     if [[ "${REGISTRY_LOGGED_IN}" == "true" ]]; then
         docker logout "${REGISTRY}" > /dev/null 2>&1 || true
     fi
+    rm -rf -- "$REGISTRY_CONFIG"
     return "${exit_code}"
 }
 trap cleanup EXIT
@@ -102,8 +117,7 @@ prepare_log_target() {
     fi
 
     if [[ -d "${log_dir}" ]] && [[ ! -w "${log_dir}" ]]; then
-        sudo chown -R "$(whoami):$(whoami)" "${log_dir}" 2>/dev/null \
-            || log "WARN" "Could not set log directory permissions"
+        log "WARN" "Shared log directory is not writable; using stdout"
     fi
 
     if [[ -e "${LOG_FILE}" ]] && [[ ! -w "${LOG_FILE}" ]]; then
@@ -115,7 +129,7 @@ prepare_log_target() {
 # Concurrency lock: avoid two deploys racing on the same project
 # ---------------------------------------------------------------------------
 acquire_lock() {
-    exec 9>"${LOCK_FILE}" 2>/dev/null || return 0
+    exec 9>"${LOCK_FILE}"
     if ! flock -w 180 9; then
         error_exit "Another update for ${COMPOSE_PROJECT_NAME} is already running (lock: ${LOCK_FILE})"
     fi
@@ -331,10 +345,7 @@ cleanup_images() {
     done
     log "INFO" "Removed ${removed} replaced image(s)"
 
-    if [[ "${PRUNE_DANGLING}" == "true" ]]; then
-        log "INFO" "Pruning dangling images"
-        docker image prune -f > /dev/null 2>&1 || log "WARN" "Dangling image prune failed"
-    fi
+    # Image cleanup remains limited to replaced, unused images of this app.
 }
 
 # ---------------------------------------------------------------------------
@@ -343,7 +354,7 @@ cleanup_images() {
 main() {
     cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     prepare_log_target
-    acquire_lock
+    # The host-wide lease is already held and validated.
     log "INFO" "Starting update for ${COMPOSE_PROJECT_NAME}"
 
     [[ -f "${COMPOSE_FILE}" ]]  || error_exit "Docker compose file not found: ${COMPOSE_FILE}"

@@ -1,0 +1,46 @@
+---
+name: file-pod-api
+enabled: false
+repo: file-pod-api
+stack: express
+build:
+  dockerfile: Dockerfile
+  workflow: build-and-deploy.yml
+app_port: 8080
+health_endpoint: /health
+env_template: projects/personal/apps/file-pod-api/.env.j2
+env_contract:
+  required: false
+networks:
+  - nginx_proxy_manager_network
+  - postgres_network
+  - minio_network
+volumes:
+  - file_pod_api_uploads:/app/uploads
+create_uploads_dir: true
+use_prisma: true
+run_migrate: true
+run_fresh_migrate: false
+run_seeder: false
+proxy:
+  subdomain: file-pod-api
+  scheme: http
+  forward_host: file-pod-api
+  forward_port: 8080
+  caching_enabled: false
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - file-pod-api
+databases:
+  postgres:
+    - file_pod
+deployment: portfolio
+group: personal
+requires:
+  - nginx
+  - postgres
+  - minio
+database_users: []

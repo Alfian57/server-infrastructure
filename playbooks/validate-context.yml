@@ -1,0 +1,27 @@
+---
+- name: Validate selected group variables locally without contacting a VPS
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/catalog.yml
+    - ../projects/index.yml
+  vars:
+    groups_registry: '{{ group_registry }}'
+    context_only: true
+  tasks:
+    - name: Resolve scoped group configuration and secret references
+      ansible.builtin.include_tasks: tasks/context.yml
+    - name: Verify resolved application database identities
+      ansible.builtin.assert:
+        that:
+          - item.database | length > 0
+          - item.username | length > 0
+          - item.password | length > 0
+      loop: '{{ run_apps | map(attribute="database_users") | flatten }}'
+      no_log: true
+    - name: Report selected application names without credentials
+      ansible.builtin.debug:
+        msg: '{{ run_apps | map(attribute="name") | list }}'

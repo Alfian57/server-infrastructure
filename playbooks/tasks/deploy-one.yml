@@ -1,0 +1,78 @@
+---
+- name: Preserve the currently deployed images before rendering configuration
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+    stdin: '{{ {"operation": "preserve", "application": {"name": selected_app.name}} | to_json }}'
+  register: preserved_images
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Select the Compose files for configuration-only deployment
+  ansible.builtin.set_fact:
+    deployment_compose_files: >-
+      {{ ['docker-compose.yml', 'docker-compose.preserve.json']
+      if (preserved_images.stdout | default('{"preserved":false}') | from_json).preserved
+      else ['docker-compose.yml'] }}
+
+- name: Deploy a catalog-driven application
+  ansible.builtin.include_role:
+    name: portfolio-apps
+    tasks_from: deploy-one
+  vars:
+    portfolio_app: '{{ selected_app }}'
+  when: selected_app.deployment == 'portfolio'
+
+- name: Deploy Hashbox PUI
+  ansible.builtin.include_role:
+    name: pui-setup
+  when: selected_app.deployment == 'pui'
+
+- name: Deploy the Guardian stack or its selected ML component
+  ansible.builtin.include_role:
+    name: guardian-lab-setup
+  vars:
+    guardian_lab_stream_image: "{{ (preserved_images.stdout | default('{}') | from_json).stream_image | default('nginx:1.28-alpine') }}"
+  when: selected_app.deployment == 'guardian'
+
+- name: Deploy Aldera Router against shared PostgreSQL
+  ansible.builtin.include_role:
+    name: aldera-router-setup
+  vars:
+    aldera_router_instance_name: '{{ selected_app.name }}'
+    aldera_router_is_staging: '{{ selected_app.staging | default(false) }}'
+    aldera_router_db_host: postgres-db
+    aldera_router_db_name: '{{ selected_app.databases.postgres[0] }}'
+    aldera_router_db_user: '{{ selected_app.database_users[0].username }}'
+    aldera_router_db_password: '{{ selected_app.database_users[0].password }}'
+  when: selected_app.deployment == 'aldera-router'
+
+- name: Record successful one-time database initialization
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+    stdin: '{{ {"operation": "initialized", "application": {"name": selected_app.name}} | to_json }}'
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Reconcile only this application's public resources
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+    stdin: >-
+      {{ {'operation': 'public', 'application': selected_app, 'address': ansible_host | default(ansible_default_ipv4.address),
+      'credentials': {'cloudflare_token': vault_cloudflare_api_token,
+      'cloudflare_email': vault_cloudflare_email | default(''),
+      'cloudflare_global_key': vault_cloudflare_global_api_key | default(''),
+      'npm_email': vault_npm_admin_email, 'npm_password': vault_npm_admin_password}} | to_json }}
+  no_log: true
+  register: public_resource_result
+  failed_when: false
+  when:
+    - not ansible_check_mode
+    - selected_app.proxy is defined or selected_app.proxy_hosts is defined
+
+- name: Require application public resource reconciliation to succeed
+  ansible.builtin.assert:
+    that: public_resource_result.rc == 0
+    fail_msg: '{{ public_resource_result.stderr | default("Scoped public resource reconciliation failed") }}'
+  when:
+    - not ansible_check_mode
+    - selected_app.proxy is defined or selected_app.proxy_hosts is defined

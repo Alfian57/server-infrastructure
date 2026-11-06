@@ -1,205 +1,73 @@
 ---
 name: Lint and Audit
-
 'on':
   push:
-    branches:
-      - main
-      - staging
+    branches: [main, staging]
   pull_request:
-    branches:
-      - main
-      - staging
+    branches: [main, staging]
   workflow_dispatch:
-    inputs:
-      guardian_operation:
-        description: Guardian Lab operation
-        type: choice
-        options: [validate, preflight, deploy]
-        default: validate
-      guardian_web_tag:
-        description: Published web image tag
-        type: string
-        default: latest
-      guardian_ml_tag:
-        description: Published ML image tag
-        type: string
-        default: latest
-
 permissions:
   contents: read
-
 jobs:
-  lint-and-audit:
-    name: Lint, Syntax & Catalog Audit
+  validate:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible ansible-lint yamllint pyyaml
-
-      - name: Install Ansible Galaxy collections
-        run: |
-          if [ -f requirements.yml ]; then
-            ansible-galaxy collection install -r requirements.yml
-          fi
-
-      - name: Run yamllint
-        run: |
-          yamllint -c .yamllint .
-
-      - name: Setup vault password and mock vault for CI syntax check
-        env:
-          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-        run: |
-          if [ -n "$VAULT_PASSWORD" ]; then
-            echo "$VAULT_PASSWORD" > .vault_pass
-          else
-            echo "ci-dummy-vault-pass" > .vault_pass
-            ansible-vault encrypt group_vars/all/vault.yml.example \
-              --vault-password-file=.vault_pass \
-              --output=group_vars/all/vault.yml \
-              --encrypt-vault-id=default
-          fi
-          chmod 600 .vault_pass
-
-      - name: Ensure inventory exists from example
-        run: |
-          if [ ! -f inventory/hosts.ini ] && [ -f inventory/hosts.ini.example ]; then
-            cp inventory/hosts.ini.example inventory/hosts.ini
-          fi
-
-      - name: Check Ansible Playbook syntax
-        run: |
-          ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --vault-password-file=.vault_pass --syntax-check
-
-      - name: Run ansible-lint
-        run: |
-          ANSIBLE_VAULT_PASSWORD_FILE=.vault_pass ansible-lint playbooks/server-setup.yml
-
-      - name: Check Shell scripts syntax
-        run: |
-          find scripts roles group_vars -name "*.sh" -print0 | xargs -0 -n1 bash -n
-
-      - name: Validate Application Catalog Integrity
-        run: |
-          ./scripts/app-catalog.py doctor
-
-      - name: Check Application Environment Templates
-        run: |
-          ./scripts/app-catalog.py env-check
-
-  guardian-preflight:
-    if: github.event_name == 'workflow_dispatch' && inputs.guardian_operation != 'validate'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
     env:
-      VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USER: ${{ secrets.VPS_USER }}
-      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
-      VPS_KEY: ${{ secrets.VPS_KEY }}
-      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-    steps:
-      - name: Check the Guardian deployment host
-        run: |
-          set -euo pipefail
-          : "${VPS_HOST:?}" "${VPS_USER:?}" "${VPS_KEY:?}" "${VPS_KNOWN_HOSTS:?}"
-          umask 077
-          ssh_dir=$(mktemp -d)
-          trap 'rm -rf "$ssh_dir"' EXIT
-          printf '%s\n' "$VPS_KEY" > "$ssh_dir/key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
-          ssh -F /dev/null -i "$ssh_dir/key" -p "${VPS_SSH_PORT:-22}" \
-            -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$ssh_dir/known_hosts" "${VPS_USER}@${VPS_HOST}" bash -se <<'REMOTE'
-          uname -m
-          free -m
-          df -h /opt/docker-stack
-          docker compose version
-          docker ps --format 'table {{.Names}}\t{{.Status}}'
-          if test -f /opt/docker-stack/applications/guardian-lab/.env; then
-            echo guardian_env=present
-            stat -c 'guardian_env_permissions=%a owner=%U group=%G' /opt/docker-stack/applications/guardian-lab/.env
-          else
-            echo guardian_env=absent
-          fi
-          if test -f /opt/docker-stack/applications/guardian-lab/stream.conf; then
-            stat -c 'guardian_stream_config=%a uid=%u gid=%g' /opt/docker-stack/applications/guardian-lab/stream.conf
-            docker inspect --format '{{json .State}}' guardian-lab-stream || true
-            docker run --rm --pull never --network none --read-only --user 101:101 \
-              --cap-drop ALL --security-opt no-new-privileges \
-              --tmpfs /var/cache/nginx:rw,nosuid,size=16m,uid=101,gid=101 \
-              --tmpfs /var/run:rw,nosuid,size=1m,uid=101,gid=101 \
-              -v /opt/docker-stack/applications/guardian-lab/stream.conf:/etc/nginx/conf.d/default.conf:ro \
-              --entrypoint nginx nginx:1.28-alpine -t || true
-          fi
-          REMOTE
-
-  guardian-deploy:
-    needs: [lint-and-audit, guardian-preflight]
-    if: github.event_name == 'workflow_dispatch' && inputs.guardian_operation == 'deploy'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    concurrency:
-      group: guardian-lab-bootstrap
-      cancel-in-progress: false
-    env:
-      VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USER: ${{ secrets.VPS_USER }}
-      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
-      VPS_KEY: ${{ secrets.VPS_KEY }}
-      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
       VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-      WEB_TAG: ${{ inputs.guardian_web_tag }}
-      ML_TAG: ${{ inputs.guardian_ml_tag }}
-      ANSIBLE_HOST_KEY_CHECKING: "true"
+      BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install the Ansible controller
+          python-version: '3.12'
+      - name: Install validation tools
         run: |
-          python -m pip install 'ansible==12.1.0' 'PyYAML==6.0.3'
+          pip install 'ansible==12.1.0' ansible-lint yamllint 'PyYAML==6.0.3'
           ansible-galaxy collection install -r requirements.yml
-      - name: Prepare private deployment configuration
+      - name: Prepare validation inventory and encrypted placeholders when needed
         run: |
           set -euo pipefail
-          [[ "$WEB_TAG" =~ ^(latest|sha-[0-9a-f]{40})$ ]]
-          [[ "$ML_TAG" =~ ^(latest|sha-[0-9a-f]{40})$ ]]
-          : "${VAULT_PASSWORD:?}"
           umask 077
-          printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
-          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/guardian-key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/guardian-known_hosts"
-          python - <<'PY'
-          import json, os
+          cp inventory/hosts.ini.example inventory/hosts.ini
+          python - <<'INNER'
+          import os,subprocess
           from pathlib import Path
-          host = {"ansible_host": os.environ["VPS_HOST"], "ansible_user": os.environ["VPS_USER"],
-                  "ansible_port": int(os.environ.get("VPS_SSH_PORT") or "22")}
-          Path("inventory/guardian-ci.json").write_text(json.dumps({"all": {"hosts": {"guardian_server": host}}}))
-          PY
-          ansible-vault view group_vars/all/vault.yml > /dev/null
-      - name: Deploy only Guardian Lab and its two public hosts
+          password=os.environ.get('VAULT_PASSWORD') or 'ci-placeholder-password'
+          Path('.vault_pass').write_text(password)
+          if not os.environ.get('VAULT_PASSWORD'):
+              for example in [Path('platform/vault.yml.example'),*Path('projects').glob('*/vault.yml.example')]:
+                  subprocess.run(['ansible-vault','encrypt',str(example),'--output',str(example).removesuffix('.example'),'--encrypt-vault-id','default'],check=True)
+          INNER
+      - name: Select changed application groups
         run: |
-          export ANSIBLE_SSH_ARGS="-F /dev/null -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=$RUNNER_TEMP/guardian-ssh-%C -o UserKnownHostsFile=$RUNNER_TEMP/guardian-known_hosts"
-          ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
-            --private-key "$RUNNER_TEMP/guardian-key" --syntax-check
-          ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
-            --private-key "$RUNNER_TEMP/guardian-key" \
-            -e "guardian_lab_initial_web_tag=$WEB_TAG" -e "guardian_lab_initial_ml_tag=$ML_TAG"
-      - name: Remove private controller files
+          python - <<'INNER'
+          import json,os,subprocess
+          from pathlib import Path
+          import yaml
+          groups=list(yaml.safe_load(Path('projects/index.yml').read_text())['group_registry'])
+          base=os.environ.get('BASE_SHA','')
+          if base and set(base)!={'0'}:
+              result=subprocess.run(['git','diff','--name-only',base,'HEAD'],capture_output=True,text=True)
+              files=result.stdout.splitlines() if result.returncode==0 else []
+              if files and all(p.startswith('projects/') and len(p.split('/'))>2 and p.split('/')[1] in groups for p in files):
+                  groups=sorted({p.split('/')[1] for p in files})
+          Path('.ansible-groups').write_text('\n'.join(groups)+'\n')
+          print('Validation groups: '+', '.join(groups))
+          INNER
+      - name: Validate behavior, Ansible, and shell scripts
+        run: make validate
+      - name: Validate selected group catalogs and templates
+        run: |
+          set -euo pipefail
+          while IFS= read -r group; do
+            python scripts/catalog.py doctor --group "$group"
+            python scripts/app-catalog.py env-check --group "$group"
+            ansible-playbook playbooks/validate-context.yml -i localhost, -e "deployment_group=$group"
+          done < .ansible-groups
+      - name: Check YAML
+        run: yamllint -c .yamllint .
+      - name: Remove local vault password
         if: always()
-        run: rm -f .vault_pass inventory/guardian-ci.json "$RUNNER_TEMP/guardian-key" "$RUNNER_TEMP/guardian-known_hosts"
+        run: rm -f .vault_pass .ansible-groups

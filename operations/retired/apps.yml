@@ -1,0 +1,185 @@
+---
+retired_apps:
+  - name: posyandu
+    enabled: false
+    repo: posyandu-digital
+    image_name: posyandu
+    stack: laravel
+    build:
+      dockerfile: docker/Dockerfile
+      workflow: build-and-deploy.yml
+    env_template: roles/applications/posyandu-setup/templates/.env.j2
+    networks:
+      - nginx_proxy_manager_network
+      - mysql_network
+      - redis_network
+    volumes:
+      - posyandu_storage:/var/www/storage
+    env_mount_path: /var/www/.env
+    proxy:
+      subdomain: posyandu
+      scheme: http
+      forward_host: posyandu
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - posyandu
+    databases:
+      mysql:
+        - posyandu
+  - name: materi-ku
+    enabled: false
+    repo: materi-ku
+    stack: laravel
+    build:
+      dockerfile: docker/Dockerfile
+      workflow: build-and-deploy.yml
+    env_template: roles/applications/materi-ku-setup/templates/.env.j2
+    networks:
+      - nginx_proxy_manager_network
+      - mysql_network
+    volumes:
+      - materi_ku_storage:/var/www/storage
+    env_mount_path: /var/www/.env
+    proxy:
+      subdomain: materi-ku
+      scheme: http
+      forward_host: materi-ku
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - materi-ku
+    databases:
+      mysql:
+        - materi_ku
+  - name: ruang-istirahat
+    enabled: false
+    repo: ruang-istirahat
+    stack: laravel
+    build:
+      dockerfile: docker/Dockerfile
+      workflow: build-and-deploy.yml
+    env_template: roles/applications/ruang-istirahat-setup/templates/.env.j2
+    networks:
+      - nginx_proxy_manager_network
+      - mysql_network
+    volumes:
+      - ruang_istirahat_storage:/var/www/storage
+    env_mount_path: /var/www/.env
+    proxy:
+      subdomain: ruang-istirahat
+      scheme: http
+      forward_host: ruang-istirahat
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - ruang-istirahat
+    databases:
+      mysql:
+        - ruang_istirahat
+  - name: tech-talk
+    enabled: false
+    repo: tech-talk
+    stack: laravel
+    run_seeder: true
+    build:
+      dockerfile: docker/Dockerfile
+      workflow: build-and-deploy.yml
+    env_template: roles/applications/tech-talk-setup/templates/.env.j2
+    networks:
+      - nginx_proxy_manager_network
+      - mysql_network
+    volumes:
+      - tech_talk_storage:/var/www/storage
+    env_mount_path: /var/www/.env
+    proxy:
+      subdomain: tech-talk
+      scheme: http
+      forward_host: tech-talk
+      forward_port: 80
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - tech-talk
+    databases:
+      mysql:
+        - tech_talk
+  - name: campus-project-hub-api
+    enabled: false
+    repo: campus-project-hub-api
+    stack: golang
+    build:
+      dockerfile: Dockerfile
+      workflow: docker-build.yml
+    app_port: 8000
+    health_endpoint: /api/v1/health
+    env_template: roles/applications/campus-project-hub-api-setup/templates/.env.j2
+    networks:
+      - nginx_proxy_manager_network
+      - postgres_network
+    volumes:
+      - campus_project_hub_api_uploads:/app/uploads
+    create_data_dir: true
+    run_migrate: false
+    run_fresh_migrate: false
+    run_seeder: false
+    proxy:
+      subdomain: campus-project-hub-api
+      scheme: http
+      forward_host: campus-project-hub-api
+      forward_port: 8000
+      caching_enabled: false
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - campus-project-hub-api
+    databases:
+      postgres:
+        - campus_project_hub
+  - name: campus-project-hub-web
+    enabled: false
+    repo: campus-project-hub-web
+    stack: nextjs
+    build:
+      dockerfile: Dockerfile
+      workflow: docker-build.yml
+    app_port: 3000
+    env_template: roles/applications/campus-project-hub-web-setup/templates/.env.j2
+    ci:
+      secrets:
+        MIDTRANS_CLIENT_KEY:
+          source: vault:vault_campus_project_hub_web_midtrans_client_key
+      variables:
+        NEXT_PUBLIC_API_URL:
+          source: vault:vault_campus_project_hub_web_api_url
+    networks:
+      - nginx_proxy_manager_network
+    proxy:
+      subdomain: campus-project-hub-web
+      scheme: http
+      forward_host: campus-project-hub-web
+      forward_port: 3000
+      caching_enabled: true
+      websocket_support: false
+      cloudflare_flexible: true
+    dns:
+      domain: alfian-gading.my.id
+      records:
+        - campus-project-hub-web

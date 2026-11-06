@@ -5,7 +5,9 @@ ignore: |
   .ansible/
   .codex/
   venv/
-  group_vars/all/vault.yml
+  **/vault.yml
+  .git/
+  __pycache__/
 
 rules:
   line-length:

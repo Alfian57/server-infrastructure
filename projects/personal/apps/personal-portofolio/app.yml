@@ -1,0 +1,31 @@
+---
+name: personal-portofolio
+repo: personal-portofolio
+stack: nextjs
+build:
+  dockerfile: Dockerfile
+  workflow: build-and-deploy.yml
+app_port: 3000
+env_contract:
+  required: false
+networks:
+  - nginx_proxy_manager_network
+proxy:
+  domain: alfian-gading.my.id
+  scheme: http
+  forward_host: personal-portofolio
+  forward_port: 3000
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - '@'
+    - '*'
+enabled: true
+deployment: portfolio
+group: personal
+requires:
+  - nginx
+database_users: []

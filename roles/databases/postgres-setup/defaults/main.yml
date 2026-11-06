@@ -1,32 +1,14 @@
 ---
-# PostgreSQL Role Defaults
-
-# Path configuration
-docker_stack_base: "/opt/docker-stack"
-docker_stack_databases: "{{ docker_stack_base }}/databases"
-
-# Docker image selection. host-profile sets postgres_auto_image on new hosts.
+docker_stack_base: /opt/docker-stack
+docker_stack_databases: '{{ docker_stack_base }}/databases'
 postgres_preserve_existing_engine: true
-postgres_image_override: ""
-postgres_auto_image: "postgres:18-bookworm"
-
-# Network configuration
-postgres_network: "postgres_network"
-
-# Resource limits
-postgres_memory_limit: "1G"
-postgres_memory_reservation: "512M"
-
-# Custom config
+postgres_image_override: ''
+postgres_auto_image: postgres:18-bookworm
+postgres_network: postgres_network
+postgres_memory_limit: 1G
+postgres_memory_reservation: 512M
 postgres_custom_config: false
-
-# pgAdmin settings
 postgres_enable_pgadmin: true
-pgadmin_version: "9.14.0"
-pgadmin_port: "8082"
-
-# List of databases to create for applications
-postgres_databases:
-  - campus_project_hub
-  - file_pod
-  - ruang_tenang
+pgadmin_version: 9.14.0
+pgadmin_port: '8082'
+postgres_databases: []

@@ -1,3 +1,0 @@
----
-# Default variables for posyandu-setup
-# GitHub credentials are centralized in group_vars/all/vars.yml

@@ -1,0 +1,10 @@
+---
+mobile_repositories:
+  - name: file-pod-mobile
+    enabled: false
+    variables:
+      BASE_URL: https://file-pod-api.alfian-gading.my.id
+    ci:
+      variables:
+        BASE_URL:
+          source: vault:vault_file_pod_mobile_base_url

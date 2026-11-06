@@ -1,0 +1,15 @@
+---
+mobile_repositories:
+  - name: Gamblock-AI-Apps
+    repo_owner: Gamblock-AI
+    build:
+      workflow: ci.yml
+    variables:
+      API_BASE_URL: https://api.gamblock-ai.com
+      WEB_BASE_URL: https://gamblock-ai.com
+    ci:
+      variables:
+        API_BASE_URL:
+          value: https://api.gamblock-ai.com
+        WEB_BASE_URL:
+          value: https://gamblock-ai.com

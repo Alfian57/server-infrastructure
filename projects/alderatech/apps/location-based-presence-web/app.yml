@@ -1,0 +1,43 @@
+---
+name: location-based-presence-web
+enabled: false
+repo_owner: AlderaTech
+repo: location-based-presence-web
+image: ghcr.io/alderatech/location-based-presence-web:latest
+stack: laravel
+build:
+  dockerfile: docker/Dockerfile
+  workflow: web.yml
+env_template: projects/alderatech/apps/location-based-presence-web/.env.j2
+networks:
+  - nginx_proxy_manager_network
+  - mysql_network
+volumes:
+  - location_based_presence_web_storage:/var/www/html/storage
+env_mount_path: /var/www/html/.env
+run_seeder: false
+seed_on: fresh
+proxy:
+  domain: location-based-presence.alfian-gading.my.id
+  scheme: http
+  forward_host: location-based-presence-web
+  forward_port: 80
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - location-based-presence
+databases:
+  mysql:
+    - location_based_presence
+deployment: portfolio
+group: alderatech
+requires:
+  - nginx
+  - mysql
+database_users:
+  - database: location_based_presence
+    username: '{{ vault_location_based_presence_web_db_username }}'
+    password: '{{ vault_location_based_presence_web_db_password }}'

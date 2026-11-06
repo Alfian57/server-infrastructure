@@ -1,0 +1,22 @@
+---
+- name: Require the shared VPS deployment lease
+  ansible.builtin.assert:
+    that:
+      - infra_lock_token | default('') | length == 48
+    fail_msg: Use make deploy, make platform, or the scoped operations workflow.
+
+- name: Verify the live lease holder before changing resources
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - |
+        import json,os,sys
+        h=json.load(open('/opt/docker-stack/.locks/holder.json'))
+        assert h['token']==sys.argv[1]
+        os.kill(h['pid'],0)
+        assert os.path.realpath('/proc/%s/fd/8'%h['pid'])=='/opt/docker-stack/.locks/deployment.lock'
+      - '{{ infra_lock_token }}'
+  changed_when: false
+  check_mode: false
+  no_log: true

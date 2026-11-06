@@ -1,0 +1,37 @@
+---
+name: panca-trivia
+enabled: false
+repo: panca-trivia
+stack: laravel
+run_seeder: false
+build:
+  dockerfile: docker/Dockerfile
+  workflow: build-and-deploy.yml
+env_template: projects/personal/apps/panca-trivia/.env.j2
+networks:
+  - nginx_proxy_manager_network
+  - mysql_network
+volumes:
+  - panca_trivia_storage:/var/www/storage
+env_mount_path: /var/www/.env
+proxy:
+  subdomain: panca-trivia
+  scheme: http
+  forward_host: panca-trivia
+  forward_port: 80
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - panca-trivia
+databases:
+  mysql:
+    - panca_trivia
+deployment: portfolio
+group: personal
+requires:
+  - nginx
+  - mysql
+database_users: []

@@ -1,0 +1,56 @@
+---
+name: gamblock-ai-website
+display_name: Gamblock AI Website
+repo_owner: Gamblock-AI
+repo: Gamblock-AI-Website
+image: ghcr.io/gamblock-ai/gamblock-ai-website:latest
+stack: nextjs
+app_port: 3000
+env_template: projects/gamblock-ai/apps/gamblock-ai-website/.env.j2
+build:
+  dockerfile: Dockerfile
+  workflow: ci.yml
+networks:
+  - nginx_proxy_manager_network
+proxy:
+  domain: gamblock-ai.com
+  domains:
+    - gamblock-ai.com
+    - www.gamblock-ai.com
+  scheme: http
+  forward_host: gamblock-ai-website
+  forward_port: 3000
+  caching_enabled: false
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: gamblock-ai.com
+  records:
+    - '@'
+    - www
+ci:
+  variables:
+    ENABLE_CI_TESTS:
+      value: 'false'
+    ENABLE_VPS_DEPLOY:
+      value: 'false'
+    VPS_HOST:
+      source: runtime:vps_host
+    VPS_HOST_FINGERPRINT:
+      value: ''
+    NEXT_PUBLIC_API_URL:
+      value: https://api.gamblock-ai.com
+    NEXT_PUBLIC_API_URL_STAGING:
+      value: https://api-staging.gamblock-ai.com
+    NEXT_PUBLIC_APP_URL:
+      value: https://gamblock-ai.com
+    NEXT_PUBLIC_APP_URL_STAGING:
+      value: https://staging.gamblock-ai.com
+    NEXT_PUBLIC_VAPID_PUBLIC_KEY:
+      value: ''
+enabled: true
+deployment: portfolio
+group: gamblock-ai
+requires:
+  - nginx
+database_users: []
