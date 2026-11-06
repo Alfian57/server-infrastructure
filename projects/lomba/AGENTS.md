@@ -6,3 +6,6 @@ Gunakan `make plan GROUP=lomba` sebelum `make deploy GROUP=lomba`.
 Untuk satu aplikasi tambahkan `APP=<nama>`. Vault berisi rahasia; jangan tampilkan nilainya.
 Role deployment bersama berada di roles/applications, layanan bersama di roles/databases dan roles/infrastructure.
 Perubahan grup ini hanya boleh memengaruhi resource miliknya.
+
+Ruang Tenang API memakai koneksi keluar langsung tanpa WARP atau HTTP/HTTPS proxy.
+Guardian Lab tetap dibatasi satu sesi sandbox.
