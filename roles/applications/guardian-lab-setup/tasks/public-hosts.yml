@@ -125,14 +125,17 @@
         dns_provider: cloudflare
         propagation_seconds: 120
         dns_provider_credentials: >-
-          {{ 'dns_cloudflare_api_token=' ~ vault_cloudflare_api_token if guardian_lab_cf_is_token | bool
-          else 'dns_cloudflare_email=' ~ vault_cloudflare_email ~ '\n' ~
-          'dns_cloudflare_api_key=' ~ (vault_cloudflare_global_api_key | default(vault_cloudflare_api_token)) }}
+          {{ 'dns_cloudflare_api_token=' ~ vault_cloudflare_api_token
+          if guardian_lab_cf_is_token | bool else guardian_lab_cf_global_credentials }}
     status_code: [200, 201]
     timeout: 900
   when: guardian_lab_certificate_id | int == 0
   register: guardian_lab_new_certificate
   no_log: true
+  vars:
+    guardian_lab_cf_global_credentials: |-
+      dns_cloudflare_email={{ vault_cloudflare_email }}
+      dns_cloudflare_api_key={{ vault_cloudflare_global_api_key | default(vault_cloudflare_api_token) }}
 
 - name: Select the newly issued Guardian certificate
   ansible.builtin.set_fact:
@@ -159,7 +162,7 @@
           'caching_enabled': false, 'block_exploits': true, 'allow_websocket_upgrade': true,
           'http2_support': true, 'hsts_enabled': true, 'hsts_subdomains': false,
           'enabled': true, 'access_list_id': 0, 'locations': [], 'meta': {},
-          'advanced_config': 'set $x_forwarded_proto $http_x_forwarded_proto;\nset $x_forwarded_scheme $http_x_forwarded_proto;\n' ~ (item.advanced_config | default(''))}
+          'advanced_config': guardian_lab_forwarded_proto_config ~ (item.advanced_config | default(''))}
       | combine({'trust_forwarded_proto': true} if (guardian_lab_npm_version.stdout | trim) is version('2.14.0', '>=') else {}) }}
     status_code: [200, 201]
   vars:

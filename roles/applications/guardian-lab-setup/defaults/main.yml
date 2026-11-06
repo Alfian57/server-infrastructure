@@ -17,6 +17,9 @@ guardian_lab_egress_repository: "{{ guardian_lab_web_app.images.sandbox_egress |
 guardian_lab_ml_repository: "{{ guardian_lab_ml_app.image | regex_replace(':latest$', '') }}"
 guardian_lab_readiness_timeout: 180
 guardian_lab_max_sessions: 1
+guardian_lab_forwarded_proto_config: |
+  set $x_forwarded_proto $http_x_forwarded_proto;
+  set $x_forwarded_scheme $http_x_forwarded_proto;
 guardian_lab_web_memory: "1536m"
 guardian_lab_web_cpus: "2.0"
 guardian_lab_stream_image: "nginx:1.28-alpine"
