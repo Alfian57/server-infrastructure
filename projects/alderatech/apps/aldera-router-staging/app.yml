@@ -1,5 +1,6 @@
 ---
 name: aldera-router-staging
+production: false
 enabled: true
 default_deploy: false
 repo_owner: AlderaTech

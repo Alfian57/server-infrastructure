@@ -1,5 +1,6 @@
 ---
 name: gamblock-ai-backend
+production: false
 display_name: Gamblock AI Backend
 repo_owner: Gamblock-AI
 repo: Gamblock-AI-Backend

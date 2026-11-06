@@ -1,5 +1,6 @@
 ---
 name: ruang-tenang-api
+production: false
 repo: ruang-tenang-api
 stack: golang
 build:

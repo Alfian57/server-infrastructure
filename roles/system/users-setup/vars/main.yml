@@ -1,4 +1,4 @@
 ---
-# Users are now defined in group_vars/all/vars.yml
+# Shared user settings are defined in platform/vars.yml.
 # This file is kept for backwards compatibility
-# Users are defined in group_vars/all/vars.yml.
+# This role remains an internal bootstrap dependency.

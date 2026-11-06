@@ -73,7 +73,7 @@ Integrity mode: development
 
 ### Infrastructure & Deployability
 - [ ] `docker compose up -d` (atau `docker compose config`) berjalan valid tanpa error sintaks.
-- [ ] Playbook Ansible `aldera-router-setup` lulus `ansible-playbook --syntax-check`.
+- [ ] Playbook internal lulus pemeriksaan melalui `make infra ACTION=validate`.
 - [ ] Script pengujian end-to-end / verifikasi otomatis (`verify-relay.sh` atau test suite Go/Python) tersedia untuk memvalidasi alur secara mandiri.
 
 
@@ -121,7 +121,7 @@ Integrity mode: development
     4. `postgres`: PostgreSQL 16 Alpine dengan volume persisten dan skrip inisialisasi schema/seeder di `docker-entrypoint-initdb.d`.
   - Jaringan internal terisolasi (`aldera_router_internal`), upstream 9router tidak mengekspos port publik secara langsung.
   - `templates/.env.j2`: Variabel lingkungan terintegrasi dengan Ansible Vault.
-  - Integrasi katalog ke `group_vars/all/apps.yml` dengan reverse proxy routing (Nginx Proxy Manager):
+  - Integrasi katalog ke `projects/alderatech/apps/aldera-router/app.yml` dengan reverse proxy routing (Nginx Proxy Manager):
     - Public gateway: `api.aldera.tech` -> `billing-proxy:8080` (SSL Cloudflare).
     - Optional admin: `router.aldera.tech` -> `9router:20128` (dilindungi HTTP Basic Auth / IP Whitelist).
   - Skrip pengujian & validasi deployment otomatis.
@@ -152,9 +152,9 @@ Integrity mode: development
 
 ### Ansible & Infrastructure (`server-infra-with-ansible`)
 - [ ] Role `aldera-router-setup` terkonfigurasi lengkap dengan tasks, templates (`docker-compose.yml.j2`, `.env.j2`), dan defaults.
-- [ ] Sintaks Ansible valid: `ansible-playbook --syntax-check` pada playbook terkait berjalan sukses.
+- [ ] Sintaks Ansible valid melalui `make infra ACTION=validate`.
 - [ ] `docker compose config` dari hasil template berjalan valid tanpa error sintaks.
-- [ ] `group_vars/all/apps.yml` terdaftar dengan konfigurasi service dan domain proxy.
+- [ ] Aplikasi terdaftar dalam catalogue grup `alderatech` dengan konfigurasi service dan domain proxy.
 
 ### Workspace Hygiene & Isolation
 - [ ] Root direktori `/home/alfiang/Projects/setup-aldera-router` strictly hanya berisi 3 folder: `server-infra-with-ansible/`, `router-telegram-bot/`, dan `billing-proxy/`.

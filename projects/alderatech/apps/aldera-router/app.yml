@@ -1,5 +1,6 @@
 ---
 name: aldera-router
+production: false
 enabled: true
 default_deploy: true
 repo_owner: AlderaTech

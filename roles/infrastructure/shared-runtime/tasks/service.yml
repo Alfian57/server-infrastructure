@@ -34,6 +34,15 @@
     - required_service != 'warp'
     - not (shared_service_info.exists | default(false))
     - not ansible_check_mode
+    - not (reset_database | default(false) | bool)
+
+- name: Require an existing shared service during application database reset
+  ansible.builtin.assert:
+    that: shared_service_info.exists | default(false)
+    fail_msg: "reset-db will not install or start shared services; {{ required_service }} requires platform maintenance first."
+  when:
+    - reset_database | default(false) | bool
+    - required_service != 'warp'
 
 - name: Require an existing shared service to be running and healthy
   ansible.builtin.assert:

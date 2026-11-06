@@ -40,13 +40,13 @@ The platform runs two completely isolated multi-stack environments side-by-side 
   - Bot: `@aldera_tech_bot` (Token: `[REDACTED_IN_VAULT]`)
   - Database: `aldera_router` (in `aldera-router-postgres`)
   - Internal Network: `aldera_router_internal`
-  - Playbook: `playbooks/server-setup.yml`
+  - Deploy command: `make infra ACTION=deploy APP=aldera-router`
 - **Staging Stack (`staging`)**:
   - Directory: `/opt/docker-stack/applications/aldera-router-staging`
   - Bot: `@aldera_tech_staging_bot` (Token: `[REDACTED_IN_VAULT]`)
   - Database: `aldera_router_staging` (in `aldera-router-staging-postgres`)
   - Internal Network: `aldera_router_staging_internal` (strictly isolated)
-  - Playbook: `deploy-aldera-router-staging.yml`
+  - Deploy command: `make infra ACTION=deploy APP=aldera-router-staging`
 
 ---
 
@@ -106,7 +106,7 @@ The platform runs two completely isolated multi-stack environments side-by-side 
 | 51 | AC.11 Idempotent Approval | Inline Approve credits balance, notifies user, rejects repeat clicks | M3, M5 | Acceptance Criteria |
 | 52 | AC.12 Admin Authorization | `/addsaldo` & `/stats` rejected for non-admin users | M3, M5 | Acceptance Criteria |
 | 53 | AC.13 Compose Syntax Validity | `docker compose config` syntax is valid | M4, M5 | Acceptance Criteria |
-| 54 | AC.14 Ansible Syntax Check | `ansible-playbook --syntax-check` passes cleanly | M4, M5 | Acceptance Criteria |
+| 54 | AC.14 Ansible Syntax Check | `make infra ACTION=validate` passes cleanly | M4, M5 | Acceptance Criteria |
 | 55 | AC.15 End-to-End Verification | Full automated test suite and verification script passes | M5 | Acceptance Criteria |
 
 ---
@@ -243,8 +243,8 @@ The platform runs two completely isolated multi-stack environments side-by-side 
 │
 ├── server-infra-with-ansible/               # Milestone 4 (Ansible Automation)
 │   ├── playbooks/
-│   │   ├── server-setup.yml                 # Master playbook including aldera-router-setup
-│   │   └── deploy-aldera-router.yml         # Dedicated application deployment playbook
+│   │   ├── deploy-group.yml                 # Internal scoped playbook used by the dispatcher
+│   │   └── deploy-group.yml                 # Internal playbook used by the dispatcher
 │   ├── group_vars/
 │   │   └── all/
 │   │       └── apps.yml                     # NPM proxy host entries for api/router.aldera.tech

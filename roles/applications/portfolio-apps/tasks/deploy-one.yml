@@ -13,8 +13,8 @@
 - name: "{{ portfolio_app.name }} | Block destructive database operations unless explicitly confirmed"
   ansible.builtin.assert:
     that:
-      - not (portfolio_app.run_fresh_migrate | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or portfolio_app.destructive_allowed | default(false) | bool
-    fail_msg: "Refusing destructive database operation for {{ portfolio_app.name }}. Re-run with confirm_destroy_data=yes only when data loss is intended."
+      - not (portfolio_app.run_fresh_migrate | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or (portfolio_database_reset | default(false) | bool and not (portfolio_app.production | bool))
+    fail_msg: "Refusing destructive database operation for {{ portfolio_app.name }}. Production applications require explicit authorization; non-production reset uses make infra ACTION=reset-db APP={{ portfolio_app.name }}."
     quiet: true
 
 - name: "{{ portfolio_app.name }} | Set deployment facts"
@@ -34,9 +34,9 @@
     app_admin_user: "{{ deploy_user | default(ansible_user | default('root')) }}"
     app_ci_user: "{{ ci_deploy_user | default(deploy_user | default(ansible_user | default('root'))) }}"
     app_runtime_group: "docker"
-    app_run_migrate: "{{ portfolio_app.run_migrate | default(portfolio_app.stack == 'laravel') | bool }}"
-    app_run_fresh_migrate: "{{ portfolio_app.run_fresh_migrate | default(false) | bool }}"
-    app_run_seeder: "{{ (portfolio_app.run_seeder | default(false) | bool) or (run_seeder_on_deploy | default(false) | bool) }}"
+    app_run_migrate: "{{ (portfolio_database_reset | default(false) | bool) or (portfolio_app.run_migrate | default(portfolio_app.stack == 'laravel') | bool) }}"
+    app_run_fresh_migrate: "{{ (portfolio_database_reset | default(false) | bool) or (portfolio_app.run_fresh_migrate | default(false) | bool) }}"
+    app_run_seeder: "{{ (portfolio_database_reset | default(false) | bool) or (portfolio_app.run_seeder | default(false) | bool) or (run_seeder_on_deploy | default(false) | bool) }}"
     app_seed_on: "{{ portfolio_app.seed_on | default('fresh') }}"
 
 - name: "{{ app_name }} | Derive named Docker volumes"
@@ -262,16 +262,41 @@
     - container_info.container.State.Health.Status | default('') == 'healthy'
   changed_when: "'Nothing to migrate' not in (laravel_migration_result.stdout | default(''))"
 
+- name: "{{ app_name }} | Check Laravel seeder availability during database reset"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ app_name }}"
+      - sh
+      - -lc
+      - test -f database/seeders/DatabaseSeeder.php -o -f database/seeds/DatabaseSeeder.php
+  register: laravel_seeder_availability
+  failed_when: false
+  changed_when: false
+  when:
+    - app_stack == 'laravel'
+    - portfolio_database_reset | default(false) | bool
+
 - name: "{{ app_name }} | Run Laravel seeders when requested"
   ansible.builtin.command:
     cmd: docker exec {{ app_name }} php artisan db:seed --force
   register: laravel_seeder_result
-  failed_when: false
+  failed_when: (portfolio_database_reset | default(false) | bool) and laravel_seeder_result.rc != 0
   when:
     - app_stack == 'laravel'
     - app_run_seeder
+    - not (portfolio_database_reset | default(false) | bool) or laravel_seeder_availability.rc | default(0) == 0
     - app_seed_on == 'always' or app_run_fresh_migrate or (app_seed_on == 'fresh' and app_is_fresh_database | default(false) | bool)
     - container_info.container.State.Health.Status | default('') == 'healthy'
+
+- name: "{{ app_name }} | Report missing Laravel dummy seeder"
+  ansible.builtin.debug:
+    msg: "No Laravel DatabaseSeeder was found in the deployed image; database reset completed without app seeding."
+  when:
+    - app_stack == 'laravel'
+    - portfolio_database_reset | default(false) | bool
+    - laravel_seeder_availability.rc | default(1) != 0
 
 - name: "{{ app_name }} | Refresh Laravel caches"
   ansible.builtin.command:
@@ -318,6 +343,23 @@
     - portfolio_app.use_prisma | default(false) | bool
     - app_run_seeder
 
+- name: "{{ app_name }} | Check Prisma seeder availability during database reset"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ app_name }}"
+      - node
+      - -e
+      - "const p=require('./package.json');process.exit(p.scripts&&p.scripts['db:seed']?0:1)"
+  register: nextjs_seeder_availability
+  failed_when: false
+  changed_when: false
+  when:
+    - app_stack == 'nextjs'
+    - portfolio_app.use_prisma | default(false) | bool
+    - portfolio_database_reset | default(false) | bool
+
 - name: "{{ app_name }} | Run Next.js Prisma seed when requested"
   ansible.builtin.command:
     cmd: docker exec {{ app_name }} npm run db:seed
@@ -326,8 +368,38 @@
     - app_stack == 'nextjs'
     - portfolio_app.use_prisma | default(false) | bool
     - app_run_seeder
-    - app_seed_on == 'always' or app_run_fresh_migrate or (app_seed_on == 'fresh' and not (nextjs_seed_marker.stat.exists | default(false)))
+    - not (portfolio_database_reset | default(false) | bool) or nextjs_seeder_availability.rc | default(0) == 0
+    - portfolio_database_reset | default(false) | bool or app_seed_on == 'always' or app_run_fresh_migrate or (app_seed_on == 'fresh' and not (nextjs_seed_marker.stat.exists | default(false)))
     - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Report missing Prisma dummy seeder"
+  ansible.builtin.debug:
+    msg: "No db:seed script was found in the deployed image; database reset completed without app seeding."
+  when:
+    - app_stack == 'nextjs'
+    - portfolio_app.use_prisma | default(false) | bool
+    - portfolio_database_reset | default(false) | bool
+    - nextjs_seeder_availability.rc | default(1) != 0
+
+- name: "{{ app_name }} | Run configured Next.js seeder during database reset"
+  ansible.builtin.command:
+    cmd: "docker exec {{ app_name }} {{ portfolio_app.seeder_command }}"
+  register: nextjs_custom_seeder_result
+  when:
+    - app_stack == 'nextjs'
+    - not (portfolio_app.use_prisma | default(false) | bool)
+    - portfolio_database_reset | default(false) | bool
+    - portfolio_app.seeder_command is defined
+    - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Report missing configured Next.js seeder"
+  ansible.builtin.debug:
+    msg: "No Prisma seed script or custom seeder_command is available; database reset completed without app seeding."
+  when:
+    - app_stack == 'nextjs'
+    - not (portfolio_app.use_prisma | default(false) | bool)
+    - portfolio_database_reset | default(false) | bool
+    - portfolio_app.seeder_command is not defined
 
 - name: "{{ app_name }} | Mark Next.js Prisma seed complete"
   ansible.builtin.file:
@@ -349,6 +421,23 @@
     - app_run_migrate or app_run_fresh_migrate
     - container_info.container.State.Running | default(false) | bool
 
+- name: "{{ app_name }} | Check default Go seeder availability during database reset"
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - "{{ app_name }}"
+      - test
+      - -x
+      - "{{ portfolio_app.seeder_binary if (portfolio_app.seeder_binary is defined and portfolio_app.seeder_binary.startswith('/')) else ('/app/bin/' ~ (portfolio_app.seeder_binary | default(app_name ~ '-seed'))) }}"
+  register: golang_seeder_availability
+  failed_when: false
+  changed_when: false
+  when:
+    - app_stack == 'golang'
+    - portfolio_database_reset | default(false) | bool
+    - portfolio_app.seeder_command is not defined
+
 - name: "{{ app_name }} | Run Go seeders when requested"
   ansible.builtin.command:
     cmd: >-
@@ -362,7 +451,17 @@
     - app_stack == 'golang'
     - app_run_seeder
     - app_seed_on == 'always' or app_run_fresh_migrate
+    - not (portfolio_database_reset | default(false) | bool) or portfolio_app.seeder_command is defined or golang_seeder_availability.rc | default(0) == 0
     - container_info.container.State.Running | default(false) | bool
+
+- name: "{{ app_name }} | Report missing Go dummy seeder"
+  ansible.builtin.debug:
+    msg: "No executable Go seeder was found in the deployed image; database reset completed without app seeding."
+  when:
+    - app_stack == 'golang'
+    - portfolio_database_reset | default(false) | bool
+    - portfolio_app.seeder_command is not defined
+    - golang_seeder_availability.rc | default(1) != 0
 
 - name: "{{ app_name }} | Render optional MySQL seed SQL"
   ansible.builtin.template:
@@ -373,9 +472,9 @@
     group: "{{ app_admin_user }}"
   when:
     - portfolio_app.mysql_seed_template is defined
-    - portfolio_app.run_mysql_seed | default(false) | bool
-    - portfolio_app.mysql_seed_on | default('manual') == 'always'
-    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or portfolio_app.destructive_allowed | default(false) | bool
+    - portfolio_app.run_mysql_seed | default(false) | bool or (portfolio_database_reset | default(false) | bool)
+    - portfolio_database_reset | default(false) | bool or portfolio_app.mysql_seed_on | default('manual') == 'always'
+    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or (portfolio_database_reset | default(false) | bool and not (portfolio_app.production | bool))
   no_log: true
 
 - name: "{{ app_name }} | Run optional MySQL seed SQL"
@@ -387,9 +486,9 @@
   changed_when: mysql_seed_result.rc == 0
   when:
     - portfolio_app.mysql_seed_template is defined
-    - portfolio_app.run_mysql_seed | default(false) | bool
-    - portfolio_app.mysql_seed_on | default('manual') == 'always'
-    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or portfolio_app.destructive_allowed | default(false) | bool
+    - portfolio_app.run_mysql_seed | default(false) | bool or (portfolio_database_reset | default(false) | bool)
+    - portfolio_database_reset | default(false) | bool or portfolio_app.mysql_seed_on | default('manual') == 'always'
+    - not (portfolio_app.mysql_seed_destructive | default(false) | bool) or portfolio_confirm_destroy_data == 'yes' or (portfolio_database_reset | default(false) | bool and not (portfolio_app.production | bool))
     - container_info.container.State.Running | default(false) | bool
   no_log: true
 

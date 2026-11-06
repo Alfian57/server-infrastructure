@@ -50,6 +50,8 @@ def select(group: str = "", app: str = "", *, require_target: bool = False,
         item = read(ROOT / "projects" / owner / "apps" / name / "app.yml")
         if item.get("name") != name or item.get("group") != owner:
             raise ValueError(f"Catalog identity mismatch: {name}")
+        if not isinstance(item.get("production"), bool):
+            raise ValueError(f"Catalog production status must be a boolean: {name}")
         if enabled_only and not item.get("enabled", True):
             continue
         if default_only and not app and not item.get("default_deploy", True):
@@ -94,11 +96,14 @@ def main() -> int:
         items = select(args.group, args.app, require_target=args.command == "plan",
                        enabled_only=args.command == "plan", default_only=args.command == "plan")
         if args.command == "list":
-            print(f"{'GROUP':14} {'APPLICATION':32} {'STATE':9} DOMAINS")
+            print(f"{'GROUP':14} {'APPLICATION':32} {'DEPLOY':9} {'PRODUCTION':14} DOMAINS")
             for a in items:
-                print(f"{a['group']:14} {a['name']:32} {('enabled' if a['enabled'] else 'disabled'):9} {', '.join(domains(a)) or '(internal)'}")
+                deployment = 'enabled' if a.get('enabled', True) else 'disabled'
+                production = 'production' if a['production'] else 'non-production'
+                print(f"{a['group']:14} {a['name']:32} {deployment:9} {production:14} {', '.join(domains(a)) or '(internal)'}")
         elif args.command == "plan":
             print(json.dumps({"applications": [a["name"] for a in items],
+                              "production_status": {a["name"]: a["production"] for a in items},
                               "services": sorted({s for a in items for s in a.get("requires", [])}),
                               "domains": [d for a in items for d in domains(a)],
                               "disabled_policy": "skip", "delete_resources": []}, indent=2))

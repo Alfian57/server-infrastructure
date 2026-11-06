@@ -53,26 +53,10 @@ Comprehensive security hardening role untuk server infrastructure dengan multipl
 
 ## 🚀 Installation
 
-### Via Playbook
-
-```yaml
-# playbooks/server-setup.yml
-- role: security-hardening
-  tags: [security, security-hardening]
-```
-
-### Via Makefile
+### Via dispatcher
 
 ```bash
-# Full security setup
-make setup-tags TAGS=security-hardening
-
-# Specific security components
-make setup-tags TAGS=security-ufw
-make setup-tags TAGS=security-fail2ban
-make setup-tags TAGS=security-ssh
-make setup-tags TAGS=security-docker
-make setup-tags TAGS=security-system
+make infra ACTION=security-hardening
 ```
 
 ## ⚙️ Configuration
@@ -483,16 +467,13 @@ sudo ufw delete 5
 
 ### 1. **Test Before Production**
 ```bash
-# Dry run
-make setup-dry-run
-
-# Deploy to staging first
-ansible-playbook playbooks/server-setup.yml -i inventory/staging.ini --tags security-hardening
+# Explicitly apply the hardening action through the shared dispatcher
+make infra ACTION=security-hardening
 ```
 
 ### 2. **Whitelist Your IP**
 ```yaml
-# group_vars/all/main.yml
+# platform/vars.yml
 security_whitelist_ips:
   - ip: "YOUR_OFFICE_IP"
     comment: "Office IP - never ban"

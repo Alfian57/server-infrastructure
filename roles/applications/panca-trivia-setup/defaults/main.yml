@@ -1,3 +1,3 @@
 ---
 # Default variables for panca-trivia-setup
-# GitHub credentials are centralized in group_vars/all/vars.yml
+# GitHub credentials are managed in the owning project's group configuration.

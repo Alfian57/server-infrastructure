@@ -37,11 +37,25 @@ def ssh_args(host: dict) -> list[str]:
 
 
 def run(args) -> int:
-    if args.operation not in ('deploy','check','dns') and (args.group or args.app):
+    target_operations = ('deploy', 'check', 'dns', 'reset-db')
+    if args.operation not in target_operations and (args.group or args.app):
         raise ValueError('This operation has a fixed platform target; do not supply --group or --app')
-    if args.operation in ('deploy','check','dns'):
-        selected = select(args.group,args.app,require_target=True,enabled_only=True,default_only=True)
+    if args.operation in target_operations:
+        if args.operation == 'reset-db' and not args.app:
+            raise ValueError('reset-db requires exactly one --app target')
+        if args.operation == 'reset-db' and args.destroy_data:
+            raise ValueError('reset-db uses its explicit action and does not accept --destroy-data')
+        selected = select(args.group,args.app,require_target=True,enabled_only=True,
+                          default_only=args.operation != 'reset-db')
         if not selected:raise ValueError('No enabled applications match the target')
+        if args.operation == 'reset-db':
+            if len(selected) != 1:
+                raise ValueError('reset-db requires exactly one application')
+            app = selected[0]
+            if app.get('production') is not False:
+                raise ValueError('reset-db is allowed only for production: false applications')
+            if not app.get('databases'):
+                raise ValueError('reset-db requires an application with declared databases')
         group = selected[0]['group']
     else:
         group = 'alderatech' if args.operation == 'consolidate' else args.group
@@ -67,10 +81,12 @@ def run(args) -> int:
         if not line.startswith('LOCKED '):
             raise RuntimeError('Unable to acquire the VPS deployment lock')
         token=line.split()[1]
-        playbook={'deploy':'deploy-group','check':'deploy-group','platform':'platform','preflight':'preflight',
-                  'decommission':'decommission','consolidate':'consolidate-postgres','helpers':'install-helpers','dns':'public-hosts'}[args.operation]
+        playbook={'deploy':'deploy-group','reset-db':'deploy-group','check':'deploy-group','platform':'platform','preflight':'preflight',
+                  'decommission':'decommission','consolidate':'consolidate-postgres','helpers':'install-helpers',
+                  'dns':'public-hosts','security-hardening':'security-hardening'}[args.operation]
         extra={'deployment_group':group,'app':args.app,'infra_lock_token':token,'platform_service':args.service,
-               'confirm_destroy_data':args.destroy_data,'dns_only':args.operation=='dns'}
+               'confirm_destroy_data':args.destroy_data,'dns_only':args.operation=='dns',
+               'reset_database':args.operation=='reset-db'}
         command=['ansible-playbook','playbooks/'+playbook+'.yml','--extra-vars',json.dumps(extra)]
         if args.operation=='check':command+=['--check']
         child=subprocess.Popen(command,cwd=ROOT)
@@ -95,7 +111,7 @@ def run(args) -> int:
 
 def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('operation',choices=['deploy','check','platform','preflight','decommission','consolidate','helpers','dns','all','rollout','resume-rollout'])
+    p.add_argument('operation',choices=['deploy','reset-db','check','platform','preflight','decommission','consolidate','helpers','dns','security-hardening','all','rollout','resume-rollout'])
     p.add_argument('--group',default='')
     p.add_argument('--app',default='')
     p.add_argument('--service',default='')
