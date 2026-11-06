@@ -8,6 +8,7 @@
     quiet: true
 
 - name: Inspect existing MySQL/MariaDB container
+  no_log: true
   community.docker.docker_container_info:
     name: mysql-db
   register: mysql_existing_container
@@ -80,6 +81,7 @@
   register: mysql_container
 
 - name: Wait for MySQL container to be healthy
+  no_log: true
   community.docker.docker_container_info:
     name: mysql-db
   register: container_info

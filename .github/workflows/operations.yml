@@ -6,7 +6,7 @@ name: Scoped Infrastructure Operations
       operation:
         description: Operation
         type: choice
-        options: [preflight, helpers, deploy, check, platform, decommission, consolidate, rollout]
+        options: [preflight, helpers, deploy, check, platform, decommission, consolidate, rollout, resume-rollout]
         default: preflight
       group:
         description: Application group
@@ -82,7 +82,7 @@ jobs:
             -o UserKnownHostsFile="$RUNNER_TEMP/vps-known-hosts" "$VPS_USER@$VPS_HOST" \
             'sudo -n python3 -' < roles/common/files/inspect-host.py
       - name: Execute scoped operation
-        if: inputs.operation != 'preflight' && inputs.operation != 'rollout'
+        if: inputs.operation != 'preflight' && inputs.operation != 'rollout' && inputs.operation != 'resume-rollout'
         run: |
           set -euo pipefail
           args=("$OPERATION")
@@ -92,12 +92,12 @@ jobs:
           if [ "$DESTROY_DATA" = true ]; then args+=(--destroy-data); fi
           python scripts/deploy.py "${args[@]}"
       - name: Validate the authorized rollout scope
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: |
           test "$DESTROY_DATA" = true
           test -z "$TARGET_GROUP$TARGET_APP$TARGET_SERVICE"
       - name: Record the runtime baseline
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py preflight
       - name: Install shared deployment helpers
         if: inputs.operation == 'rollout'
@@ -109,22 +109,22 @@ jobs:
         if: inputs.operation == 'rollout'
         run: python scripts/deploy.py decommission --destroy-data
       - name: Consolidate Router PostgreSQL staging then production
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py consolidate --destroy-data
       - name: Deploy Personal
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py deploy --group personal
       - name: Deploy Lomba
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py deploy --group lomba
       - name: Deploy Gamblock-AI
-        if: inputs.operation == 'rollout'
+        if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py deploy --group gamblock-ai
       - name: Inspect the resulting runtime
-        if: always() && inputs.operation == 'rollout'
+        if: always() && (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: python scripts/deploy.py preflight
       - name: Upload credential-free runtime reports
-        if: always() && inputs.operation == 'rollout'
+        if: always() && (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         uses: actions/upload-artifact@v4
         with:
           name: runtime-reports

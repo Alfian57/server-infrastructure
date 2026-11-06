@@ -95,18 +95,19 @@ def run(args) -> int:
 
 def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('operation',choices=['deploy','check','platform','preflight','decommission','consolidate','helpers','dns','all','rollout'])
+    p.add_argument('operation',choices=['deploy','check','platform','preflight','decommission','consolidate','helpers','dns','all','rollout','resume-rollout'])
     p.add_argument('--group',default='')
     p.add_argument('--app',default='')
     p.add_argument('--service',default='')
     p.add_argument('--destroy-data',action='store_true')
     a=p.parse_args()
     try:
-        if a.operation=='rollout':
+        if a.operation in ('rollout','resume-rollout'):
             if not a.destroy_data or a.group or a.app or a.service:
                 raise ValueError('rollout has fixed targets and requires --destroy-data')
             steps=[('helpers',''),('deploy','uty'),('decommission',''),('consolidate',''),
                    ('deploy','personal'),('deploy','lomba'),('deploy','gamblock-ai'),('preflight','')]
+            if a.operation=='resume-rollout':steps=steps[3:]
             for operation,group in steps:
                 step=argparse.Namespace(**vars(a));step.operation=operation;step.group=group
                 step.destroy_data=operation in ('decommission','consolidate')

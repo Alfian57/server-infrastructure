@@ -181,6 +181,7 @@
   register: app_deployment
 
 - name: "{{ app_name }} | Wait for Laravel healthcheck"
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ app_name }}"
   register: laravel_container_info
@@ -194,6 +195,7 @@
   when: app_stack == 'laravel'
 
 - name: "{{ app_name }} | Wait for container to run"
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ app_name }}"
   register: runtime_container_info

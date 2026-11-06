@@ -96,6 +96,7 @@
   register: aldera_router_deployment
 
 - name: Wait for PostgreSQL container to become healthy
+  no_log: true
   community.docker.docker_container_info:
     name: postgres-db
   register: aldera_router_postgres_info
@@ -107,6 +108,7 @@
   delay: "{{ aldera_router_health_delay }}"
 
 - name: Wait for Billing Proxy container to become healthy
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ aldera_router_billing_proxy_container_name }}"
   register: aldera_router_proxy_info
@@ -118,6 +120,7 @@
   delay: "{{ aldera_router_health_delay }}"
 
 - name: Wait for Telegram Bot container to be running
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ aldera_router_bot_container_name }}"
   register: aldera_router_bot_info
