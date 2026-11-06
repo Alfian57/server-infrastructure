@@ -38,11 +38,58 @@
     - github_token is defined
     - github_token | length > 0
 
+- name: Apply idempotent schema migrations
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ aldera_router_db_password }}"
+      - postgres-db
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ aldera_router_db_user }}"
+      - -d
+      - "{{ aldera_router_db_name }}"
+    stdin: "{{ lookup('template', 'schema.sql.j2') }}"
+  register: aldera_router_migration_result
+  changed_when: "'CREATE TABLE' in (aldera_router_migration_result.stdout | default('')) or 'INSERT 0' in (aldera_router_migration_result.stdout | default(''))"
+  failed_when: aldera_router_migration_result.rc != 0
+  no_log: true
+  when: aldera_router_run_migration | bool
+
+- name: Apply idempotent initial seeds
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - -i
+      - -e
+      - "PGPASSWORD={{ aldera_router_db_password }}"
+      - postgres-db
+      - psql
+      - -v
+      - ON_ERROR_STOP=1
+      - -U
+      - "{{ aldera_router_db_user }}"
+      - -d
+      - "{{ aldera_router_db_name }}"
+    stdin: "{{ lookup('template', 'seed.sql.j2') }}"
+  register: aldera_router_migration_result
+  changed_when: "'CREATE TABLE' in (aldera_router_migration_result.stdout | default('')) or 'INSERT 0' in (aldera_router_migration_result.stdout | default(''))"
+  failed_when: aldera_router_migration_result.rc != 0
+  no_log: true
+  when: aldera_router_app_name in (new_database_apps | default([]))
+
 - name: Deploy Aldera Router compose stack
   community.docker.docker_compose_v2:
+    files: "{{ deployment_compose_files | default(['docker-compose.yml']) }}"
     project_src: "{{ aldera_router_install_dir }}"
     build: "{{ aldera_router_compose_build | default('policy') }}"
-    pull: policy
+    pull: "{{ 'never' if deployment_compose_files | default([]) | length > 1 else 'missing' }}"
     remove_orphans: true
     recreate: "{{ 'always' if (aldera_router_env_render.changed | default(false)) or (aldera_router_compose_render.changed | default(false)) else 'auto' }}"
     state: present
@@ -50,7 +97,7 @@
 
 - name: Wait for PostgreSQL container to become healthy
   community.docker.docker_container_info:
-    name: "{{ aldera_router_postgres_container_name }}"
+    name: postgres-db
   register: aldera_router_postgres_info
   until:
     - aldera_router_postgres_info.container is defined
@@ -79,29 +126,6 @@
     - aldera_router_bot_info.container.State.Running | default(false) | bool
   retries: 10
   delay: 3
-
-- name: Apply idempotent schema migrations & seeds
-  ansible.builtin.command:
-    argv:
-      - docker
-      - exec
-      - -i
-      - -e
-      - "PGPASSWORD={{ aldera_router_db_password }}"
-      - "{{ aldera_router_postgres_container_name }}"
-      - psql
-      - -v
-      - ON_ERROR_STOP=1
-      - -U
-      - "{{ aldera_router_db_user }}"
-      - -d
-      - "{{ aldera_router_db_name }}"
-    stdin: "{{ lookup('template', 'init.sql.j2') }}"
-  register: aldera_router_migration_result
-  changed_when: "'CREATE TABLE' in (aldera_router_migration_result.stdout | default('')) or 'INSERT 0' in (aldera_router_migration_result.stdout | default(''))"
-  failed_when: aldera_router_migration_result.rc != 0
-  no_log: true
-  when: aldera_router_run_migration | bool
 
 - name: Verify Billing Proxy healthz endpoint internally
   ansible.builtin.command:

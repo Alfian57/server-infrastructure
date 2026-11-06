@@ -1,0 +1,27 @@
+---
+- name: Reconcile DNS for one explicit group
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/catalog.yml
+    - ../projects/index.yml
+  vars:
+    groups_registry: '{{ group_registry }}'
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  tasks:
+    - name: Validate the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Load only the selected group
+      ansible.builtin.include_tasks: tasks/context.yml
+    - name: Upsert only selected DNS names
+      ansible.builtin.command:
+        argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+        stdin: >-
+          {{ {'operation': 'dns', 'application': item, 'address': ansible_host | default(ansible_default_ipv4.address),
+          'credentials': {'cloudflare_token': vault_cloudflare_api_token, 'cloudflare_email': vault_cloudflare_email | default(''),
+          'cloudflare_global_key': vault_cloudflare_global_api_key | default('')}} | to_json }}
+      loop: '{{ run_apps }}'
+      no_log: true

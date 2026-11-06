@@ -1,0 +1,36 @@
+---
+- name: Remove the six explicitly retired applications and their data
+  hosts: all
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/vault.yml
+    - ../operations/retired/apps.yml
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  tasks:
+    - name: Validate the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Install host resource tools
+      ansible.builtin.include_tasks: tasks/helpers.yml
+    - name: Delete only verified resources belonging to the authorized retirement set
+      ansible.builtin.command:
+        argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+        stdin: >-
+          {{ {'operation': 'decommission', 'applications': retired_apps, 'confirm_destroy_data': confirm_destroy_data | default(false),
+          'retained_databases': {'mysql': ['panca_trivia', 'presensi_skansaba', 'location_based_presence', 'pelelangan_produk_fashion', 'pos_soto_saben', 'ruang_tenang', 'satu_platform', 'guardian_lab'],
+          'postgres': ['pui', 'sistertika_uty', 'aldera_tech', 'aldera_tech_staging', 'file_pod', 'gamblock', 'aldera_router', 'aldera_router_staging']},
+          'credentials': {'cloudflare_token': vault_cloudflare_api_token, 'cloudflare_email': vault_cloudflare_email | default(''),
+          'cloudflare_global_key': vault_cloudflare_global_api_key | default(''),
+          'npm_email': vault_npm_admin_email, 'npm_password': vault_npm_admin_password}} | to_json }}
+      no_log: true
+      register: decommission_result
+      failed_when: false
+    - name: Require scoped retirement cleanup to succeed
+      ansible.builtin.assert:
+        that: decommission_result.rc == 0
+        fail_msg: '{{ decommission_result.stderr | default("Scoped retirement cleanup failed") }}'
+    - name: Report retired resource identifiers without credentials
+      ansible.builtin.debug:
+        msg: '{{ decommission_result.stdout | from_json }}'

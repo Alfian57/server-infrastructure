@@ -84,7 +84,7 @@
 
 - name: Render Hashbox PUI environment
   ansible.builtin.template:
-    src: ".env.j2"
+    src: "{{ playbook_dir }}/../{{ pui_app.env_template }}"
     dest: "{{ pui_install_dir }}/.env"
     mode: "0640"
     owner: "{{ pui_admin_user }}"
@@ -113,14 +113,16 @@
   community.docker.docker_image:
     name: "{{ item }}"
     source: pull
-    force_source: true
+    force_source: false
     state: present
   loop: "{{ pui_images }}"
+  when: deployment_compose_files | default([]) | length <= 1
 
 - name: Deploy Hashbox PUI compose stack
   community.docker.docker_compose_v2:
+    files: "{{ deployment_compose_files | default(['docker-compose.yml']) }}"
     project_src: "{{ pui_install_dir }}"
-    pull: always
+    pull: "{{ 'never' if deployment_compose_files | default([]) | length > 1 else 'missing' }}"
     remove_orphans: true
     recreate: "{{ 'always' if (pui_env_render.changed | default(false)) or (pui_compose_render.changed | default(false)) else 'auto' }}"
     state: present

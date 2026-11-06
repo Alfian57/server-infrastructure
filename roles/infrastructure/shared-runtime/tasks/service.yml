@@ -1,0 +1,60 @@
+---
+- name: Define shared service identifiers
+  ansible.builtin.set_fact:
+    service_containers:
+      postgres: postgres-db
+      mysql: mysql-db
+      redis: redis-server
+      nginx: nginx-proxy-manager
+      minio: minio
+    service_roles:
+      postgres: postgres-setup
+      mysql: mysql-setup
+      redis: redis-setup
+      nginx: nginx-proxy-setup
+      minio: minio-setup
+
+- name: Inspect the existing shared container
+  community.docker.docker_container_info:
+    name: '{{ service_containers[required_service] }}'
+  register: shared_service_info
+  when: required_service != 'warp'
+  no_log: true
+
+- name: Install a missing shared service using platform configuration
+  ansible.builtin.include_role:
+    name: '{{ service_roles[required_service] }}'
+  vars:
+    mysql_databases: []
+    mysql_database_users: []
+    postgres_databases: []
+    postgres_database_users: []
+    proxy_hosts: []
+  when:
+    - required_service != 'warp'
+    - not (shared_service_info.exists | default(false))
+    - not ansible_check_mode
+
+- name: Require an existing shared service to be running and healthy
+  ansible.builtin.assert:
+    that:
+      - shared_service_info.container.State.Running | bool
+      - shared_service_info.container.State.Health.Status | default('healthy') == 'healthy'
+    fail_msg: 'Shared {{ required_service }} needs platform maintenance; group deployment will not restart it.'
+  when:
+    - required_service != 'warp'
+    - shared_service_info.exists | default(false)
+
+- name: Preserve the actual MySQL-compatible engine for application environment
+  ansible.builtin.set_fact:
+    mysql_effective_image: '{{ shared_service_info.container.Config.Image }}'
+  when:
+    - required_service == 'mysql'
+    - shared_service_info.exists | default(false)
+
+- name: Check the shared WARP forward proxy
+  ansible.builtin.wait_for:
+    host: '{{ warp_forward_bind_address | default("172.17.0.1", true) }}'
+    port: '{{ warp_forward_port | default(40001, true) }}'
+    timeout: 10
+  when: required_service == 'warp'

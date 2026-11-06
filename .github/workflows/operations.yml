@@ -1,0 +1,96 @@
+---
+name: Scoped Infrastructure Operations
+'on':
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation
+        type: choice
+        options: [preflight, helpers, deploy, check, platform, decommission, consolidate]
+        default: preflight
+      group:
+        description: Application group
+        type: string
+        default: ''
+      app:
+        description: Optional application
+        type: string
+        default: ''
+      service:
+        description: Platform service
+        type: string
+        default: ''
+      destroy_data:
+        description: Allow the explicitly requested retirement cleanup
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: vps-infrastructure-operations
+  cancel-in-progress: false
+jobs:
+  operation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      VPS_HOST: ${{ secrets.VPS_HOST }}
+      VPS_USER: ${{ secrets.VPS_USER }}
+      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
+      VPS_KEY: ${{ secrets.VPS_KEY }}
+      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+      VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
+      OPERATION: ${{ inputs.operation }}
+      TARGET_GROUP: ${{ inputs.group }}
+      TARGET_APP: ${{ inputs.app }}
+      TARGET_SERVICE: ${{ inputs.service }}
+      DESTROY_DATA: ${{ inputs.destroy_data }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prepare controller
+        run: |
+          set -euo pipefail
+          pip install 'ansible==12.1.0' 'PyYAML==6.0.3'
+          ansible-galaxy collection install -r requirements.yml
+          umask 077
+          printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/vps-key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/vps-known-hosts"
+          export VPS_KEY_PATH="$RUNNER_TEMP/vps-key"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          host={'ansible_host':os.environ['VPS_HOST'],'ansible_user':os.environ['VPS_USER'],
+                'ansible_port':int(os.environ.get('VPS_SSH_PORT') or '22'),
+                'ansible_ssh_private_key_file':os.environ['VPS_KEY_PATH']}
+          Path('inventory/hosts.json').write_text(json.dumps({'all':{'hosts':{'vps':host}}}))
+          PY
+          echo "ANSIBLE_INVENTORY=$GITHUB_WORKSPACE/inventory/hosts.json" >> "$GITHUB_ENV"
+          echo "VPS_KNOWN_HOSTS_FILE=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
+          echo "ANSIBLE_SSH_ARGS=-F /dev/null -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
+      - name: Read-only preflight
+        if: inputs.operation == 'preflight'
+        run: |
+          set -euo pipefail
+          ssh -F /dev/null -i "$RUNNER_TEMP/vps-key" -p "${VPS_SSH_PORT:-22}" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-known-hosts" "$VPS_USER@$VPS_HOST" \
+            'sudo -n python3 -' < roles/common/files/inspect-host.py
+      - name: Execute scoped operation
+        if: inputs.operation != 'preflight'
+        run: |
+          set -euo pipefail
+          args=("$OPERATION")
+          if [ -n "$TARGET_GROUP" ]; then args+=(--group "$TARGET_GROUP"); fi
+          if [ -n "$TARGET_APP" ]; then args+=(--app "$TARGET_APP"); fi
+          if [ -n "$TARGET_SERVICE" ]; then args+=(--service "$TARGET_SERVICE"); fi
+          if [ "$DESTROY_DATA" = true ]; then args+=(--destroy-data); fi
+          python scripts/deploy.py "${args[@]}"
+      - name: Remove controller secrets
+        if: always()
+        run: rm -f .vault_pass inventory/hosts.json "$RUNNER_TEMP/vps-key" "$RUNNER_TEMP/vps-known-hosts"

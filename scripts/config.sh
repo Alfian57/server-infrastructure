@@ -3,7 +3,7 @@
 # =============================================================================
 # Shared Configuration for Local Scripts
 # =============================================================================
-# This file reads configuration from group_vars/all/vars.yml to avoid
+# This file reads configuration from platform/vars.yml to avoid
 # hardcoded values scattered across multiple scripts.
 #
 # Source this file in other scripts:
@@ -27,13 +27,13 @@ NC='\033[0m'
 # Read a simple value from vars.yml
 get_var() {
   local key=$1
-  grep "^${key}:" "$PROJECT_DIR/group_vars/all/vars.yml" 2>/dev/null | head -1 | awk -F': ' '{print $2}' | tr -d '"' | tr -d "'"
+  grep "^${key}:" "$PROJECT_DIR/platform/vars.yml" 2>/dev/null | head -1 | awk -F': ' '{print $2}' | tr -d '"' | tr -d "'"
 }
 
 # Read a list from vars.yml (returns space-separated values)
 get_var_list() {
   local key=$1
-  awk "/^${key}:$/,/^[a-z_]+:/" "$PROJECT_DIR/group_vars/all/vars.yml" | grep "^\s*-\s*\"" | sed 's/.*"\(.*\)".*/\1/' | tr '\n' ' '
+  awk "/^${key}:$/,/^[a-z_]+:/" "$PROJECT_DIR/platform/vars.yml" | grep "^\s*-\s*\"" | sed 's/.*"\(.*\)".*/\1/' | tr '\n' ' '
 }
 
 # Read domain records from vars.yml
@@ -102,19 +102,19 @@ fi
 
 # Get GitHub token from vault
 get_github_token() {
-  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
+  ansible-vault view "$PROJECT_DIR/platform/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
     grep "vault_github_token:" | awk '{print $2}' | tr -d '"'
 }
 
 # Get Cloudflare API token from vault
 get_cf_token() {
-  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
+  ansible-vault view "$PROJECT_DIR/platform/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
     grep "vault_cloudflare_api_token:" | awk '{print $2}' | tr -d '"'
 }
 
 # Get Cloudflare account email from vault. Required when using Global API Key.
 get_cf_email() {
-  ansible-vault view "$PROJECT_DIR/group_vars/all/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
+  ansible-vault view "$PROJECT_DIR/platform/vault.yml" --vault-password-file="$PROJECT_DIR/.vault_pass" 2>/dev/null | \
     grep "vault_cloudflare_email:" | awk '{print $2}' | tr -d '"'
 }
 

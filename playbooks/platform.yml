@@ -1,0 +1,42 @@
+---
+- name: Explicit shared platform maintenance
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/vault.yml
+    - ../platform/catalog.yml
+  vars:
+    mysql_databases: []
+    mysql_database_users: []
+    postgres_databases: []
+    postgres_database_users: []
+    proxy_hosts: []
+    platform_roles:
+      docker: docker-setup
+      postgres: postgres-setup
+      mysql: mysql-setup
+      redis: redis-setup
+      nginx: nginx-proxy-setup
+      minio: minio-setup
+      warp: cloudflare-warp-setup
+      autoheal: autoheal-setup
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  pre_tasks:
+    - name: Require an explicit platform target
+      ansible.builtin.assert:
+        that: platform_service | default('') in platform_roles or platform_service | default('') == 'all'
+    - name: Verify the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+  tasks:
+    - name: Inspect host capabilities without changing engines
+      ansible.builtin.include_role:
+        name: host-profile
+    - name: Apply the selected shared service configuration
+      ansible.builtin.include_role:
+        name: '{{ platform_roles[service_id] }}'
+      loop: "{{ ['docker', 'autoheal', 'nginx', 'mysql', 'postgres', 'redis'] if platform_service == 'all' else [platform_service] }}"
+      loop_control:
+        loop_var: service_id

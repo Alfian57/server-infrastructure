@@ -1,0 +1,26 @@
+---
+- name: Read application definition
+  ansible.builtin.include_vars:
+    file: '{{ playbook_dir }}/../projects/{{ run_group }}/apps/{{ context_id }}/app.yml'
+    name: context_definition
+  no_log: true
+
+- name: Verify catalog identity
+  ansible.builtin.assert:
+    that:
+      - context_definition.name == context_id
+      - context_definition.group == run_group
+
+- name: Retain stack metadata
+  ansible.builtin.set_fact:
+    context_apps: '{{ context_apps + [context_definition] }}'
+  no_log: true
+
+- name: Select enabled applications and preserve explicit staging behavior
+  ansible.builtin.set_fact:
+    run_apps: '{{ run_apps + [context_definition] }}'
+  no_log: true
+  when:
+    - context_definition.enabled | default(true) | bool
+    - app | default('') | length == 0 or context_id == app
+    - requested_apps is defined or app | default('') | length > 0 or context_definition.default_deploy | default(true) | bool

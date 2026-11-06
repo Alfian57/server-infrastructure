@@ -5,7 +5,7 @@
 # =============================================================================
 # Run this after successful bootstrap to switch from password to SSH key auth
 #
-# Configuration is loaded from group_vars/all/vars.yml
+# Configuration is loaded from platform/vars.yml
 #
 # This script:
 #   1. Gets current IP from inventory

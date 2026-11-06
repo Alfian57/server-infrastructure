@@ -1,0 +1,55 @@
+---
+name: aldera-tech
+display_name: Aldera Tech
+repo_owner: AlderaTech
+repo: aldera-tech
+image: ghcr.io/alderatech/aldera-tech:latest
+stack: nextjs
+build:
+  dockerfile: docker/Dockerfile
+  workflow: build-and-deploy.yml
+app_port: 3000
+env_template: projects/alderatech/apps/aldera-tech/.env.j2
+ci:
+  variables:
+    NEXT_PUBLIC_APP_URL:
+      value: https://aldera.tech
+    NEXTAUTH_URL:
+      value: https://aldera.tech
+networks:
+  - nginx_proxy_manager_network
+  - postgres_network
+  - aldera_router_internal
+volumes:
+  - aldera_uploads:/app/public/uploads
+use_prisma: false
+run_migrate: false
+run_seeder: false
+proxy:
+  domain: aldera.tech
+  scheme: http
+  forward_host: aldera-tech
+  forward_port: 3000
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: aldera.tech
+  records:
+    - '@'
+    - api
+    - router
+    - staging
+databases:
+  postgres:
+    - '{{ vault_aldera_db_database | default(''aldera_tech'') }}'
+enabled: true
+deployment: portfolio
+group: alderatech
+requires:
+  - nginx
+  - postgres
+database_users:
+  - database: '{{ vault_aldera_db_database | default(''aldera_tech'') }}'
+    username: '{{ vault_aldera_db_username }}'
+    password: '{{ vault_aldera_db_password }}'

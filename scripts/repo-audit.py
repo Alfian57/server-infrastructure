@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from catalog import catalog as read_catalog, select as select_catalog
 import base64
 import json
 import os
@@ -16,8 +17,7 @@ from typing import Any
 import yaml
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-APPS_FILE = PROJECT_DIR / "group_vars" / "all" / "apps.yml"
-VARS_FILE = PROJECT_DIR / "group_vars" / "all" / "vars.yml"
+VARS_FILE = PROJECT_DIR / "platform" / "vars.yml"
 ENV_FILE = PROJECT_DIR / ".env"
 
 WORKFLOW_IMAGE_RE = re.compile(r"^\s*IMAGE_NAME:\s*(.+?)\s*$", re.MULTILINE)
@@ -294,7 +294,7 @@ def audit_app(
 
 
 def cmd_check(args: argparse.Namespace) -> int:
-    data = load_yaml(APPS_FILE)
+    data = read_catalog(os.environ.get("CATALOG_GROUP", ""), os.environ.get("CATALOG_APP", ""))
     default_owner = str(load_yaml(VARS_FILE).get("github_username", "")).strip()
     if not default_owner:
         raise SystemExit("github_username is not set")
@@ -328,7 +328,17 @@ def main() -> int:
     check.add_argument("--source-dir", type=Path, help="audit one local checkout instead of GitHub")
     check.set_defaults(func=cmd_check)
 
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for target in action.choices.values():
+                if not any(a.dest == 'group' for a in target._actions): target.add_argument('--group', default='')
+                if not any(a.dest == 'app' for a in target._actions): target.add_argument('--app', default='')
+                if not any(a.dest == 'all' for a in target._actions): target.add_argument('--all', action='store_true')
     args = parser.parse_args()
+    os.environ['CATALOG_GROUP'] = args.group
+    os.environ['CATALOG_APP'] = args.app
+    if getattr(args, 'command', '') == 'sync-github' and not (args.group or args.app or getattr(args, 'repo', []) or args.all):
+        parser.error('Select --group, --app, --repo, or --all explicitly')
     return int(args.func(args))
 
 

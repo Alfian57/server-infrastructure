@@ -1,0 +1,60 @@
+---
+name: pui
+display_name: Hashbox PUI
+enabled: true
+repo: PUI
+stack: compose
+build:
+  workflow: ci-cd.yml
+env_template: projects/personal/apps/pui/.env.j2
+env_contract:
+  path: .env.example
+  ignore_keys:
+    - PGADMIN_DEFAULT_EMAIL
+    - PGADMIN_DEFAULT_PASSWORD
+images:
+  web: ghcr.io/alfian57/pui-web-client:latest
+  api: ghcr.io/alfian57/pui-api-service:latest
+  vault: ghcr.io/alfian57/pui-vault-core:latest
+ci:
+  variables:
+    VITE_API_BASE_URL:
+      value: https://pui-api.alfian-gading.my.id
+    VITE_ENVIRONMENT_NAME:
+      value: production
+    VITE_SECURITY_LAB_ENABLED:
+      value: 'false'
+proxy_hosts:
+  - domain: pui.alfian-gading.my.id
+    subdomain: pui
+    scheme: http
+    forward_host: pui-web-client
+    forward_port: 80
+    caching_enabled: true
+    websocket_support: false
+    cloudflare_flexible: true
+  - domain: pui-api.alfian-gading.my.id
+    subdomain: pui-api
+    scheme: http
+    forward_host: pui-api-service
+    forward_port: 8080
+    caching_enabled: false
+    websocket_support: false
+    cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - pui
+    - pui-api
+databases:
+  postgres:
+    - '{{ vault_pui_db_database | default(''pui'') }}'
+deployment: pui
+group: personal
+requires:
+  - nginx
+  - postgres
+database_users:
+  - database: '{{ vault_pui_db_database | default(''pui'') }}'
+    username: '{{ vault_pui_db_username }}'
+    password: '{{ vault_pui_db_password }}'

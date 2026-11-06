@@ -1,37 +1,16 @@
 ---
-# MySQL Role Defaults
-
-# Path configuration
-docker_stack_base: "/opt/docker-stack"
-docker_stack_databases: "{{ docker_stack_base }}/databases"
-
-# Docker image selection. host-profile sets mysql_auto_image on new hosts.
+docker_stack_base: /opt/docker-stack
+docker_stack_databases: '{{ docker_stack_base }}/databases'
 mysql_preserve_existing_engine: true
-mysql_image_override: ""
-mysql_auto_image: "mariadb:10.11"
-
-# Network configuration
-mysql_network: "mysql_network"
-
-# Resource limits
-mysql_memory_limit: "1G"
-mysql_memory_reservation: "512M"
-
-# Custom config
+mysql_image_override: ''
+mysql_auto_image: mariadb:10.11
+mysql_network: mysql_network
+mysql_memory_limit: 1G
+mysql_memory_reservation: 512M
 mysql_custom_config: false
-
-# phpMyAdmin settings
 mysql_enable_phpmyadmin: true
-phpmyadmin_version: "5.2.2"
-phpmyadmin_port: "8081"
-phpmyadmin_upload_limit: "50M"
-phpmyadmin_memory_limit: "128M"
-
-# List of databases to create for applications
-mysql_databases:
-  - materi_ku
-  - panca_trivia
-  - posyandu
-  - presensi_skansaba
-  - ruang_istirahat
-  - tech_talk
+phpmyadmin_version: 5.2.2
+phpmyadmin_port: '8081'
+phpmyadmin_upload_limit: 50M
+phpmyadmin_memory_limit: 128M
+mysql_databases: []

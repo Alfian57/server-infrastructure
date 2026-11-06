@@ -5,7 +5,7 @@
 # =============================================================================
 # Verifies that GitHub secrets and Cloudflare DNS are properly configured
 #
-# Configuration is loaded from group_vars/all/vars.yml
+# Configuration is loaded from platform/vars.yml
 #
 # Usage:
 #   ./scripts/check-cloud-services.sh

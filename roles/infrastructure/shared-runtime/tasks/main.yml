@@ -1,0 +1,25 @@
+---
+- name: Inspect dependencies without reconciling existing shared engines
+  ansible.builtin.include_tasks: service.yml
+  loop: '{{ required_services }}'
+  loop_control:
+    loop_var: required_service
+
+- name: Provision only selected application databases
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-databases.py]
+    stdin: '{{ {"applications": run_apps} | to_json }}'
+  no_log: true
+  register: database_provision_result
+  failed_when: false
+  when: not ansible_check_mode
+
+- name: Require scoped database provisioning to succeed
+  ansible.builtin.assert:
+    that: database_provision_result.rc == 0
+    fail_msg: '{{ database_provision_result.stderr | default("Scoped database provisioning failed") }}'
+  when: not ansible_check_mode
+
+- name: Record newly created databases for one-time initialization
+  ansible.builtin.set_fact:
+    new_database_apps: "{{ ((database_provision_result.stdout | default('{\"changed\":[]}') | from_json).changed | select('search', ':database$') | map('regex_replace', ':database$', '') | list) }}"

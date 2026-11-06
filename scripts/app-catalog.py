@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+from catalog import catalog as read_catalog, select as select_catalog, domains as app_domains
 import subprocess
 import sys
 from pathlib import Path
@@ -13,8 +15,7 @@ import yaml
 
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-APPS_FILE = PROJECT_DIR / "group_vars" / "all" / "apps.yml"
-VARS_FILE = PROJECT_DIR / "group_vars" / "all" / "vars.yml"
+VARS_FILE = PROJECT_DIR / "platform" / "vars.yml"
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -55,20 +56,11 @@ def git_file_state(path: Path) -> str:
 
 
 def apps() -> list[dict[str, Any]]:
-    data = load_yaml(APPS_FILE)
-    items = data.get("portfolio_apps", [])
-    if not isinstance(items, list):
-        raise SystemExit("portfolio_apps must be a list")
-    enabled = [item for item in items if item.get("enabled", True)]
-    pui = data.get("pui_app")
-    if isinstance(pui, dict) and pui.get("enabled", True):
-        enabled.append(pui)
-    enabled.extend(item for item in data.get("guardian_lab_apps", []) if item.get("enabled", True))
-    return enabled
+    return select_catalog(os.environ.get("CATALOG_GROUP", ""), os.environ.get("CATALOG_APP", ""), enabled_only=True)
 
 
 def mobile_repositories(enabled_only: bool = True) -> list[dict[str, Any]]:
-    data = load_yaml(APPS_FILE)
+    data = read_catalog(os.environ.get("CATALOG_GROUP", ""), os.environ.get("CATALOG_APP", ""))
     items = data.get("mobile_repositories", [])
     if not isinstance(items, list):
         raise SystemExit("mobile_repositories must be a list")
@@ -106,18 +98,11 @@ def image_name(item: dict[str, Any]) -> str:
     return f"{repo_owner(item)}/{item.get('image_name', repo_name(item))}"
 
 
-def cmd_list(_: argparse.Namespace) -> int:
-    print(f"{'APP':32} {'STACK':10} {'REPO':42} {'IMAGE':42} DOMAIN")
-    for app in apps():
-        proxy = app.get("proxy", {})
-        if not proxy and app.get("proxy_hosts"):
-            domain = ", ".join(
-                h.get("domain") or (f"{h['subdomain']}.alfian-gading.my.id" if "subdomain" in h else "-")
-                for h in app["proxy_hosts"]
-            )
-        else:
-            domain = proxy.get("domain") or proxy.get("subdomain", "-")
-        print(f"{app.get('display_name', app['name']):32} {app['stack']:10} {repo_ref(app):42} {image_name(app):42} {domain}")
+def cmd_list(args: argparse.Namespace) -> int:
+    print(f"{'GROUP':14} {'APP':32} {'STATE':9} DOMAIN")
+    for app in select_catalog(os.environ.get('CATALOG_GROUP', ''), os.environ.get('CATALOG_APP', '')):
+        state = 'enabled' if app.get('enabled', True) else 'disabled'
+        print(f"{app['group']:14} {app['name']:32} {state:9} {', '.join(app_domains(app)) or '(internal)'}")
     return 0
 
 
@@ -303,7 +288,13 @@ def main() -> int:
     env_check.add_argument("--app", default="")
     env_check.set_defaults(func=cmd_env_check)
 
+    for subparser in sub.choices.values():
+        subparser.add_argument('--group', default='')
+        if not any(a.dest == 'app' for a in subparser._actions):
+            subparser.add_argument('--app', default='')
     args = parser.parse_args()
+    os.environ['CATALOG_GROUP'] = args.group
+    os.environ['CATALOG_APP'] = args.app
     return int(args.func(args))
 
 

@@ -46,7 +46,7 @@
 
     - name: Render Guardian Lab secret environment
       ansible.builtin.template:
-        src: "{{ item.src }}"
+        src: "{{ (playbook_dir ~ '/../' ~ guardian_lab_web_app.env_template) if item.src == '.env.j2' else item.src }}"
         dest: "{{ guardian_lab_install_dir }}/{{ item.dest }}"
         mode: "0640"
         owner: "{{ guardian_lab_admin_user }}"
@@ -110,25 +110,6 @@
         - "{{ nginx_proxy_network }}"
         - "{{ mysql_network }}"
       when: not ansible_check_mode
-
-    - name: Provision Guardian Lab database and restricted application user
-      ansible.builtin.command:
-        argv:
-          - docker
-          - exec
-          - -i
-          - -e
-          - "MYSQL_PWD={{ vault_mysql_root_password }}"
-          - mysql-db
-          - sh
-          - -c
-          - "if command -v mysql >/dev/null 2>&1; then exec mysql -uroot; else exec mariadb -uroot; fi"
-        stdin: |
-          CREATE DATABASE IF NOT EXISTS `{{ guardian_lab_db_name }}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-          CREATE USER IF NOT EXISTS '{{ guardian_lab_db_user }}'@'%' IDENTIFIED BY '{{ vault_guardian_lab_db_password | replace("'", "''") }}';
-          ALTER USER '{{ guardian_lab_db_user }}'@'%' IDENTIFIED BY '{{ vault_guardian_lab_db_password | replace("'", "''") }}';
-          GRANT ALL PRIVILEGES ON `{{ guardian_lab_db_name }}`.* TO '{{ guardian_lab_db_user }}'@'%';
-      no_log: true
 
 - name: Deploy Guardian Lab through the shared lock and strict readiness checks
   ansible.builtin.command:

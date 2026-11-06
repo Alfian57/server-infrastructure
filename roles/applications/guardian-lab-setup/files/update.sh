@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 # Ansible owns configuration; CI changes only the selected image references.
 set -euo pipefail
+
+# Both repository CI and Ansible serialize VPS mutations through the same lock.
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
+host_lock=/opt/docker-stack/bin/with-deployment-lock.sh
+if [[ ! -x "$host_lock" ]]; then
+  echo 'Shared deployment lock is missing; provision helpers with Ansible first.' >&2
+  exit 1
+fi
+if ! "$host_lock" --validate; then
+  exec "$host_lock" bash "$0" "$@"
+fi
+
 umask 027
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 

@@ -1,0 +1,39 @@
+---
+name: presensi-skansaba-web
+enabled: false
+repo: Presensi-Skansaba-Web
+image_name: presensi-skansaba-web
+stack: laravel
+build:
+  dockerfile: Dockerfile
+  workflow: build-and-deploy.yml
+env_template: projects/personal/apps/presensi-skansaba-web/.env.j2
+networks:
+  - nginx_proxy_manager_network
+  - mysql_network
+  - redis_network
+volumes:
+  - presensi_skansaba_web_storage:/var/www/html/storage
+env_mount_path: /var/www/html/.env
+proxy:
+  subdomain: presensi-skansaba-web
+  scheme: http
+  forward_host: presensi-skansaba-web
+  forward_port: 80
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - presensi-skansaba-web
+databases:
+  mysql:
+    - presensi_skansaba
+deployment: portfolio
+group: personal
+requires:
+  - nginx
+  - mysql
+  - redis
+database_users: []

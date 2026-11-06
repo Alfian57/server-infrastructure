@@ -22,6 +22,11 @@ services:
 {% endfor %}
 {% endif %}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: {{ portfolio_app.memory_limit | default('768m' if app_stack == 'laravel' else ('512m' if app_stack == 'nextjs' else '384m')) }}
+          cpus: "{{ portfolio_app.cpu_limit | default('1.0') }}"
 {% if app_volumes | length > 0 or (app_stack == 'laravel' and app_env_template | length > 0) %}
     volumes:
 {% if app_stack == 'laravel' and app_env_template | length > 0 %}
