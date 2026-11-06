@@ -44,11 +44,3 @@ database_users:
   - database: '{{ vault_ruang_tenang_api_db_name | default(''ruang_tenang'') }}'
     username: '{{ vault_ruang_tenang_api_db_user | default(''ruang_tenang'') }}'
     password: '{{ vault_ruang_tenang_api_db_password }}'
-env_contract:
-  ignore_keys:
-    - HTTP_PROXY
-    - HTTPS_PROXY
-    - http_proxy
-    - https_proxy
-    - NO_PROXY
-    - no_proxy

@@ -8,13 +8,6 @@ services:
       - RUN_MIGRATE={{ run_migrate | default(false) | string | lower }}
       - RUN_MIGRATE_FRESH={{ run_fresh_migrate | default(false) | string | lower }}
       - RUN_SEEDER={{ run_seeder | default(false) | string | lower }}
-      # Proxy configuration for Gemini API (bypass region block via Cloudflare WARP)
-      - HTTP_PROXY=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}
-      - HTTPS_PROXY=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}
-      - http_proxy=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}
-      - https_proxy=http://{{ warp_forward_bind_address }}:{{ warp_forward_port }}
-      - NO_PROXY={{ warp_no_proxy }}
-      - no_proxy={{ warp_no_proxy }}
     restart: unless-stopped
     volumes:
       - ruang_tenang_api_uploads:/app/uploads
