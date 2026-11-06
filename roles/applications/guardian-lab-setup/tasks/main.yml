@@ -60,14 +60,30 @@
       ansible.builtin.template:
         src: "{{ item.src }}"
         dest: "{{ guardian_lab_install_dir }}/{{ item.dest }}"
-        mode: "0640"
+        mode: "{{ item.mode | default('0640') }}"
         owner: "{{ guardian_lab_admin_user }}"
         group: "{{ guardian_lab_runtime_group }}"
       loop:
         - {src: "docker-compose.yml.j2", dest: "docker-compose.yml"}
         - {src: "deployment.env.j2", dest: "deployment.env"}
-        - {src: "stream.conf.j2", dest: "stream.conf"}
+        - {src: "stream.conf.j2", dest: "stream.conf", mode: "0644"}
         - {src: "ml.env.j2", dest: "ml.env"}
+      register: guardian_lab_config_render
+
+    - name: Inspect the Guardian stream gateway
+      community.docker.docker_container_info:
+        name: guardian-lab-stream
+      register: guardian_lab_stream_container
+      no_log: true
+      when: not ansible_check_mode
+
+    - name: Restart the Guardian stream gateway after configuration changes
+      ansible.builtin.command:
+        argv: [docker, restart, guardian-lab-stream]
+      when:
+        - not ansible_check_mode
+        - guardian_lab_stream_container.exists | default(false)
+        - guardian_lab_config_render.changed | default(false)
 
     - name: Initialize Guardian Lab image state without replacing deployed pins
       ansible.builtin.template:
