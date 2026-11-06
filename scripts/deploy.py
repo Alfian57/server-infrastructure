@@ -36,6 +36,8 @@ def ssh_args(host: dict) -> list[str]:
 
 
 def run(args) -> int:
+    if args.operation not in ('deploy','check','dns') and (args.group or args.app):
+        raise ValueError('This operation has a fixed platform target; do not supply --group or --app')
     if args.operation in ('deploy','check','dns'):
         selected = select(args.group,args.app,require_target=True,enabled_only=True,default_only=True)
         group = selected[0]['group']
@@ -87,6 +89,8 @@ def main() -> int:
     a=p.parse_args()
     try:
         if a.operation=='all':
+            if a.group or a.app or a.service or a.destroy_data:
+                raise ValueError('all cannot be combined with another target selector')
             for group in index()['groups']:
                 a.operation='deploy';a.group=group
                 status=run(a)

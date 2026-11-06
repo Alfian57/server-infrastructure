@@ -15,7 +15,7 @@ report={'containers':[], 'applications':[], 'postgres':[], 'disk':run(['df','-h'
         'memory':run(['free','-m'])}
 for c in containers:
     name=c['Name'].lstrip('/')
-    report['containers'].append({'name':name,'image':c['Config']['Image'],'image_id':c['Image'],
+    report['containers'].append({'name':name,'container_id':c['Id'],'started_at':c['State']['StartedAt'],'image':c['Config']['Image'],'image_id':c['Image'],
         'status':c['State']['Status'],'health':c['State'].get('Health',{}).get('Status'),
         'project':c['Config'].get('Labels',{}).get('com.docker.compose.project'),
         'directory':c['Config'].get('Labels',{}).get('com.docker.compose.project.working_dir'),

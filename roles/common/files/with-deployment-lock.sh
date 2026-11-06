@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One host lock shared by Ansible and every repository's deployment helper.
 set -euo pipefail
+umask 007
 lock_dir=/opt/docker-stack/.locks
 lease="$lock_dir/holder.json"
 valid_lease() {
@@ -23,7 +24,7 @@ if valid_lease; then
   exec "$@"
 fi
 if [[ ! -d "$lock_dir" ]]; then
-  sudo -n install -d -m 0770 -o "$(id -un)" -g docker "$lock_dir"
+  sudo -n install -d -m 2770 -o "$(id -un)" -g docker "$lock_dir"
 fi
 exec 8>"$lock_dir/deployment.lock"
 flock -w "${INFRA_LOCK_TIMEOUT:-1800}" 8

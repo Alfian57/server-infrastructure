@@ -72,7 +72,7 @@ jobs:
           PY
           echo "ANSIBLE_INVENTORY=$GITHUB_WORKSPACE/inventory/hosts.json" >> "$GITHUB_ENV"
           echo "VPS_KNOWN_HOSTS_FILE=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
-          echo "ANSIBLE_SSH_ARGS=-F /dev/null -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
+          echo "ANSIBLE_SSH_ARGS=-F /dev/null -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=$RUNNER_TEMP/infra-%C -o UserKnownHostsFile=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
       - name: Read-only preflight
         if: inputs.operation == 'preflight'
         run: |
