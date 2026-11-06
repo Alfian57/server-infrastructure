@@ -1,0 +1,15 @@
+---
+- name: Apply explicit host security hardening
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/vault.yml
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  pre_tasks:
+    - name: Verify the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+  roles:
+    - role: security-hardening

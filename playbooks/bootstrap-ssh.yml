@@ -2,13 +2,7 @@
 # ============================================================================
 # SSH Key Bootstrap Playbook
 # ============================================================================
-# This playbook sets up SSH key authentication on fresh VPS
-# Run this FIRST before the main server-setup.yml playbook
-# 
-# Usage:
-#   make prepare-bootstrap
-#   make bootstrap-password
-#   OR: make bootstrap-key
+# Internal implementation for `make infra ACTION=bootstrap` on a fresh VPS.
 # ============================================================================
 
 - name: Bootstrap SSH Key Authentication
@@ -16,8 +10,8 @@
   gather_facts: false
   become: true
   vars_files:
-    - ../group_vars/all/vars.yml
-    - ../group_vars/all/vault.yml
+    - ../platform/vars.yml
+    - ../platform/vault.yml
   vars:
     ssh_public_key_path: "~/.ssh/{{ ssh_key_name }}.pub"
     ssh_private_key_path: "~/.ssh/{{ ssh_key_name }}"
@@ -245,7 +239,7 @@
           - "  {{ 'Password authentication: DISABLED' if ssh_test.rc == 0 else 'Password authentication: STILL ENABLED (SSH key test failed)' }}"
           - ""
           - "  Next steps:"
-          - "  1. Run: make switch-to-ssh (to update inventory)"
-          - "  2. Run: make deploy"
+          - "  1. Run: make infra ACTION=inventory-ssh (to update inventory)"
+          - "  2. Continue with: make infra ACTION=deploy GROUP=<group>"
           - ""
           - "═══════════════════════════════════════════════════════════"

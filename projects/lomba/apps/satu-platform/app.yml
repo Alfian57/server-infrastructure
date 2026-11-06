@@ -1,5 +1,6 @@
 ---
 name: satu-platform
+production: false
 display_name: SATU Platform
 enabled: true
 repo: satu-platform

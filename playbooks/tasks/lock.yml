@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - infra_lock_token | default('') | length == 48
-    fail_msg: Use make deploy, make platform, or the scoped operations workflow.
+    fail_msg: Use the `make infra ACTION=...` dispatcher or the scoped operations workflow.
 
 - name: Verify the live lease holder before changing resources
   ansible.builtin.command:

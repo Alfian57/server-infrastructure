@@ -1,6 +1,7 @@
 ---
 portfolio_app_filter: "{{ app | default('') }}"
 portfolio_confirm_destroy_data: "{{ confirm_destroy_data | default('no') }}"
+portfolio_database_reset: "{{ reset_database | default(false) | bool }}"
 portfolio_default_image_tag: "latest"
 portfolio_verify_health: true
 github_username: "alfian57"

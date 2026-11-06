@@ -57,14 +57,12 @@ jobs:
           print('Validation groups: '+', '.join(groups))
           INNER
       - name: Validate behavior, Ansible, and shell scripts
-        run: make validate
+        run: make infra ACTION=validate
       - name: Validate selected group catalogs and templates
         run: |
           set -euo pipefail
           while IFS= read -r group; do
-            python scripts/catalog.py doctor --group "$group"
-            python scripts/app-catalog.py env-check --group "$group"
-            ansible-playbook playbooks/validate-context.yml -i localhost, -e "deployment_group=$group"
+            make infra ACTION=validate-context GROUP="$group"
           done < .ansible-groups
       - name: Check YAML
         run: yamllint -c .yamllint .

@@ -10,24 +10,22 @@ Satu VPS, lima grup aplikasi, dan layanan platform bersama. Pengelompokan mengik
 | alderatech | AlderaTech | Aldera web, Router produksi/staging, aplikasi Aldera lainnya |
 | gamblock-ai | Gamblock-AI | Backend, website, dan konfigurasi CI aplikasi native |
 
-`make app-list` menampilkan domain dan status enabled/disabled seluruh aplikasi. Aplikasi mobile mengikuti grup proyeknya dan bukan container VPS.
+`make infra ACTION=list` menampilkan domain dan status enabled/disabled seluruh aplikasi. Aplikasi mobile mengikuti grup proyeknya dan bukan container VPS.
 
-## Perintah
+## Perintah tunggal
 
 ```sh
-make app-list GROUP=uty
-make plan GROUP=uty
-make deploy GROUP=uty
-make deploy GROUP=lomba APP=guardian-lab
-make app APP=guardian-lab-ai
-make app-dry-run APP=sistertika-uty-api
-make platform SERVICE=postgres
-make install-helpers
-make deploy-all
-make validate
+make infra ACTION=list GROUP=uty
+make infra ACTION=plan GROUP=uty
+make infra ACTION=deploy GROUP=lomba APP=guardian-lab
+make infra ACTION=check APP=sistertika-uty-api
+make infra ACTION=platform SERVICE=postgres
+make infra ACTION=decommission DESTROY_DATA=yes
 ```
 
-Deploy tanpa target ditolak. `deploy-all` adalah operasi semua grup yang eksplisit. Router staging hanya dijalankan ketika diminta, misalnya `make app APP=aldera-router-staging`.
+Semua operasi operator menggunakan bentuk `make infra ACTION=...`. Tanpa `ACTION`, perintah menampilkan bantuan. Deployment harus menyebut `GROUP` atau `APP`; tidak ada default deploy-all. Aksi `all`, `rollout`, dan `resume-rollout` tersedia untuk operasi eksplisit. Operasi yang dapat menghapus data tetap memerlukan `DESTROY_DATA=yes`.
+
+Daftar aksi, termasuk bootstrap SSH, security-hardening, pemeriksaan, sinkronisasi, dan operasi platform, tersedia lewat `make infra ACTION=help`. Playbook dan perintah Ansible langsung adalah detail internal dispatcher, bukan antarmuka operator.
 
 ## Konfigurasi
 
@@ -45,8 +43,8 @@ DNS/proxy diubah berdasarkan domain aplikasi terpilih. Resource grup lain dan ho
 
 ## Operasi data
 
-Enam aplikasi pensiun didefinisikan pada manifest operasi: Posyandu, Materi Ku, Ruang Istirahat, Tech Talk, Campus Project Hub API dan web. `make decommission DESTROY_DATA=yes` menghapus hanya resource yang terverifikasi milik keenam aplikasi. Operasi ini tidak menghapus repository GitHub atau layanan platform.
+Enam aplikasi pensiun didefinisikan pada manifest operasi: Posyandu, Materi Ku, Ruang Istirahat, Tech Talk, Campus Project Hub API dan web. `make infra ACTION=decommission DESTROY_DATA=yes` menghapus hanya resource yang terverifikasi milik keenam aplikasi. Operasi ini tidak menghapus repository GitHub atau layanan platform.
 
-`make consolidate-postgres` menginisialisasi database Router staging lalu produksi pada PostgreSQL bersama menggunakan migration/seeder. Data dummy sumber tidak disalin dan sumber lama dibersihkan setelah pemeriksaan berhasil. Database aplikasi yang sudah berada pada engine bersama dipertahankan. Deploy rutin tidak membuat ulang database atau menjalankan seed ulang.
+`make infra ACTION=consolidate DESTROY_DATA=yes` menginisialisasi database Router staging lalu produksi pada PostgreSQL bersama menggunakan migration/seeder. Data dummy sumber tidak disalin dan sumber lama dibersihkan setelah pemeriksaan berhasil. Database aplikasi yang sudah berada pada engine bersama dipertahankan. Deploy rutin tidak membuat ulang database atau menjalankan seed ulang.
 
 Workflow Scoped Infrastructure Operations menyediakan preflight, helper installation, deployment/check satu grup, platform maintenance, decommission, dan konsolidasi. Host key SSH dipin melalui VPS_KNOWN_HOSTS; secret tidak dicetak.

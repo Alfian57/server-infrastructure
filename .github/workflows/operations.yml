@@ -6,7 +6,7 @@ name: Scoped Infrastructure Operations
       operation:
         description: Operation
         type: choice
-        options: [preflight, helpers, deploy, check, platform, decommission, consolidate, rollout, resume-rollout]
+        options: [preflight, helpers, deploy, check, platform, dns, decommission, consolidate, rollout, resume-rollout, security-hardening]
         default: preflight
       group:
         description: Application group
@@ -85,12 +85,12 @@ jobs:
         if: inputs.operation != 'preflight' && inputs.operation != 'rollout' && inputs.operation != 'resume-rollout'
         run: |
           set -euo pipefail
-          args=("$OPERATION")
-          if [ -n "$TARGET_GROUP" ]; then args+=(--group "$TARGET_GROUP"); fi
-          if [ -n "$TARGET_APP" ]; then args+=(--app "$TARGET_APP"); fi
-          if [ -n "$TARGET_SERVICE" ]; then args+=(--service "$TARGET_SERVICE"); fi
-          if [ "$DESTROY_DATA" = true ]; then args+=(--destroy-data); fi
-          python scripts/deploy.py "${args[@]}"
+          args=(make infra "ACTION=$OPERATION")
+          if [ -n "$TARGET_GROUP" ]; then args+=("GROUP=$TARGET_GROUP"); fi
+          if [ -n "$TARGET_APP" ]; then args+=("APP=$TARGET_APP"); fi
+          if [ -n "$TARGET_SERVICE" ]; then args+=("SERVICE=$TARGET_SERVICE"); fi
+          if [ "$DESTROY_DATA" = true ]; then args+=(DESTROY_DATA=yes); fi
+          "${args[@]}"
       - name: Validate the authorized rollout scope
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         run: |
@@ -98,31 +98,31 @@ jobs:
           test -z "$TARGET_GROUP$TARGET_APP$TARGET_SERVICE"
       - name: Record the runtime baseline
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py preflight
+        run: make infra ACTION=preflight
       - name: Install shared deployment helpers
         if: inputs.operation == 'rollout'
-        run: python scripts/deploy.py helpers
+        run: make infra ACTION=helpers
       - name: Deploy UTY and verify group isolation
         if: inputs.operation == 'rollout'
-        run: python scripts/deploy.py deploy --group uty
+        run: make infra ACTION=deploy GROUP=uty
       - name: Remove the six retired applications and data
         if: inputs.operation == 'rollout'
-        run: python scripts/deploy.py decommission --destroy-data
+        run: make infra ACTION=decommission DESTROY_DATA=yes
       - name: Consolidate Router PostgreSQL staging then production
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py consolidate --destroy-data
+        run: make infra ACTION=consolidate DESTROY_DATA=yes
       - name: Deploy Personal
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py deploy --group personal
+        run: make infra ACTION=deploy GROUP=personal
       - name: Deploy Lomba
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py deploy --group lomba
+        run: make infra ACTION=deploy GROUP=lomba
       - name: Deploy Gamblock-AI
         if: (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py deploy --group gamblock-ai
+        run: make infra ACTION=deploy GROUP=gamblock-ai
       - name: Inspect the resulting runtime
         if: always() && (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
-        run: python scripts/deploy.py preflight
+        run: make infra ACTION=preflight
       - name: Upload credential-free runtime reports
         if: always() && (inputs.operation == 'rollout' || inputs.operation == 'resume-rollout')
         uses: actions/upload-artifact@v4

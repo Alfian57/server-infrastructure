@@ -1,8 +1,8 @@
 ---
 name: sistertika-uty-api
+production: false
 enabled: true
 repo: sistertika-uty-api
-destructive_allowed: false
 run_seeder: false
 seed_on: fresh
 seeder_binary: sistertika-uty-seed

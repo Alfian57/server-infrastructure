@@ -1,5 +1,6 @@
 ---
 name: guardian-lab-ai
+production: false
 enabled: true
 repo_owner: DeryWahyu
 repo: guardian-lab-ai

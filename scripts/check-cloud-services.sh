@@ -10,8 +10,8 @@
 # Usage:
 #   ./scripts/check-cloud-services.sh
 #
-# Or via Makefile:
-#   make check-cloud
+# Run through the operator dispatcher:
+#   make infra ACTION=cloud-check
 # =============================================================================
 
 set -e
@@ -160,7 +160,7 @@ echo ""
 
 if [ $github_fail -gt 0 ] || [ $dns_fail -gt 0 ]; then
   echo -e "${YELLOW}⚠ Some checks failed. Run:${NC}"
-  echo "  make update-cloud"
+  echo "  make infra ACTION=cloud-services GROUP=<group>"
   exit 1
 else
   echo -e "${GREEN}✓ All cloud services are properly configured!${NC}"

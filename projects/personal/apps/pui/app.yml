@@ -1,5 +1,6 @@
 ---
 name: pui
+production: false
 display_name: Hashbox PUI
 enabled: true
 repo: PUI

@@ -31,7 +31,7 @@ npm_cloudflare_forwarded_proto_config: |
   set $x_forwarded_proto $http_x_forwarded_proto;
   set $x_forwarded_scheme $http_x_forwarded_proto;
 
-# Proxy hosts are derived from group_vars/all/apps.yml by default.
+# Proxy hosts are derived from the selected group app catalogue by default.
 proxy_hosts: "{{ portfolio_proxy_hosts | default([]) }}"
 
 # Internal bootstrap variables (migrated from vars/main.yml)

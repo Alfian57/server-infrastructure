@@ -99,10 +99,11 @@ def image_name(item: dict[str, Any]) -> str:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    print(f"{'GROUP':14} {'APP':32} {'STATE':9} DOMAIN")
+    print(f"{'GROUP':14} {'APP':32} {'DEPLOY':9} {'PRODUCTION':14} DOMAIN")
     for app in select_catalog(os.environ.get('CATALOG_GROUP', ''), os.environ.get('CATALOG_APP', '')):
         state = 'enabled' if app.get('enabled', True) else 'disabled'
-        print(f"{app['group']:14} {app['name']:32} {state:9} {', '.join(app_domains(app)) or '(internal)'}")
+        production = 'production' if app['production'] else 'non-production'
+        print(f"{app['group']:14} {app['name']:32} {state:9} {production:14} {', '.join(app_domains(app)) or '(internal)'}")
     return 0
 
 

@@ -1,0 +1,68 @@
+---
+- name: Validate the reset target before changing the running application
+  ansible.builtin.assert:
+    that:
+      - run_apps | length == 1
+      - run_apps[0].get('enabled', true) | bool
+      - not (run_apps[0].production | bool)
+      - run_apps[0].databases is defined
+      - run_apps[0].databases | length > 0
+    fail_msg: "reset-db accepts one enabled non-production application with declared databases."
+    quiet: true
+
+- name: Check database ownership before stopping the target application
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-databases.py]
+    stdin: '{{ {"operation": "validate-reset", "application": run_apps[0]} | to_json }}'
+  no_log: true
+  register: database_reset_preflight
+  failed_when: false
+
+- name: Require database ownership preflight to succeed
+  ansible.builtin.assert:
+    that: database_reset_preflight.rc == 0
+    fail_msg: '{{ database_reset_preflight.stderr | default("Database reset preflight failed") }}'
+
+- name: Check whether the target application has a Compose project to stop
+  ansible.builtin.stat:
+    path: "{{ docker_stack_applications }}/{{ run_apps[0].name }}/docker-compose.yml"
+  register: database_reset_compose
+
+- name: Stop and reset only the target application's databases
+  block:
+    - name: Stop only the target application's containers before database reset
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_stack_applications }}/{{ run_apps[0].name }}"
+        state: stopped
+      no_log: true
+      when: database_reset_compose.stat.exists
+
+    - name: Drop only databases exclusively owned by the target application
+      ansible.builtin.command:
+        argv: [python3, /opt/docker-stack/bin/manage-databases.py]
+        stdin: '{{ {"operation": "reset", "application": run_apps[0]} | to_json }}'
+      no_log: true
+      register: database_reset_result
+      failed_when: false
+
+    - name: Require scoped database reset to succeed
+      ansible.builtin.assert:
+        that: database_reset_result.rc == 0
+        fail_msg: '{{ database_reset_result.stderr | default("Scoped database reset failed") }}'
+  rescue:
+    - name: Restart the target application with its existing Compose configuration
+      community.docker.docker_compose_v2:
+        project_src: "{{ docker_stack_applications }}/{{ run_apps[0].name }}"
+        pull: never
+        recreate: never
+        state: present
+      no_log: true
+      when: database_reset_compose.stat.exists
+
+    - name: Report database reset failure after attempting application recovery
+      ansible.builtin.fail:
+        msg: "Database reset failed for {{ run_apps[0].name }}. The previous Compose configuration was restarted when available; inspect database ownership and target configuration before retrying."
+
+- name: Report the target application database reset
+  ansible.builtin.debug:
+    msg: "Reset approved for {{ run_apps[0].name }}; the selected app deployment will now initialize its database."

@@ -54,7 +54,7 @@ github_token: "{{ vault_github_token }}"
 primary_domain: "alfian-gading.my.id"
 
 # Managed domains, DNS records, repositories, proxy hosts, and app databases are
-# now defined in group_vars/all/apps.yml.
+# now defined in per-group project app catalogues.
 
 # SSH Configuration
 ssh_key_name: "server_ed25519"

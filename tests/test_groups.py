@@ -11,9 +11,47 @@ from unittest import mock
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'scripts'))
 import catalog
+import deploy
 
 
 class CatalogTests(unittest.TestCase):
+    def test_every_app_has_an_explicit_boolean_production_status(self):
+        apps=catalog.select()
+        self.assertEqual(len(apps),21)
+        self.assertTrue(all(type(app.get('production')) is bool for app in apps))
+        self.assertTrue(any(not app.get('enabled',True) for app in apps))
+
+    def test_catalog_production_status_is_independent_from_runtime_environment(self):
+        original=catalog.read
+        def nonproduction_catalog(path):
+            value=original(path)
+            if path.name=='app.yml' and path.parent.name=='aldera-tech':
+                value['production']=False
+            return value
+        with mock.patch.object(catalog,'read',side_effect=nonproduction_catalog):
+            app=catalog.select(app='aldera-tech')[0]
+        template=(ROOT/app['env_template']).read_text()
+        self.assertIn('NODE_ENV=production',template)
+        self.assertIs(app['production'],False)
+
+    def test_catalog_rejects_non_boolean_production_status(self):
+        original=catalog.read
+        def malformed(path):
+            value=original(path)
+            if path.name=='app.yml' and path.parent.name=='sistertika-uty-api':
+                value['production']='false'
+            return value
+        with mock.patch.object(catalog,'read',side_effect=malformed):
+            with self.assertRaisesRegex(ValueError,'production status must be a boolean'):
+                catalog.select(app='sistertika-uty-api')
+
+    def test_plan_exposes_catalog_production_status(self):
+        result=subprocess.run([sys.executable,'scripts/catalog.py','plan','--group','uty'],
+                              cwd=ROOT,capture_output=True,text=True,check=True)
+        data=json.loads(result.stdout)
+        self.assertEqual(data['production_status'],
+                         {'sistertika-uty-api':False,'sistertika-uty-web':False})
+
     def test_uty_selection_reads_no_other_group(self):
         with mock.patch.object(catalog,'read',wraps=catalog.read) as reader:
             apps=catalog.select('uty',enabled_only=True)
@@ -182,6 +220,94 @@ class OwnershipTests(unittest.TestCase):
         state=resources.db.read_state()
         self.assertTrue(state['databases']['postgres:router']['initialized'])
         self.assertFalse(state['databases']['postgres:pui']['initialized'])
+
+
+class DatabaseResetTests(unittest.TestCase):
+    def setUp(self):
+        self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup)
+        self.state_path=Path(self.directory.name)/'state.json'
+        self.patch_state=mock.patch.object(resources.db,'STATE',self.state_path)
+        self.patch_state.start();self.addCleanup(self.patch_state.stop)
+
+    @staticmethod
+    def app(**overrides):
+        value={'name':'sistertika-uty-api','group':'uty','enabled':True,'production':False,
+               'databases':{'postgres':['new_db']},
+               'database_users':[{'database':'new_db','username':'new_user','password':'fixture-password'}]}
+        value.update(overrides)
+        return value
+
+    def test_production_status_blocks_reset_before_database_queries(self):
+        with mock.patch.object(resources.db,'database_exists') as exists:
+            with self.assertRaisesRegex(ValueError,'production is false'):
+                resources.db.preflight_reset(self.app(production=True))
+        exists.assert_not_called()
+
+    def test_disabled_application_blocks_reset_before_database_queries(self):
+        with mock.patch.object(resources.db,'database_exists') as exists:
+            with self.assertRaisesRegex(ValueError,'enabled applications'):
+                resources.db.preflight_reset(self.app(enabled=False))
+        exists.assert_not_called()
+
+    def test_existing_unowned_target_blocks_reset(self):
+        resources.db.save_state({'databases':{},'applications':{}})
+        with mock.patch.object(resources.db,'environment',return_value={'POSTGRES_USER':'postgres'}), \
+             mock.patch.object(resources.db,'database_exists',return_value=True):
+            with self.assertRaisesRegex(ValueError,'no verified application owner'):
+                resources.db.preflight_reset(self.app())
+
+    def test_target_claimed_by_another_app_blocks_reset(self):
+        resources.db.save_state({'databases':{
+            'postgres:new_db':{'group':'personal','app':'pui','initialized':True}},'applications':{}})
+        with mock.patch.object(resources.db,'database_exists') as exists:
+            with self.assertRaisesRegex(ValueError,'owned by another application'):
+                resources.db.preflight_reset(self.app())
+        exists.assert_not_called()
+
+    def test_reset_drops_only_owned_databases_and_preserves_other_claims(self):
+        resources.db.save_state({'databases':{
+            'postgres:old_db':{'group':'uty','app':'sistertika-uty-api','initialized':True},
+            'postgres:other_db':{'group':'personal','app':'pui','initialized':True}},'applications':{}})
+        def exists(engine,database):return database=='old_db'
+        with mock.patch.object(resources.db,'environment',return_value={'POSTGRES_USER':'postgres'}), \
+             mock.patch.object(resources.db,'database_exists',side_effect=exists), \
+             mock.patch.object(resources.db,'active_sessions',return_value=0), \
+             mock.patch.object(resources.db,'pg') as pg:
+            result=resources.db.reset_application(self.app())
+        self.assertEqual(result['removed_databases'],[{'engine':'postgres','database':'old_db'}])
+        self.assertIn('DROP DATABASE "old_db"',pg.call_args.args[0])
+        state=resources.db.read_state()
+        self.assertEqual(set(state['databases']),{'postgres:other_db'})
+
+    def test_reset_refuses_active_database_sessions_before_drop(self):
+        resources.db.save_state({'databases':{
+            'postgres:new_db':{'group':'uty','app':'sistertika-uty-api','initialized':True}},'applications':{}})
+        with mock.patch.object(resources.db,'environment',return_value={'POSTGRES_USER':'postgres'}), \
+             mock.patch.object(resources.db,'database_exists',return_value=True), \
+             mock.patch.object(resources.db,'active_sessions',return_value=1), \
+             mock.patch.object(resources.db,'pg') as pg:
+            with self.assertRaisesRegex(ValueError,'active connections'):
+                resources.db.reset_application(self.app())
+        self.assertFalse(any('DROP DATABASE' in call.args[0] for call in pg.call_args_list))
+        self.assertIn('postgres:new_db',resources.db.read_state()['databases'])
+
+    def test_dispatch_rejects_production_target_before_opening_vps_lock(self):
+        args=type('Args',(),{'operation':'reset-db','group':'','app':'demo','service':'','destroy_data':False})()
+        target={'name':'demo','group':'lomba','enabled':True,'production':True,'databases':{'postgres':['demo']}}
+        with mock.patch.object(deploy,'select',return_value=[target]), \
+             mock.patch.object(deploy,'inventory_host') as inventory:
+            with self.assertRaisesRegex(ValueError,'production: false'):
+                deploy.run(args)
+        inventory.assert_not_called()
+
+    def test_dispatch_rejects_missing_database_before_opening_vps_lock(self):
+        args=type('Args',(),{'operation':'reset-db','group':'','app':'demo','service':'','destroy_data':False})()
+        target={'name':'demo','group':'lomba','enabled':True,'production':False}
+        with mock.patch.object(deploy,'select',return_value=[target]), \
+             mock.patch.object(deploy,'inventory_host') as inventory:
+            with self.assertRaisesRegex(ValueError,'declared databases'):
+                deploy.run(args)
+        inventory.assert_not_called()
 
 
 if __name__=='__main__':unittest.main()

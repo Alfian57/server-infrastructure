@@ -1,5 +1,6 @@
 ---
 name: gamblock-ai-website
+production: false
 display_name: Gamblock AI Website
 repo_owner: Gamblock-AI
 repo: Gamblock-AI-Website

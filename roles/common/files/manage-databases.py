@@ -2,6 +2,7 @@
 """Provision selected databases only; credentials are read on stdin and never logged."""
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -57,6 +58,112 @@ def save_state(state):
     temp.replace(STATE)
 
 
+SYSTEM_DATABASES={'postgres','template0','template1','mysql','sys','information_schema','performance_schema'}
+
+
+def validate_database(engine,database):
+    if engine not in ('postgres','mysql'):
+        raise ValueError('Unsupported database engine in reset target')
+    if not isinstance(database,str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,63}',database):
+        raise ValueError('Invalid database identifier in reset target')
+    if database.lower() in SYSTEM_DATABASES:
+        raise ValueError('System database reset is prohibited')
+
+
+def database_exists(engine,database):
+    if engine=='postgres':
+        return pg('SELECT 1 FROM pg_database WHERE datname='+literal(database)).stdout.strip()=='1'
+    return mysql('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='+literal(database)).stdout.strip()==database
+
+
+def active_sessions(engine,database):
+    if engine=='postgres':
+        sql='SELECT count(*) FROM pg_stat_activity WHERE datname='+literal(database)+' AND pid<>pg_backend_pid()'
+        return int(pg(sql).stdout.strip() or '0')
+    sql='SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE DB='+literal(database)+' AND ID<>CONNECTION_ID()'
+    return int(mysql(sql).stdout.strip() or '0')
+
+
+def preflight_reset(app):
+    if app.get('production') is not False:
+        raise ValueError('Database reset is allowed only when production is false')
+    if not app.get('enabled',True):
+        raise ValueError('Database reset is limited to enabled applications')
+    name=app.get('name','')
+    if not re.fullmatch(r'[a-z0-9][a-z0-9-]*',name):
+        raise ValueError('Invalid application identifier')
+    declared=app.get('databases')
+    if not isinstance(declared,dict) or not declared:
+        raise ValueError('Application has no declared databases')
+    state=read_state();desired=[]
+    users=app.get('database_users',[]) or []
+    for engine,names in declared.items():
+        if not isinstance(names,list) or not names:
+            raise ValueError('Database declarations must contain at least one database')
+        for database in names:
+            validate_database(engine,database)
+            claim=state.get('databases',{}).get(engine+':'+database)
+            if claim and claim.get('app')!=name:
+                raise ValueError('Target database is owned by another application')
+            matching=[user for user in users if user.get('database')==database]
+            if not matching:
+                raise ValueError('Every reset target requires a restricted application database user')
+            admin=(environment('postgres-db').get('POSTGRES_USER','postgres') if engine=='postgres' else 'root')
+            for user in matching:
+                username=user.get('username','')
+                if not username or username in ('root','postgres','mysql',admin):
+                    raise ValueError('Application database user cannot be an administrator')
+                if not user.get('password'):
+                    raise ValueError('Every reset target requires its application database credential')
+            desired.append((engine,database))
+    if len(desired)!=len(set(desired)):
+        raise ValueError('Duplicate database targets are not allowed')
+
+    owned=[]
+    for key,claim in state.get('databases',{}).items():
+        if claim.get('app')!=name:continue
+        engine,database=key.split(':',1)
+        validate_database(engine,database)
+        owned.append((engine,database))
+    for engine,database in desired:
+        claim=state.get('databases',{}).get(engine+':'+database)
+        exists=database_exists(engine,database)
+        if exists and not claim:
+            raise ValueError('Existing target database has no verified application owner')
+    # Verify every previously owned database is reachable before any container
+    # is stopped or database is dropped. A missing database is safe to forget.
+    exists_by_key={}
+    for engine,database in owned:
+        exists_by_key[engine+':'+database]=database_exists(engine,database)
+    return {'application':name,'owned':owned,'exists':exists_by_key}
+
+
+def reset_application(app):
+    """Preflight a single app's databases, then drop only its exclusive claims."""
+    plan=preflight_reset(app)
+    state=read_state()
+    for engine,database in plan['owned']:
+        key=engine+':'+database
+        claim=state.get('databases',{}).get(key)
+        if not claim or claim.get('app')!=plan['application']:
+            raise ValueError('Database ownership changed during reset preflight')
+    removed=[]
+    for engine,database in plan['owned']:
+        key=engine+':'+database
+        if plan['exists'][key]:
+            sessions=active_sessions(engine,database)
+            if sessions:
+                raise ValueError('Database still has active connections; refusing reset')
+            if engine=='postgres':
+                pg('DROP DATABASE '+ident(database))
+            else:
+                mysql('DROP DATABASE `'+database.replace('`','``')+'`')
+            removed.append({'engine':engine,'database':database})
+        state['databases'].pop(key,None)
+        save_state(state)
+    return {'application':plan['application'],'removed_databases':removed}
+
+
 def provision(apps):
     state=read_state()
     changes=[];pending=[]
@@ -108,6 +215,13 @@ def provision(apps):
 
 
 if __name__=='__main__':
-    try:print(json.dumps(provision(json.load(sys.stdin)['applications'])))
+    try:
+        payload=json.load(sys.stdin)
+        operation=payload.get('operation','provision')
+        if operation=='validate-reset':result=preflight_reset(payload['application'])
+        elif operation=='reset':result=reset_application(payload['application'])
+        elif operation=='provision':result=provision(payload['applications'])
+        else:raise ValueError('Unsupported database operation')
+        print(json.dumps(result))
     except (ValueError,RuntimeError,KeyError) as exc:
         print(str(exc),file=sys.stderr);sys.exit(1)

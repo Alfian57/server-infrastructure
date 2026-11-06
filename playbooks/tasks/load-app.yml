@@ -11,6 +11,12 @@
       - context_definition.name == context_id
       - context_definition.group == run_group
 
+- name: Require an explicit application production status
+  ansible.builtin.assert:
+    that:
+      - context_definition.production is boolean
+    fail_msg: "Application {{ context_id }} must define production as a YAML boolean."
+
 - name: Retain stack metadata
   ansible.builtin.set_fact:
     context_apps: '{{ context_apps + [context_definition] }}'
