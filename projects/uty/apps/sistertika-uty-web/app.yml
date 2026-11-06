@@ -1,8 +1,8 @@
 ---
 name: sistertika-uty-web
+production: false
 enabled: true
 repo: sistertika-uty-web
-destructive_allowed: false
 stack: nextjs
 env_contract:
   required: false

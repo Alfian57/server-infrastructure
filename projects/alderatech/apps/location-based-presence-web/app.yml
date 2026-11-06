@@ -1,5 +1,6 @@
 ---
 name: location-based-presence-web
+production: false
 enabled: false
 repo_owner: AlderaTech
 repo: location-based-presence-web

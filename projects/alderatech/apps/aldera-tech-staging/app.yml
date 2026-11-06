@@ -1,5 +1,6 @@
 ---
 name: aldera-tech-staging
+production: false
 display_name: Aldera Tech Staging
 repo_owner: AlderaTech
 repo: aldera-tech

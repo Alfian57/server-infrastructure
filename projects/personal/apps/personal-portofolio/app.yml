@@ -1,5 +1,6 @@
 ---
 name: personal-portofolio
+production: false
 repo: personal-portofolio
 stack: nextjs
 build:

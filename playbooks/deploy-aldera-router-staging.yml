@@ -1,6 +1,0 @@
----
-- name: Deploy aldera-router-staging within its group
-  ansible.builtin.import_playbook: deploy-group.yml
-  vars:
-    deployment_group: alderatech
-    app: aldera-router-staging

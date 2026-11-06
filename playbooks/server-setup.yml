@@ -1,3 +1,0 @@
----
-- name: Deploy an explicit application group
-  ansible.builtin.import_playbook: deploy-group.yml

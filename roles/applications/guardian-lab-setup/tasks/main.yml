@@ -18,7 +18,7 @@
   ansible.builtin.assert:
     that:
       - guardian_lab_image_state.stat.exists
-    fail_msg: "Bootstrap the stack first with make app APP=guardian-lab."
+    fail_msg: "Bootstrap the stack first with make infra ACTION=deploy APP=guardian-lab."
     quiet: true
   when: portfolio_app_filter | default('') == 'guardian-lab-ai'
 

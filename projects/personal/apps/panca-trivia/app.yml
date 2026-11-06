@@ -1,5 +1,6 @@
 ---
 name: panca-trivia
+production: false
 enabled: false
 repo: panca-trivia
 stack: laravel

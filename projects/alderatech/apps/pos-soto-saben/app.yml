@@ -1,5 +1,6 @@
 ---
 name: pos-soto-saben
+production: false
 enabled: false
 repo_owner: AlderaTech
 repo: pos-soto-saben

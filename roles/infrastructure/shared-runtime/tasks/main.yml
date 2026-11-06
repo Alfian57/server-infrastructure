@@ -5,6 +5,10 @@
   loop_control:
     loop_var: required_service
 
+- name: Preflight and reset one application's databases when explicitly requested
+  ansible.builtin.include_tasks: reset-database.yml
+  when: reset_database | default(false) | bool
+
 - name: Provision only selected application databases
   ansible.builtin.command:
     argv: [python3, /opt/docker-stack/bin/manage-databases.py]

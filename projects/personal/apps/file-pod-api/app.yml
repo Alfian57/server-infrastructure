@@ -1,5 +1,6 @@
 ---
 name: file-pod-api
+production: false
 enabled: false
 repo: file-pod-api
 stack: express

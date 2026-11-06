@@ -5,38 +5,13 @@
 ### 1. Full Security Hardening
 
 ```bash
-# Deploy semua security features
-make security
-
-# Atau menggunakan ansible-playbook langsung
-ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --tags security-hardening
+# Deploy semua security features melalui dispatcher
+make infra ACTION=security-hardening
 ```
 
-### 2. Specific Security Components
+### 2. Check Security Status
 
 ```bash
-# UFW Firewall only
-make security-ufw
-
-# Fail2ban only
-make security-fail2ban
-
-# SSH hardening only
-make security-ssh
-
-# Docker security only
-make security-docker
-
-# System hardening only
-make security-system
-```
-
-### 3. Check Security Status
-
-```bash
-# Via Makefile
-make security-check
-
 # Via SSH on server
 ssh -p 2222 deployer@server-ip
 sudo security-check
@@ -46,7 +21,7 @@ sudo security-check
 
 ### Override Default Settings
 
-Create `group_vars/all/security.yml`:
+Configure security variables in `platform/vars.yml`:
 
 ```yaml
 ---
@@ -84,7 +59,7 @@ security_custom_allowed_ports:
 ### 1. Basic Security (Recommended)
 
 ```yaml
-# group_vars/all/security.yml
+# platform/vars.yml
 ---
 security_ssh_port: 2222
 security_allow_npm_dashboard: true
@@ -97,13 +72,13 @@ security_fail2ban_ssh_bantime: "24h"
 
 Deploy:
 ```bash
-make security
+make infra ACTION=security-hardening
 ```
 
 ### 2. Paranoid Mode (Maximum Security)
 
 ```yaml
-# group_vars/all/security.yml
+# platform/vars.yml
 ---
 security_ssh_port: 2222
 security_allow_npm_dashboard: false        # Access via SSH tunnel only
@@ -119,13 +94,13 @@ security_enable_rkhunter: true             # Rootkit scanning
 
 Deploy:
 ```bash
-make security
+make infra ACTION=security-hardening
 ```
 
 ### 3. Development Mode (More Lenient)
 
 ```yaml
-# group_vars/all/security.yml
+# platform/vars.yml
 ---
 security_ssh_port: 22                      # Standard port
 security_allow_npm_dashboard: true
@@ -140,7 +115,7 @@ security_whitelist_ips:
 
 Deploy:
 ```bash
-make security
+make infra ACTION=security-hardening
 ```
 
 ## 🔍 Verification Steps
@@ -341,24 +316,19 @@ Status: Excellent
        comment: "Management IP"
    ```
 
-2. **Test in dry-run mode first:**
-   ```bash
-   make setup-dry-run
-   ```
-
-3. **Keep a backup SSH session open:**
+2. **Keep a backup SSH session open:**
    ```bash
    # Terminal 1: Current session
    ssh -p 2222 deployer@server-ip
    
    # Terminal 2: Deploy changes
-   make security
+   make infra ACTION=security-hardening
    
    # Terminal 3: Test new connection
    ssh -p 2222 deployer@server-ip
    ```
 
-4. **Monitor logs after deployment:**
+3. **Monitor logs after deployment:**
    ```bash
    sudo tail -f /var/log/fail2ban.log
    sudo tail -f /var/log/ufw.log

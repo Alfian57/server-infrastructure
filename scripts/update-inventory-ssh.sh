@@ -61,5 +61,5 @@ echo -e "${BLUE}═════════════════════�
 echo -e "${GREEN}  ✓ SSH Key Authentication Ready!${NC}"
 echo -e "${BLUE}═══════════════════════════════════════════════════════════${NC}"
 echo ""
-echo "Next step: make deploy"
+echo "Next step: make infra ACTION=deploy GROUP=<group>"
 echo ""

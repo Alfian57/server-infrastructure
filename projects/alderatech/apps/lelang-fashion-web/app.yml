@@ -1,5 +1,6 @@
 ---
 name: lelang-fashion-web
+production: false
 enabled: false
 repo_owner: AlderaTech
 repo: lelang-fashion-web

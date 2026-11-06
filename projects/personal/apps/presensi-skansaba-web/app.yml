@@ -1,5 +1,6 @@
 ---
 name: presensi-skansaba-web
+production: false
 enabled: false
 repo: Presensi-Skansaba-Web
 image_name: presensi-skansaba-web

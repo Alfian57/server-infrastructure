@@ -1,5 +1,6 @@
 ---
 name: aldera-tech
+production: false
 display_name: Aldera Tech
 repo_owner: AlderaTech
 repo: aldera-tech
@@ -37,9 +38,6 @@ dns:
   domain: aldera.tech
   records:
     - '@'
-    - api
-    - router
-    - staging
 databases:
   postgres:
     - '{{ vault_aldera_db_database | default(''aldera_tech'') }}'

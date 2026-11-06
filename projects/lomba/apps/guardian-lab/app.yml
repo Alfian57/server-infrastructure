@@ -1,5 +1,6 @@
 ---
 name: guardian-lab
+production: false
 enabled: true
 repo_owner: DeryWahyu
 repo: guardian-lab

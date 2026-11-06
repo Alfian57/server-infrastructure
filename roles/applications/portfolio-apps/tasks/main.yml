@@ -4,7 +4,7 @@
     that:
       - portfolio_apps is defined
       - portfolio_apps | length > 0
-    fail_msg: "portfolio_apps is empty. Define applications in group_vars/all/apps.yml."
+    fail_msg: "portfolio_apps is empty. Define the selected app in projects/<group>/apps/."
     quiet: true
 
 - name: Select enabled portfolio applications
@@ -24,7 +24,7 @@
   ansible.builtin.assert:
     that:
       - portfolio_apps_selected | length > 0
-    fail_msg: "No enabled app matched '{{ portfolio_app_filter }}'. Run `make app-list` to see known apps."
+    fail_msg: "No enabled app matched '{{ portfolio_app_filter }}'. Run `make infra ACTION=list` to see known apps."
     quiet: true
   when: portfolio_app_filter | length > 0
 

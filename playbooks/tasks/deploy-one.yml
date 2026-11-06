@@ -20,6 +20,7 @@
     tasks_from: deploy-one
   vars:
     portfolio_app: '{{ selected_app }}'
+    portfolio_database_reset: '{{ reset_database | default(false) | bool }}'
   when: selected_app.deployment == 'portfolio'
 
 - name: Deploy Hashbox PUI
@@ -67,6 +68,7 @@
   failed_when: false
   when:
     - not ansible_check_mode
+    - not (reset_database | default(false) | bool)
     - selected_app.proxy is defined or selected_app.proxy_hosts is defined
 
 - name: Require application public resource reconciliation to succeed
@@ -75,4 +77,5 @@
     fail_msg: '{{ public_resource_result.stderr | default("Scoped public resource reconciliation failed") }}'
   when:
     - not ansible_check_mode
+    - not (reset_database | default(false) | bool)
     - selected_app.proxy is defined or selected_app.proxy_hosts is defined
