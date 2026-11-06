@@ -200,14 +200,14 @@ app-env-check: ## Check app env templates (APP=name optional)
 	@./scripts/app-catalog.py env-check $(if $(APP),--app $(APP),)
 
 env-contract-check: ## Check remote .env.example contracts (APP=name optional)
-	@./scripts/env-contracts.py check $(if $(APP),--app $(APP),)
+	@./scripts/env-contracts.py check $(if $(APP),--app $(APP),) $(if $(SOURCE_DIR),--source-dir "$(SOURCE_DIR)",)
 
 env-contract-show: ## Show env contract drift for one app (APP=name)
 	@[ -n "$(APP)" ] || (echo "Usage: make env-contract-show APP=<name>" && exit 1)
-	@./scripts/env-contracts.py show --app $(APP)
+	@./scripts/env-contracts.py show --app $(APP) $(if $(SOURCE_DIR),--source-dir "$(SOURCE_DIR)",)
 
 repo-audit: ## Audit remote repo Dockerfile/workflow/image settings (APP=name optional)
-	@./scripts/repo-audit.py check $(if $(APP),--app $(APP),)
+	@./scripts/repo-audit.py check $(if $(APP),--app $(APP),) $(if $(SOURCE_DIR),--source-dir "$(SOURCE_DIR)",)
 
 app: check app-env-check ## Deploy one app (APP=name)
 	@[ -n "$(APP)" ] || (echo "Usage: make app APP=<name>" && exit 1)

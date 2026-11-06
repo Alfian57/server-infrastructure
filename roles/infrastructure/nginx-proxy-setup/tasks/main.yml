@@ -368,7 +368,7 @@
           ssl_forced: false
           caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
           block_exploits: true
-          advanced_config: "{{ npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '' }}"
+          advanced_config: "{{ (npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '') ~ '\n' ~ (item.advanced_config | default('')) }}"
           meta: {}
           access_list_id: 0
           allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
@@ -944,7 +944,7 @@
           ssl_forced: "{{ item.force_ssl | default(true) | bool }}"
           caching_enabled: "{{ item.caching_enabled | default(false) | bool }}"
           block_exploits: true
-          advanced_config: "{{ npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '' }}"
+          advanced_config: "{{ (npm_cloudflare_forwarded_proto_config if cloudflare_edge | bool else '') ~ '\n' ~ (item.advanced_config | default('')) }}"
           meta: {}
           access_list_id: 0
           allow_websocket_upgrade: "{{ item.websocket_support | default(false) | bool }}"
@@ -959,6 +959,49 @@
         - proxy_hosts is defined
         - certificate_id | int > 0
         - proxy_host_id != ''
+
+    # Adding a second error_log directive cannot disable NPM's generated error log.
+    # Replace the generated directive only for hosts carrying sensitive stream tickets.
+    - name: Disable generated error logs for sensitive proxy hosts
+      ansible.builtin.command:
+        argv:
+          - docker
+          - exec
+          - nginx-proxy-manager
+          - node
+          - -e
+          - |
+            const fs = require('fs');
+            const id = process.argv[1];
+            if (!/^[0-9]+$/.test(id)) throw new Error('Invalid proxy host ID');
+            const path = '/data/nginx/proxy_host/' + id + '.conf';
+            const original = fs.readFileSync(path, 'utf8');
+            const pattern = /(^|\n)(\s*)error_log\s+[^;]+;/g;
+            if (!pattern.test(original)) throw new Error('Unsupported NPM proxy log layout');
+            pattern.lastIndex = 0;
+            const updated = original.replace(pattern, '$1$2error_log /dev/null crit;');
+            if (updated !== original) fs.writeFileSync(path, updated);
+            console.log(updated !== original ? 'changed' : 'unchanged');
+          - "{{ npm_sensitive_host_id }}"
+      vars:
+        npm_sensitive_domain: "{{ item.domain | default(item.subdomain | default('') ~ '.' ~ npm_domain_name) }}"
+        npm_sensitive_host_id: >-
+          {{ (current_proxy_hosts.json | selectattr('domain_names', 'contains', npm_sensitive_domain)
+          | first).id }}
+      loop: >-
+        {{ proxy_hosts | default([]) | selectattr('disable_error_log', 'defined')
+        | selectattr('disable_error_log', 'equalto', true) | list }}
+      loop_control:
+        label: "{{ item.domain | default(item.subdomain | default('')) }}"
+      register: npm_sensitive_log_update
+      changed_when: npm_sensitive_log_update.stdout == 'changed'
+      when: not ansible_check_mode
+
+    - name: Validate and reload Nginx after sensitive log changes
+      ansible.builtin.command:
+        argv: [docker, exec, nginx-proxy-manager, sh, -c, "nginx -t && nginx -s reload"]
+      when:
+        - npm_sensitive_log_update.results | default([]) | selectattr('changed', 'equalto', true) | list | length > 0
 
     - name: Display proxy host configuration results
       ansible.builtin.debug:

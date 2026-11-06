@@ -1,0 +1,19 @@
+---
+- name: Deploy Guardian Lab on existing infrastructure
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../group_vars/all/vars.yml
+    - ../group_vars/all/apps.yml
+    - ../group_vars/all/vault.yml
+  vars:
+    portfolio_app_filter: guardian-lab
+  roles:
+    - role: guardian-lab-setup
+  post_tasks:
+    - name: Configure Guardian Lab DNS and HTTPS without changing other hosts
+      ansible.builtin.include_role:
+        name: guardian-lab-setup
+        tasks_from: public-hosts
+      when: not ansible_check_mode

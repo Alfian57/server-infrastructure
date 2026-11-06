@@ -1,0 +1,158 @@
+name: guardian-lab
+
+services:
+  app:
+    image: ${GUARDIAN_WEB_IMAGE:?Missing web image}
+    container_name: guardian-lab
+    init: true
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 256
+    mem_limit: {{ guardian_lab_web_memory }}
+    cpus: {{ guardian_lab_web_cpus }}
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m,uid=1000,gid=1000
+    volumes:
+      - next-cache:/app/.next/cache
+    networks: [proxy, mysql, control, ml]
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/', {signal: AbortSignal.timeout(5000)}).then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 6s
+      start_period: 30s
+      retries: 5
+    logging:
+      options: {max-size: "10m", max-file: "3"}
+
+  ml:
+    image: ${GUARDIAN_ML_IMAGE:?Missing ML image}
+    container_name: guardian-lab-ml
+    init: true
+    restart: unless-stopped
+    env_file: [ml.env]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    networks: [ml]
+    logging:
+      options: {max-size: "10m", max-file: "3"}
+
+  broker:
+    image: ${GUARDIAN_BROKER_IMAGE:?Missing broker image}
+    container_name: guardian-lab-broker
+    init: true
+    restart: unless-stopped
+    env_file: [broker.env]
+    environment:
+      SANDBOX_WEB_IMAGE: ${GUARDIAN_BROWSER_IMAGE:?Missing browser image}
+      SANDBOX_EGRESS_IMAGE: ${GUARDIAN_EGRESS_IMAGE:?Missing egress image}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [control, stream]
+    logging:
+      options: {max-size: "10m", max-file: "3"}
+
+  stream:
+    image: {{ guardian_lab_stream_image }}
+    container_name: guardian-lab-stream
+    user: "101:101"
+    entrypoint: [nginx]
+    command: ["-g", "daemon off;"]
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 64m
+    cpus: 0.25
+    tmpfs:
+      - /var/cache/nginx:rw,nosuid,size=16m,uid=101,gid=101
+      - /var/run:rw,nosuid,size=1m,uid=101,gid=101
+    volumes:
+      - ./stream.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [proxy, stream]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/healthz]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: none
+
+  # Keep both runtime images referenced while idle, including during system prune -a.
+  # The egress keeper also prevents network prune from removing the session egress bridge.
+  sandbox-web-image:
+    image: ${GUARDIAN_BROWSER_IMAGE:?Missing browser image}
+    entrypoint: [/bin/sleep, infinity]
+    command: []
+    restart: unless-stopped
+    read_only: true
+    network_mode: none
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 16
+    mem_limit: 16m
+    cpus: 0.01
+    healthcheck: {disable: true}
+    logging: {driver: none}
+
+  sandbox-egress-image:
+    image: ${GUARDIAN_EGRESS_IMAGE:?Missing egress image}
+    entrypoint: [/bin/sleep, infinity]
+    command: []
+    restart: unless-stopped
+    read_only: true
+    networks: [egress]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 16
+    mem_limit: 16m
+    cpus: 0.01
+    healthcheck: {disable: true}
+    logging: {driver: none}
+
+volumes:
+  next-cache:
+
+networks:
+  proxy:
+    external: true
+    name: {{ nginx_proxy_network }}
+  mysql:
+    external: true
+    name: {{ mysql_network }}
+  ml:
+    name: guardian-lab-ml
+    internal: true
+  control:
+    name: guardian-lab-control
+    internal: true
+  stream:
+    name: guardian-lab-stream
+    internal: true
+  egress:
+    name: guardian-lab-egress

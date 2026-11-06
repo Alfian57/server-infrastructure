@@ -85,6 +85,7 @@ def enabled_apps(data: dict[str, Any]) -> list[dict[str, Any]]:
     pui = data.get("pui_app")
     if isinstance(pui, dict) and pui.get("enabled", True):
         enabled.append(pui)
+    enabled.extend(item for item in data.get("guardian_lab_apps", []) if item.get("enabled", True))
     return enabled
 
 
@@ -246,8 +247,8 @@ def contract_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, Any]
 
 
 def ci_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    defaults = data.get("github_actions_defaults", {}) or {}
     app_ci = app.get("ci", {}) or {}
+    defaults = (data.get("github_actions_defaults", {}) or {}) if app_ci.get("inherit_defaults", True) else {}
     return {
         "secrets": {**(defaults.get("secrets", {}) or {}), **(app_ci.get("secrets", {}) or {})},
         "variables": {**(defaults.get("variables", {}) or {}), **(app_ci.get("variables", {}) or {})},
@@ -281,6 +282,7 @@ def evaluate_app(
     default_owner: str,
     token: str,
     vault: dict[str, Any],
+    source_dir: Path | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     config = contract_config(data, app)
     owner = repo_owner(app, default_owner)
@@ -300,9 +302,15 @@ def evaluate_app(
     }
 
     try:
-        content = fetch_env_example(owner, repo, str(config["path"]), str(config.get("ref") or ""), token)
+        if source_dir is not None:
+            local_file = source_dir / str(config["path"])
+            if not local_file.is_file():
+                raise ContractError(f"local contract not found: {config['path']}")
+            content = local_file.read_text(encoding="utf-8")
+        else:
+            content = fetch_env_example(owner, repo, str(config["path"]), str(config.get("ref") or ""), token)
         remote_keys = parse_env_keys(content) - set(config.get("ignore_keys", []) or [])
-    except ContractError as exc:
+    except (ContractError, OSError) as exc:
         result["fetch_error"] = str(exc)
         return (not result["required"], result)
 
@@ -339,7 +347,7 @@ def print_result(result: dict[str, Any], show_details: bool = False) -> None:
     missing_vault = sorted(result["missing_required_vault_refs"])
     source_errors = sorted(result["source_errors"])
     if not (missing or uncovered or missing_vault or source_errors):
-        print(f"OK   {app}: {len(result['remote_keys'])} remote keys covered")
+        print(f"OK   {app}: {len(result['remote_keys'])} contract keys covered")
     else:
         print(f"FAIL {app}: contract drift detected")
     if show_details or missing:
@@ -586,9 +594,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     if args.app and not selected:
         print(f"Unknown app: {args.app}", file=sys.stderr)
         return 1
+    if args.source_dir and len(selected) != 1:
+        raise SystemExit("--source-dir requires --app selecting one repository")
     failed = 0
     for app in selected:
-        ok, result = evaluate_app(data, app, default_owner, token, vault)
+        ok, result = evaluate_app(data, app, default_owner, token, vault, args.source_dir)
         print_result(result, show_details=args.verbose)
         failed += 0 if ok else 1
     return 1 if failed else 0
@@ -607,7 +617,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     if not matches:
         print(f"Unknown app: {args.app}", file=sys.stderr)
         return 1
-    ok, result = evaluate_app(data, matches[0], default_owner, token, vault)
+    ok, result = evaluate_app(data, matches[0], default_owner, token, vault, args.source_dir)
     print_result(result, show_details=True)
     return 0 if ok else 1
 
@@ -688,10 +698,12 @@ def main() -> int:
     check = sub.add_parser("check", help="check remote .env.example against local runtime templates")
     check.add_argument("--app", default="")
     check.add_argument("--verbose", action="store_true")
+    check.add_argument("--source-dir", type=Path, help="read the contract from one local checkout instead of GitHub")
     check.set_defaults(func=cmd_check)
 
     show = sub.add_parser("show", help="show detailed contract drift for one app")
     show.add_argument("--app", required=True)
+    show.add_argument("--source-dir", type=Path, help="read the contract from a local checkout instead of GitHub")
     show.set_defaults(func=cmd_show)
 
     sync = sub.add_parser("github-sync", help="sync mapped GitHub secrets and variables")

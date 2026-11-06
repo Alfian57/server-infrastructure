@@ -63,6 +63,7 @@ def apps() -> list[dict[str, Any]]:
     pui = data.get("pui_app")
     if isinstance(pui, dict) and pui.get("enabled", True):
         enabled.append(pui)
+    enabled.extend(item for item in data.get("guardian_lab_apps", []) if item.get("enabled", True))
     return enabled
 
 
@@ -211,6 +212,9 @@ def cmd_env_check(args: argparse.Namespace) -> int:
 
 def cmd_deploy_tags(args: argparse.Namespace) -> int:
     app = find_app(args.app)
+    if app.get("deploy_tag"):
+        print(app["deploy_tag"])
+        return 0
     if app["name"] == "pui":
         print("pui-setup")
         return 0

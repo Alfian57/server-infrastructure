@@ -198,6 +198,7 @@
       when:
         - setup_applications | bool
         - enable_portfolio_apps | bool
+        - portfolio_app_filter not in ['guardian-lab', 'guardian-lab-ai']
 
     - role: pui-setup
       tags: [application, pui-setup]
@@ -205,6 +206,13 @@
         - setup_applications | bool
         - enable_pui_app | bool
         - portfolio_app_filter | length == 0 or portfolio_app_filter == "pui"
+
+    - role: guardian-lab-setup
+      tags: [application, guardian-lab-setup]
+      when:
+        - setup_applications | bool
+        - enable_guardian_lab | default(true) | bool
+        - portfolio_app_filter | length == 0 or portfolio_app_filter in ['guardian-lab', 'guardian-lab-ai']
 
     - role: aldera-router-setup
       tags: [application, aldera-router-setup]

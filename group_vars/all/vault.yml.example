@@ -1,4 +1,12 @@
 ---
+# Guardian Lab: generate independent production keys; never copy these placeholders.
+vault_guardian_lab_db_password: "generate-at-least-32-random-characters"
+vault_guardian_lab_session_secret: "generate-at-least-32-random-characters"
+vault_guardian_lab_broker_key: "generate-at-least-32-random-characters"
+vault_guardian_lab_fonnte_token: ""
+# Trusted OpenSSH known_hosts entries for the inventory host and SSH port.
+vault_guardian_lab_ssh_known_hosts: ""
+
 # ============================================================================
 # Sensitive Variables Template (Copy to vault.yml and customize)
 # ============================================================================
