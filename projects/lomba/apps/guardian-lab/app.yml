@@ -1,0 +1,84 @@
+---
+name: guardian-lab
+enabled: true
+repo_owner: DeryWahyu
+repo: guardian-lab
+stack: compose
+deploy_tag: guardian-lab-setup
+app_port: 3000
+image: ghcr.io/derywahyu/guardian-lab:latest
+images:
+  web: ghcr.io/derywahyu/guardian-lab:latest
+  broker: ghcr.io/derywahyu/guardian-lab-broker:latest
+  sandbox_web: ghcr.io/derywahyu/guardian-sandbox-web:latest
+  sandbox_egress: ghcr.io/derywahyu/guardian-sandbox-egress:latest
+build:
+  dockerfile: docker/app/Dockerfile
+  workflow: build-and-deploy.yml
+  images:
+    - image: guardian-lab
+      dockerfile: docker/app/Dockerfile
+      target: runner
+    - image: guardian-lab-broker
+      dockerfile: docker/sandbox/broker/Dockerfile
+      target: ''
+    - image: guardian-sandbox-web
+      dockerfile: docker/sandbox/web/Dockerfile
+      target: ''
+    - image: guardian-sandbox-egress
+      dockerfile: docker/sandbox/egress/Dockerfile
+      target: ''
+env_template: projects/lomba/apps/guardian-lab/.env.j2
+proxy_hosts:
+  - domain: guardian-lab.alfian-gading.my.id
+    scheme: http
+    forward_host: guardian-lab
+    forward_port: 3000
+    caching_enabled: false
+    websocket_support: true
+    cloudflare_flexible: true
+    advanced_config: client_max_body_size 64m;
+  - domain: guardian-sandbox.alfian-gading.my.id
+    scheme: http
+    forward_host: guardian-lab-stream
+    forward_port: 8080
+    caching_enabled: false
+    websocket_support: true
+    cloudflare_flexible: true
+    advanced_config: access_log off; proxy_read_timeout 240s; proxy_send_timeout 240s;
+    disable_error_log: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - guardian-lab
+    - guardian-sandbox
+databases:
+  mysql:
+    - guardian_lab
+ci:
+  inherit_defaults: false
+  secrets:
+    VPS_HOST:
+      source: runtime:vps_host
+    VPS_USER:
+      source: runtime:ci_deploy_user
+    VPS_SSH_PORT:
+      source: runtime:vps_ssh_port
+    VPS_KEY:
+      source: runtime:vps_key
+    VPS_KNOWN_HOSTS:
+      source: vault:vault_guardian_lab_ssh_known_hosts
+  variables:
+    ENABLE_VPS_DEPLOY:
+      value: 'true'
+    NEXT_PUBLIC_APP_URL:
+      value: https://guardian-lab.alfian-gading.my.id
+deployment: guardian
+group: lomba
+requires:
+  - nginx
+  - mysql
+database_users:
+  - database: guardian_lab
+    username: guardian_lab
+    password: '{{ vault_guardian_lab_db_password }}'

@@ -1,0 +1,6 @@
+---
+- name: Deploy guardian-lab within its group
+  ansible.builtin.import_playbook: deploy-group.yml
+  vars:
+    deployment_group: lomba
+    app: guardian-lab

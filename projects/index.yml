@@ -1,0 +1,34 @@
+---
+applications:
+  pui: personal
+  personal-portofolio: personal
+  panca-trivia: personal
+  presensi-skansaba-web: personal
+  file-pod-api: personal
+  sistertika-uty-api: uty
+  sistertika-uty-web: uty
+  ruang-tenang-api: lomba
+  ruang-tenang-web: lomba
+  satu-platform: lomba
+  guardian-lab: lomba
+  guardian-lab-ai: lomba
+  aldera-tech: alderatech
+  aldera-tech-staging: alderatech
+  location-based-presence-web: alderatech
+  lelang-fashion-web: alderatech
+  pos-soto-saben: alderatech
+  aldera-router: alderatech
+  aldera-router-staging: alderatech
+  gamblock-ai-backend: gamblock-ai
+  gamblock-ai-website: gamblock-ai
+group_registry:
+  personal:
+    name: Personal
+  uty:
+    name: UTY
+  lomba:
+    name: Lomba
+  alderatech:
+    name: AlderaTech
+  gamblock-ai:
+    name: Gamblock-AI

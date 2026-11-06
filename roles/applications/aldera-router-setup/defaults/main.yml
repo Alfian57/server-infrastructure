@@ -67,8 +67,8 @@ aldera_router_db_name: "{{ (vault_aldera_router_staging_db_name if (aldera_route
 aldera_router_db_user: "{{ (vault_aldera_router_staging_db_user if (aldera_router_is_staging | bool) else vault_aldera_router_db_user) | default('aldera') }}"
 aldera_router_db_password: "{{ (vault_aldera_router_staging_db_password if (aldera_router_is_staging | bool) else vault_aldera_router_db_password) | default(vault_postgres_password | default('change_me_super_secret_db_pass')) }}"
 aldera_router_db_sslmode: "disable"
-aldera_router_db_min_conns: 5
-aldera_router_db_max_conns: 25
+aldera_router_db_min_conns: 1
+aldera_router_db_max_conns: 5
 aldera_router_db_max_idle_time: "5m"
 aldera_router_pgdata: "/var/lib/postgresql/data/pgdata"
 

@@ -1,0 +1,62 @@
+---
+- name: Resolve application group from the index
+  ansible.builtin.set_fact:
+    run_group: "{{ deployment_group | default('') or applications.get(app | default(''), '') }}"
+
+- name: Validate explicit target before reading group configuration
+  ansible.builtin.assert:
+    that:
+      - run_group in groups_registry
+      - app | default('') | length == 0 or applications.get(app, '') == run_group
+    fail_msg: A valid group or application is required. Use deploy-all explicitly for every group.
+
+- name: Load the platform credential and selected group only
+  ansible.builtin.include_vars:
+    file: '{{ item }}'
+  loop:
+    - '{{ playbook_dir }}/../platform/vault.yml'
+    - '{{ playbook_dir }}/../projects/{{ run_group }}/vars.yml'
+    - '{{ playbook_dir }}/../projects/{{ run_group }}/vault.yml'
+  no_log: true
+
+- name: Select application identifiers in this group
+  ansible.builtin.set_fact:
+    context_ids: >-
+      {{ requested_apps | default([app] if app | default('') | length > 0 else
+      (applications | dict2items | selectattr('value', 'equalto', run_group) | map(attribute='key') | list)) }}
+    run_apps: []
+    context_apps: []
+
+- name: Validate every requested identifier belongs to this group
+  ansible.builtin.assert:
+    that: applications.get(item, '') == run_group
+  loop: '{{ context_ids }}'
+
+- name: Include Guardian stack metadata for either repository
+  ansible.builtin.set_fact:
+    context_ids: "{{ (context_ids + ['guardian-lab', 'guardian-lab-ai']) | unique }}"
+  when: context_ids | intersect(['guardian-lab', 'guardian-lab-ai']) | length > 0
+
+- name: Load application definitions from the selected group
+  ansible.builtin.include_tasks: load-app.yml
+  loop: '{{ context_ids }}'
+  loop_control:
+    loop_var: context_id
+
+- name: Require an enabled deployment target
+  ansible.builtin.assert:
+    that: run_apps | length > 0
+    fail_msg: No enabled applications match the requested target.
+
+- name: Adapt selected metadata for reusable deployment roles
+  ansible.builtin.set_fact:
+    portfolio_apps: "{{ run_apps | selectattr('deployment', 'equalto', 'portfolio') | list }}"
+    pui_app: "{{ run_apps | selectattr('deployment', 'equalto', 'pui') | first | default({}) }}"
+    guardian_lab_apps: "{{ context_apps | selectattr('deployment', 'equalto', 'guardian') | list }}"
+    required_services: "{{ run_apps | map(attribute='requires') | flatten | unique | list }}"
+    portfolio_app_filter: "{{ app | default('') }}"
+  no_log: true
+
+- name: Install shared deployment tools
+  ansible.builtin.include_tasks: helpers.yml
+  when: not (context_only | default(false) | bool)

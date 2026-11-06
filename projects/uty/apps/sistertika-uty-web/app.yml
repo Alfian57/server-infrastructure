@@ -1,0 +1,42 @@
+---
+name: sistertika-uty-web
+enabled: true
+repo: sistertika-uty-web
+destructive_allowed: false
+stack: nextjs
+env_contract:
+  required: false
+build:
+  dockerfile: Dockerfile
+  workflow: deploy.yml
+ci:
+  secrets:
+    NEXT_PUBLIC_API_URL:
+      source: vault:vault_sistertika_uty_web_api_url
+app_port: 3000
+env_template: projects/uty/apps/sistertika-uty-web/.env.j2
+networks:
+  - nginx_proxy_manager_network
+proxy:
+  domain: sistertika.alfian-gading.my.id
+  domains:
+    - sistertika.alfian-gading.my.id
+    - sistertika.com
+  scheme: http
+  forward_host: sistertika-uty-web
+  forward_port: 3000
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  - domain: alfian-gading.my.id
+    records:
+      - sistertika
+  - domain: sistertika.com
+    records:
+      - '@'
+deployment: portfolio
+group: uty
+requires:
+  - nginx
+database_users: []

@@ -1,0 +1,49 @@
+---
+name: lelang-fashion-web
+enabled: false
+repo_owner: AlderaTech
+repo: lelang-fashion-web
+image: ghcr.io/alderatech/lelang-fashion-web:latest
+stack: laravel
+run_seeder: false
+build:
+  dockerfile: docker/Dockerfile
+  workflow: web.yml
+env_template: projects/alderatech/apps/lelang-fashion-web/.env.j2
+ci:
+  secrets:
+    APP_KEY:
+      source: vault:vault_lelang_fashion_web_app_key
+  variables:
+    APP_URL:
+      source: vault:vault_lelang_fashion_web_app_url
+networks:
+  - nginx_proxy_manager_network
+  - mysql_network
+volumes:
+  - lelang_fashion_web_storage:/var/www/html/storage
+env_mount_path: /var/www/html/.env
+proxy:
+  domain: lelang-fashion.alfian-gading.my.id
+  scheme: http
+  forward_host: lelang-fashion-web
+  forward_port: 80
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - lelang-fashion
+databases:
+  mysql:
+    - pelelangan_produk_fashion
+deployment: portfolio
+group: alderatech
+requires:
+  - nginx
+  - mysql
+database_users:
+  - database: pelelangan_produk_fashion
+    username: '{{ vault_lelang_fashion_web_db_username }}'
+    password: '{{ vault_lelang_fashion_web_db_password }}'

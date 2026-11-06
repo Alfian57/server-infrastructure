@@ -1,0 +1,31 @@
+---
+- name: Install shared deployment entrypoints without restarting applications
+  hosts: all
+  gather_facts: false
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../projects/index.yml
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  tasks:
+    - name: Validate the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Install host-level helpers
+      ansible.builtin.include_tasks: tasks/helpers.yml
+    - name: Locate existing registered applications
+      ansible.builtin.stat:
+        path: '{{ docker_stack_applications }}/{{ item.key }}/docker-compose.yml'
+      loop: '{{ applications | dict2items }}'
+      register: existing_applications
+    - name: Install the shared lock in each application's existing CI entrypoint
+      ansible.builtin.copy:
+        src: '{{ playbook_dir }}/../roles/{{ "applications/guardian-lab-setup" if item.item.key == "guardian-lab" else "common" }}/files/update.sh'
+        dest: '{{ docker_stack_applications }}/{{ item.item.key }}/update.sh'
+        owner: '{{ deploy_user }}'
+        group: docker
+        mode: '0750'
+      loop: '{{ existing_applications.results }}'
+      loop_control:
+        label: '{{ item.item.key }}'
+      when: item.stat.exists

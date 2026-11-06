@@ -1,77 +1,16 @@
-# Panduan AI Agent
+# Panduan AI
 
-Dokumen ini adalah sumber instruksi utama untuk AI agent yang bekerja di repository ini. File instruksi khusus tool hanya menunjuk ke dokumen ini agar aturan project tidak tersebar atau saling berbeda.
+Repository ini mengelola satu VPS dengan platform bersama dan grup aplikasi terpisah.
+Mulai dari `projects/index.yml`, lalu baca `projects/<grup>/AGENTS.md` dan konfigurasi aplikasi yang diminta.
+Jangan membaca seluruh grup untuk perubahan satu aplikasi. Role bersama dibaca hanya jika relevan.
 
-## Tentang project
-
-Repository ini mengelola konfigurasi dan deployment server menggunakan Ansible. Playbook utama berada di `playbooks/server-setup.yml`; konfigurasi dibagi ke dalam roles untuk setup sistem, hardening keamanan, infrastruktur, database, aplikasi, dan optimasi. Project ini juga menyediakan skrip dan target Make untuk mengelola katalog aplikasi, kontrak environment, audit repository, dan operasi server.
-
-## Sumber konfigurasi
-
-- `group_vars/all/apps.yml` adalah katalog aplikasi dan sumber utama untuk metadata seperti status, repository, domain, deployment, kontrak environment, serta mapping variabel dan secret CI.
-- `group_vars/all/vars.yml` berisi konfigurasi non-sensitif bersama.
-- `group_vars/all/vault.yml` menyimpan credential terenkripsi dengan Ansible Vault. `group_vars/all/vault.yml.example` adalah panduan bentuk variabelnya, bukan tempat menyimpan nilai rahasia nyata.
-- Template `.env` aplikasi berada di `roles/applications/<app>-setup/templates/.env.j2`. Template harus mengambil nilai rahasia dari variabel Vault, bukan menanam credential secara langsung.
-- `ansible.cfg`, `inventory/`, `requirements.yml`, `playbooks/`, `roles/`, `scripts/`, `README.md`, dan `Makefile` menjelaskan cara project dijalankan dan diorganisasi. Periksa implementasi yang ada sebelum mengubah asumsi atau pola.
-
-## Akses credential dan penanganan rahasia
-
-Pemilik project telah memberi AI agent izin untuk membaca credential di project ini, termasuk mendekripsi `group_vars/all/vault.yml` menggunakan Ansible Vault bila tugas memang memerlukannya. `.vault_pass` adalah file lokal yang mungkin menyediakan password vault dan tidak boleh masuk Git.
-
-- Baca atau dekripsi hanya credential yang diperlukan untuk tugas saat ini.
-- Jangan menyalin nilai rahasia ke dokumentasi, contoh, template, issue, log, output terminal yang dibagikan, atau balasan kepada pengguna.
-- Jangan menampilkan isi vault dalam diff atau ringkasan perubahan. Laporkan nama key atau hasil validasi tanpa nilainya.
-- Simpan credential baru di Vault dan gunakan variabel Vault dari template atau konfigurasi terkait.
-- Jangan mengubah, menghapus, atau mengganti credential saat tugas hanya meminta inspeksi atau dokumentasi.
-
-## Alur kerja perubahan & Aturan Git Branching Model
-
-Repositori ini mengelola konfigurasi infrastruktur VPS secara terpusat pada branch `main`. Seluruh playbook (baik untuk stack production maupun staging) dikelola pada branch `main`.
-
-### 1. Larangan Commit Langsung ke `main`
-- **DILARANG KERAS** melakukan commit langsung ke branch `main`.
-- Seluruh perubahan konfigurasi dan playbook wajib dikerjakan pada feature/fix branch.
-
-### 2. Alur Branching & Pull Request
-1. **Branch dari `origin/main`**:
-   ```bash
-   git fetch origin
-   git checkout -b feat/<nama-fitur> origin/main
-   # atau
-   git checkout -b fix/<deskripsi-bug> origin/main
-   ```
-2. **Commit & Pull Request**:
-   - Lakukan commit pada branch kerja menggunakan pesan Conventional Commits.
-   - Ajukan Pull Request ke branch **`main`** (`base: main`, `compare: feat/...`) dengan strategi **Squash and Merge**.
-
-### 3. Langkah Operasional Perubahan
-1. Periksa `git status --short` sebelum mengedit. Kenali perubahan lokal yang sudah ada dan pertahankan; jangan melakukan reset, checkout massal, atau penghapusan perubahan yang bukan bagian dari tugas.
-2. Baca README, katalog aplikasi, role, template, dan skrip yang berkaitan sebelum mengubah perilaku. Ikuti pola yang sudah dipakai repository.
-3. Untuk perubahan aplikasi, pertahankan kesesuaian antara `apps.yml`, role aplikasi, template `.env`, repository aplikasi, dan konfigurasi CI.
-4. Jika kontrak `.env.example` di repository aplikasi berubah, gunakan `make env-contract-check` atau `make env-contract-check APP=<slug>`, lalu `make env-contract-show APP=<slug>` untuk meninjau selisih. Tambahkan key yang diperlukan ke template dan mapping CI jika memang dipakai saat build atau deploy.
-5. **Verifikasi Deployment Staging**:
-   - Sebelum menjalankan playbook staging ke VPS, lakukan validasi sintaks:
-     ```bash
-     ansible-playbook -i inventory/hosts.ini deploy-aldera-router-staging.yml --syntax-check
-     ansible-playbook -i inventory/hosts.ini deploy-aldera-web-staging.yml --syntax-check
-     ```
-   - Pastikan variabel vault staging (`vault_aldera_router_staging_*`, `vault_aldera_staging_*`) sudah terdaftar dan tidak menimpa kredensial produksi.
-6. Lakukan validasi lokal (`make check`, `make lint`), lalu tinjau diff dan status Git. Jangan melaporkan pemeriksaan sebagai berhasil jika belum dijalankan.
-
-## Perintah yang berguna
-
-- `make app-list` menampilkan katalog aplikasi.
-- `make app-env-check` memeriksa template environment aplikasi; dapat dibatasi dengan `APP=<slug>`.
-- `make env-contract-check` memeriksa kontrak `.env.example` dari repository aplikasi; dapat dibatasi dengan `APP=<slug>`.
-- `make check` memeriksa sintaks playbook; `make lint` menjalankan ansible-lint; `make shell-check` memeriksa sintaks skrip shell; `make validate` menjalankan validasi lokal tersebut.
-- `make app-dry-run APP=<slug>` melakukan dry-run deployment aplikasi. Tinjau hasilnya sebelum menjalankan `make app APP=<slug>` yang menerapkan perubahan ke server.
-- `make vault-view` dan `make vault-edit` adalah target untuk melihat atau mengedit Vault. Gunakan hanya bila dibutuhkan; jangan menyalin hasilnya ke output.
-
-Target `make env-contract-check`, `make repo-audit`, dan beberapa skrip utilitas dapat mengakses repository eksternal. Deployment, perubahan DNS, sinkronisasi GitHub secrets/variables, dan operasi jarak jauh memiliki efek di luar working tree. Jalankan operasi tersebut hanya saat diminta secara jelas dan untuk aplikasi atau target yang dimaksud.
-
-## Panduan agent
-
-- Utamakan perubahan kecil yang langsung memenuhi permintaan. Jangan memperluas cakupan ke aplikasi, credential, server, atau layanan eksternal lain.
-- Gunakan Bahasa Indonesia sebagai bahasa komunikasi default, kecuali pengguna meminta bahasa lain.
-- Ikuti instruksi yang lebih spesifik di direktori kerja bila ada file `AGENTS.md` tambahan.
-- Codex dan OpenCode membaca `AGENTS.md` di root secara langsung. Adapter tool lain di root atau direktori konfigurasinya hanya menunjuk ke dokumen ini.
+- Konfigurasi platform: `platform/`. Aplikasi dan template environment: `projects/<grup>/apps/<nama>/`.
+- Vault platform dan grup terenkripsi. Pemilik mengizinkan pembacaan bila diperlukan; jangan tampilkan nilainya, diff plaintext, atau salin ke log/dokumentasi.
+- Deploy lewat `make plan GROUP=...` lalu `make deploy GROUP=... [APP=...]`. APP dapat menentukan grup secara unik.
+- Semua perubahan VPS memakai lock yang sama melalui dispatcher. Jangan melewati lock atau melakukan prune global.
+- Grup hanya mengubah resource miliknya. `enabled: false` berarti dilewati. Penghapusan data memerlukan operasi decommission eksplisit dan izin pemilik.
+- Jangan mengubah versi atau restart layanan bersama dari deployment grup. PostgreSQL bersama digunakan seluruh aplikasi yang dikelola.
+- Periksa status Git; pertahankan pekerjaan lokal. Gunakan feature/fix branch dari main, PR ke main, dan squash merge. Jangan commit langsung ke main.
+- Jalankan `make validate`; perubahan environment juga diperiksa dengan `make env-contract-check GROUP=... APP=...` jika kontrak repository tersedia.
+- Untuk wrapper staging, jalankan syntax-check sebelum deployment.
+- Gunakan Bahasa Indonesia dan laporkan hasil validasi yang benar-benar dijalankan.

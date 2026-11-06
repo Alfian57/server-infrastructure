@@ -1,0 +1,55 @@
+INSERT INTO model_pricing (model_name, display_name, input_price_per_m, output_price_per_m, is_active)
+VALUES
+    ('gpt-4o', 'GPT-4o (Omni)', 45000.0000, 180000.0000, true),
+    ('gpt-4o-mini', 'GPT-4o Mini', 2500.0000, 10000.0000, true),
+    ('claude-3-5-sonnet-20241022', 'Claude 3.5 Sonnet v2', 48000.0000, 240000.0000, true),
+    ('claude-3-5-haiku-20241022', 'Claude 3.5 Haiku', 15000.0000, 75000.0000, true),
+    ('deepseek-chat', 'DeepSeek V3', 2000.0000, 4000.0000, true),
+    ('deepseek-reasoner', 'DeepSeek R1', 8000.0000, 32000.0000, true)
+ON CONFLICT (model_name) DO UPDATE
+SET display_name = EXCLUDED.display_name,
+    input_price_per_m = EXCLUDED.input_price_per_m,
+    output_price_per_m = EXCLUDED.output_price_per_m,
+    is_active = EXCLUDED.is_active,
+    updated_at = clock_timestamp();
+
+-- =============================================================================
+-- 6. INITIAL SEED DATA: TELEGRAM BOT CONFIGS & PAYMENT METHODS
+-- =============================================================================
+INSERT INTO telegram_bot_configs (
+    id,
+    ticket_template,
+    important_notes,
+    next_steps_notes,
+    topup_amounts,
+    admin_telegram_username
+) VALUES (
+    'default',
+    '<b>TIKET TOP-UP ALDERA AI</b>\n\nID Tiket: <code>{ticket_id}</code>\nNominal: <b>Rp {amount}</b>\nKode Unik: <b>{unique_code}</b>\nTotal Transfer: <b>Rp {total_transfer}</b>\n\nSilakan transfer tepat sesuai total transfer.',
+    '⚠️ <b>PENTING:</b>\n- Transfer tepat hingga 3 digit terakhir agar deposit otomatis/cepat terverifikasi.\n- Tiket berlaku selama 2 jam sejak dibuat.',
+    '📸 <b>LANGKAH SELANJUTNYA:</b>\n1. Selesaikan pembayaran sesuai nominal di atas.\n2. Kirim bukti transfer (foto/screenshot) langsung ke chat bot ini.\n3. Saldo Anda akan dikonfirmasi oleh sistem/admin.',
+    '[25000, 50000, 100000, 250000, 500000]'::jsonb,
+    '{{ aldera_router_admin_telegram_username | default("aldera_admin") }}'
+) ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO payment_method_settings (
+    id,
+    type,
+    name,
+    account_number,
+    account_name,
+    qris_image_url,
+    instructions,
+    is_active,
+    display_order
+) VALUES (
+    'bca_default',
+    'BANK',
+    '{{ aldera_router_bank_name | default("Bank BCA") }}',
+    '{{ aldera_router_bank_account_number | default("1234567890") }}',
+    '{{ aldera_router_bank_account_name | default("PT Aldera Solusi Teknologi") }}',
+    '{{ aldera_router_qris_image_url | default("") }}',
+    'Transfer sesuai jumlah total transfer ke rekening bank tertera',
+    true,
+    1
+) ON CONFLICT (id) DO NOTHING;

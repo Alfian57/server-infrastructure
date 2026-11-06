@@ -1,0 +1,38 @@
+---
+name: aldera-router
+enabled: true
+default_deploy: true
+repo_owner: AlderaTech
+repo: router-billing-proxy
+stack: compose
+deployment: aldera-router
+staging: false
+databases:
+  postgres:
+    - aldera_router
+database_users:
+  - database: aldera_router
+    username: aldera_router
+    password: '{{ vault_aldera_router_db_password }}'
+proxy_hosts:
+  - domain: api.aldera.tech
+    scheme: http
+    forward_host: aldera-router-billing-proxy
+    forward_port: 8080
+  - domain: router.aldera.tech
+    scheme: http
+    forward_host: aldera-router-9router
+    forward_port: 20128
+dns:
+  domain: aldera.tech
+  records:
+    - api
+    - router
+build:
+  workflow: docker-publish.yml
+env_contract:
+  required: false
+group: alderatech
+requires:
+  - nginx
+  - postgres

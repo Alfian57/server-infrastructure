@@ -1,0 +1,29 @@
+---
+- name: Deploy applications within one explicit group
+  hosts: all
+  gather_facts: true
+  become: true
+  vars_files:
+    - ../platform/vars.yml
+    - ../platform/catalog.yml
+    - ../projects/index.yml
+  vars:
+    groups_registry: "{{ group_registry }}"
+  environment:
+    INFRA_LOCK_TOKEN: '{{ infra_lock_token | default("") }}'
+  pre_tasks:
+    - name: Validate the shared deployment lock
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Load the selected application group
+      ansible.builtin.include_tasks: tasks/context.yml
+    - name: Ensure required shared services
+      ansible.builtin.include_role:
+        name: shared-runtime
+  tasks:
+    - name: Deploy selected application stacks
+      ansible.builtin.include_tasks: tasks/deploy-one.yml
+      loop: '{{ run_apps }}'
+      loop_control:
+        loop_var: selected_app
+        label: '{{ selected_app.name }}'
+      when: selected_app.name != 'guardian-lab-ai' or 'guardian-lab' not in (run_apps | map(attribute='name') | list)

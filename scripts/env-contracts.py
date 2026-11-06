@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from catalog import catalog as read_catalog, select as select_catalog
 import base64
 import json
 import os
@@ -20,9 +21,8 @@ from typing import Any
 import yaml
 
 PROJECT_DIR = Path(__file__).resolve().parents[1]
-APPS_FILE = PROJECT_DIR / "group_vars" / "all" / "apps.yml"
-VARS_FILE = PROJECT_DIR / "group_vars" / "all" / "vars.yml"
-VAULT_FILE = PROJECT_DIR / "group_vars" / "all" / "vault.yml"
+VARS_FILE = PROJECT_DIR / "platform" / "vars.yml"
+VAULT_FILE = PROJECT_DIR / "platform" / "vault.yml"
 VAULT_PASS_FILE = PROJECT_DIR / ".vault_pass"
 ENV_FILE = PROJECT_DIR / ".env"
 
@@ -70,7 +70,7 @@ def load_dotenv() -> dict[str, str]:
 
 
 def catalog() -> dict[str, Any]:
-    return load_yaml(APPS_FILE)
+    return read_catalog(os.environ.get("CATALOG_GROUP", ""), os.environ.get("CATALOG_APP", ""))
 
 
 def vars_data() -> dict[str, Any]:
@@ -78,14 +78,7 @@ def vars_data() -> dict[str, Any]:
 
 
 def enabled_apps(data: dict[str, Any]) -> list[dict[str, Any]]:
-    items = data.get("portfolio_apps", [])
-    if not isinstance(items, list):
-        raise SystemExit("portfolio_apps must be a list")
-    enabled = [item for item in items if item.get("enabled", True)]
-    pui = data.get("pui_app")
-    if isinstance(pui, dict) and pui.get("enabled", True):
-        enabled.append(pui)
-    return enabled
+    return [a for a in data['applications'] if a.get('enabled', True)]
 
 
 def mobile_repositories(data: dict[str, Any], enabled_only: bool = True) -> list[dict[str, Any]]:
@@ -100,7 +93,7 @@ def mobile_repositories(data: dict[str, Any], enabled_only: bool = True) -> list
 def github_owner() -> str:
     owner = str(vars_data().get("github_username", "")).strip()
     if not owner:
-        raise SystemExit("github_username is not set in group_vars/all/vars.yml")
+        raise SystemExit("github_username is not set in platform/vars.yml")
     return owner
 
 
@@ -213,25 +206,22 @@ def parse_template(path: Path) -> TemplateEnv:
 
 
 def load_vault(required: bool = True) -> dict[str, Any]:
-    if not VAULT_FILE.exists() or not VAULT_PASS_FILE.exists():
-        if required:
-            raise SystemExit("vault.yml or .vault_pass is missing")
-        return {}
-    command = [
-        "ansible-vault",
-        "view",
-        str(VAULT_FILE),
-        f"--vault-password-file={VAULT_PASS_FILE}",
-    ]
-    result = subprocess.run(command, cwd=PROJECT_DIR, text=True, capture_output=True, check=False)
-    if result.returncode != 0:
-        if required:
-            raise SystemExit("failed to read ansible vault")
-        return {}
-    data = yaml.safe_load(result.stdout) or {}
-    if not isinstance(data, dict):
-        raise SystemExit("vault.yml must contain a YAML mapping")
-    return data
+    selected = select_catalog(os.environ.get('CATALOG_GROUP', ''), os.environ.get('CATALOG_APP', ''))
+    repos = json.loads(os.environ.get('CATALOG_REPOS', '[]'))
+    if repos:
+        selected = [a for a in selected if a.get('repo', a['name']) in repos or repo_ref(a, github_owner()) in repos]
+    paths = [PROJECT_DIR / 'platform/vault.yml'] + [PROJECT_DIR / 'projects' / group / 'vault.yml' for group in sorted({a['group'] for a in selected})]
+    result = {}
+    for path in paths:
+        if not path.exists() or not VAULT_PASS_FILE.exists():
+            if required: raise SystemExit('Selected vault or password file is missing')
+            continue
+        value = subprocess.run(['ansible-vault', 'view', str(path), f'--vault-password-file={VAULT_PASS_FILE}'], capture_output=True, text=True)
+        if value.returncode:
+            if required: raise SystemExit('Cannot decrypt selected vault')
+            continue
+        result.update(yaml.safe_load(value.stdout) or {})
+    return result
 
 
 def contract_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, Any]:
@@ -246,8 +236,8 @@ def contract_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, Any]
 
 
 def ci_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    defaults = data.get("github_actions_defaults", {}) or {}
     app_ci = app.get("ci", {}) or {}
+    defaults = (data.get("github_actions_defaults", {}) or {}) if app_ci.get("inherit_defaults", True) else {}
     return {
         "secrets": {**(defaults.get("secrets", {}) or {}), **(app_ci.get("secrets", {}) or {})},
         "variables": {**(defaults.get("variables", {}) or {}), **(app_ci.get("variables", {}) or {})},
@@ -281,6 +271,7 @@ def evaluate_app(
     default_owner: str,
     token: str,
     vault: dict[str, Any],
+    source_dir: Path | None = None,
 ) -> tuple[bool, dict[str, Any]]:
     config = contract_config(data, app)
     owner = repo_owner(app, default_owner)
@@ -300,9 +291,15 @@ def evaluate_app(
     }
 
     try:
-        content = fetch_env_example(owner, repo, str(config["path"]), str(config.get("ref") or ""), token)
+        if source_dir is not None:
+            local_file = source_dir / str(config["path"])
+            if not local_file.is_file():
+                raise ContractError(f"local contract not found: {config['path']}")
+            content = local_file.read_text(encoding="utf-8")
+        else:
+            content = fetch_env_example(owner, repo, str(config["path"]), str(config.get("ref") or ""), token)
         remote_keys = parse_env_keys(content) - set(config.get("ignore_keys", []) or [])
-    except ContractError as exc:
+    except (ContractError, OSError) as exc:
         result["fetch_error"] = str(exc)
         return (not result["required"], result)
 
@@ -339,7 +336,7 @@ def print_result(result: dict[str, Any], show_details: bool = False) -> None:
     missing_vault = sorted(result["missing_required_vault_refs"])
     source_errors = sorted(result["source_errors"])
     if not (missing or uncovered or missing_vault or source_errors):
-        print(f"OK   {app}: {len(result['remote_keys'])} remote keys covered")
+        print(f"OK   {app}: {len(result['remote_keys'])} contract keys covered")
     else:
         print(f"FAIL {app}: contract drift detected")
     if show_details or missing:
@@ -586,9 +583,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     if args.app and not selected:
         print(f"Unknown app: {args.app}", file=sys.stderr)
         return 1
+    if args.source_dir and len(selected) != 1:
+        raise SystemExit("--source-dir requires --app selecting one repository")
     failed = 0
     for app in selected:
-        ok, result = evaluate_app(data, app, default_owner, token, vault)
+        ok, result = evaluate_app(data, app, default_owner, token, vault, args.source_dir)
         print_result(result, show_details=args.verbose)
         failed += 0 if ok else 1
     return 1 if failed else 0
@@ -607,7 +606,7 @@ def cmd_show(args: argparse.Namespace) -> int:
     if not matches:
         print(f"Unknown app: {args.app}", file=sys.stderr)
         return 1
-    ok, result = evaluate_app(data, matches[0], default_owner, token, vault)
+    ok, result = evaluate_app(data, matches[0], default_owner, token, vault, args.source_dir)
     print_result(result, show_details=True)
     return 0 if ok else 1
 
@@ -688,10 +687,12 @@ def main() -> int:
     check = sub.add_parser("check", help="check remote .env.example against local runtime templates")
     check.add_argument("--app", default="")
     check.add_argument("--verbose", action="store_true")
+    check.add_argument("--source-dir", type=Path, help="read the contract from one local checkout instead of GitHub")
     check.set_defaults(func=cmd_check)
 
     show = sub.add_parser("show", help="show detailed contract drift for one app")
     show.add_argument("--app", required=True)
+    show.add_argument("--source-dir", type=Path, help="read the contract from a local checkout instead of GitHub")
     show.set_defaults(func=cmd_show)
 
     sync = sub.add_parser("github-sync", help="sync mapped GitHub secrets and variables")
@@ -703,7 +704,18 @@ def main() -> int:
     github_check.add_argument("--repo", action="append", default=[])
     github_check.set_defaults(func=cmd_github_check)
 
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            for target in action.choices.values():
+                if not any(a.dest == 'group' for a in target._actions): target.add_argument('--group', default='')
+                if not any(a.dest == 'app' for a in target._actions): target.add_argument('--app', default='')
+                if not any(a.dest == 'all' for a in target._actions): target.add_argument('--all', action='store_true')
     args = parser.parse_args()
+    os.environ['CATALOG_GROUP'] = args.group
+    os.environ['CATALOG_APP'] = args.app
+    os.environ['CATALOG_REPOS'] = json.dumps(getattr(args, 'repo', []))
+    if getattr(args, 'command', '') == 'github-sync' and not (args.group or args.app or getattr(args, 'repo', []) or args.all):
+        parser.error('Select --group, --app, --repo, or --all explicitly')
     return int(args.func(args))
 
 

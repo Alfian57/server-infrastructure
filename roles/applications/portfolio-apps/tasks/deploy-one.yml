@@ -149,12 +149,13 @@
     owner: "{{ app_admin_user }}"
     group: "{{ app_runtime_group }}"
 
-- name: "{{ app_name }} | Pull latest image"
+- name: "{{ app_name }} | Pull image only for initial installation"
   community.docker.docker_image:
     name: "{{ app_image }}"
     source: pull
-    force_source: true
+    force_source: false
     state: present
+  when: deployment_compose_files | default([]) | length <= 1
 
 - name: "{{ app_name }} | Ensure external networks exist"
   community.docker.docker_network:
@@ -171,14 +172,16 @@
 
 - name: "{{ app_name }} | Deploy container"
   community.docker.docker_compose_v2:
+    files: "{{ deployment_compose_files | default(['docker-compose.yml']) }}"
     project_src: "{{ app_install_dir }}"
-    pull: always
+    pull: "{{ 'never' if deployment_compose_files | default([]) | length > 1 else 'missing' }}"
     remove_orphans: true
     recreate: "{{ 'always' if (app_env_render.changed | default(false)) or (portfolio_force_recreate | default(false) | bool) else 'auto' }}"
     state: present
   register: app_deployment
 
 - name: "{{ app_name }} | Wait for Laravel healthcheck"
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ app_name }}"
   register: laravel_container_info
@@ -192,6 +195,7 @@
   when: app_stack == 'laravel'
 
 - name: "{{ app_name }} | Wait for container to run"
+  no_log: true
   community.docker.docker_container_info:
     name: "{{ app_name }}"
   register: runtime_container_info

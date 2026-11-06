@@ -1,0 +1,21 @@
+---
+- name: Create the shared helper directory
+  ansible.builtin.file:
+    path: /opt/docker-stack/bin
+    state: directory
+    owner: '{{ deploy_user }}'
+    group: docker
+    mode: '0750'
+
+- name: Install resource and lock helpers
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/../roles/common/files/{{ item }}'
+    dest: '/opt/docker-stack/bin/{{ item }}'
+    owner: '{{ deploy_user }}'
+    group: docker
+    mode: '0750'
+  loop:
+    - with-deployment-lock.sh
+    - manage-resources.py
+    - manage-databases.py
+    - inspect-host.py

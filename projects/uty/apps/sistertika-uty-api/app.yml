@@ -1,0 +1,48 @@
+---
+name: sistertika-uty-api
+enabled: true
+repo: sistertika-uty-api
+destructive_allowed: false
+run_seeder: false
+seed_on: fresh
+seeder_binary: sistertika-uty-seed
+stack: golang
+build:
+  dockerfile: Dockerfile
+  workflow: deploy.yml
+app_port: 8080
+health_endpoint: /health
+env_template: projects/uty/apps/sistertika-uty-api/.env.j2
+networks:
+  - nginx_proxy_manager_network
+  - postgres_network
+proxy:
+  domain: sistertika-api.alfian-gading.my.id
+  domains:
+    - sistertika-api.alfian-gading.my.id
+    - api.sistertika.com
+  scheme: http
+  forward_host: sistertika-uty-api
+  forward_port: 8080
+  caching_enabled: true
+  websocket_support: false
+  cloudflare_flexible: true
+dns:
+  - domain: alfian-gading.my.id
+    records:
+      - sistertika-api
+  - domain: sistertika.com
+    records:
+      - api
+databases:
+  postgres:
+    - '{{ vault_sistertika_uty_api_db_database }}'
+deployment: portfolio
+group: uty
+requires:
+  - nginx
+  - postgres
+database_users:
+  - database: '{{ vault_sistertika_uty_api_db_database }}'
+    username: '{{ vault_sistertika_uty_api_db_username }}'
+    password: '{{ vault_sistertika_uty_api_db_password }}'

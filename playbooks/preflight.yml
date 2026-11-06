@@ -1,0 +1,22 @@
+---
+- name: Inspect the deployment host
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Verify the deployment lease
+      ansible.builtin.include_tasks: tasks/lock.yml
+    - name: Read runtime metadata without exposing environment values
+      ansible.builtin.script: ../roles/common/files/inspect-host.py
+      register: host_metadata
+      changed_when: false
+    - name: Display resource metadata
+      ansible.builtin.debug:
+        msg: '{{ host_metadata.stdout | from_json }}'
+    - name: Save a credential-free controller report
+      ansible.builtin.copy:
+        content: '{{ host_metadata.stdout }}'
+        dest: "{{ lookup('env', 'RUNNER_TEMP') | default(playbook_dir ~ '/../.ansible', true) }}/vps-preflight-{{ lookup('pipe', 'date +%s%N') }}.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false

@@ -1,0 +1,44 @@
+---
+mobile_repositories:
+  - name: location-based-presence-mobile
+    enabled: false
+    repo_owner: AlderaTech
+    build:
+      workflow: mobile.yml
+    variables:
+      API_BASE_URL: https://location-based-presence.alfian-gading.my.id/api/mobile
+      API_BASE_URL_DEBUG: https://thankful-midge-noble.ngrok-free.app/api/mobile
+    ci:
+      variables:
+        API_BASE_URL:
+          source: vault:vault_location_based_presence_mobile_api_base_url
+        API_BASE_URL_DEBUG:
+          value: https://thankful-midge-noble.ngrok-free.app/api/mobile
+  - name: lelang-fashion-mobile
+    enabled: false
+    repo_owner: AlderaTech
+    build:
+      workflow: mobile.yml
+    variables:
+      API_BASE_URL: https://lelang-fashion.alfian-gading.my.id/api
+      API_BASE_URL_DEBUG: https://handwoven-ramp-avid.ngrok-free.dev/api
+    ci:
+      variables:
+        API_BASE_URL:
+          source: vault:vault_lelang_fashion_mobile_api_base_url
+        API_BASE_URL_DEBUG:
+          value: https://handwoven-ramp-avid.ngrok-free.dev/api
+  - name: pos-soto-saben
+    enabled: false
+    repo_owner: AlderaTech
+    build:
+      workflow: build-and-deploy.yml
+    variables:
+      API_BASE_URL: https://pos-soto-saben.alfian-gading.my.id/api
+      API_BASE_URL_DEBUG: https://thankful-midge-noble.ngrok-free.app/api
+    ci:
+      variables:
+        API_BASE_URL:
+          source: vault:vault_pos_soto_saben_mobile_api_base_url
+        API_BASE_URL_DEBUG:
+          value: https://thankful-midge-noble.ngrok-free.app/api

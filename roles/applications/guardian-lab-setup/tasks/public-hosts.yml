@@ -1,0 +1,213 @@
+---
+- name: Find the Guardian Cloudflare zone using token authentication
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/zones?name={{ guardian_lab_web_app.dns.domain }}"
+    headers:
+      Authorization: "Bearer {{ vault_cloudflare_api_token }}"
+    status_code: [200, 400, 401, 403]
+  delegate_to: localhost
+  become: false
+  register: guardian_lab_cf_token_zone
+  failed_when: false
+  no_log: true
+
+- name: Select Guardian Cloudflare authentication
+  ansible.builtin.set_fact:
+    guardian_lab_cf_is_token: "{{ guardian_lab_cf_token_zone.json.success | default(false) | bool }}"
+    guardian_lab_cf_headers: >-
+      {{ {'Authorization': 'Bearer ' ~ vault_cloudflare_api_token}
+      if guardian_lab_cf_token_zone.json.success | default(false) | bool
+      else {'X-Auth-Email': vault_cloudflare_email,
+            'X-Auth-Key': vault_cloudflare_global_api_key | default(vault_cloudflare_api_token)} }}
+  no_log: true
+
+- name: Read the Guardian Cloudflare zone
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/zones?name={{ guardian_lab_web_app.dns.domain }}"
+    headers: "{{ guardian_lab_cf_headers }}"
+    status_code: 200
+  delegate_to: localhost
+  become: false
+  register: guardian_lab_cf_zone
+  no_log: true
+
+- name: Require a single Guardian DNS zone
+  ansible.builtin.assert:
+    that:
+      - guardian_lab_cf_zone.json.success | bool
+      - guardian_lab_cf_zone.json.result | length == 1
+    quiet: true
+    fail_msg: "The Guardian DNS zone is unavailable with the configured Cloudflare credential."
+
+- name: Read only the two Guardian DNS records
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ guardian_lab_cf_zone.json.result[0].id }}/dns_records?type=A&name={{ item.domain }}
+    headers: "{{ guardian_lab_cf_headers }}"
+  loop: "{{ guardian_lab_web_app.proxy_hosts }}"
+  delegate_to: localhost
+  become: false
+  register: guardian_lab_cf_records
+  no_log: true
+
+- name: Upsert only the two Guardian A records
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{ guardian_lab_cf_zone.json.result[0].id }}/dns_records{{ '/' ~ guardian_lab_existing_dns[0].id if guardian_lab_existing_dns | length > 0 else '' }}
+    method: "{{ 'PUT' if guardian_lab_existing_dns | length > 0 else 'POST' }}"
+    headers: "{{ guardian_lab_cf_headers }}"
+    body_format: json
+    body:
+      type: A
+      name: "{{ item.domain }}"
+      content: "{{ ansible_host | default(ansible_default_ipv4.address) }}"
+      proxied: true
+      ttl: 1
+      comment: Managed by server-infra-with-ansible Guardian Lab
+    status_code: [200, 201]
+  vars:
+    guardian_lab_existing_dns: "{{ guardian_lab_cf_records.results[guardian_lab_dns_index].json.result }}"
+  loop: "{{ guardian_lab_web_app.proxy_hosts }}"
+  loop_control:
+    index_var: guardian_lab_dns_index
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Authenticate to the existing Nginx Proxy Manager
+  ansible.builtin.uri:
+    url: http://127.0.0.1:81/api/tokens
+    method: POST
+    body_format: json
+    body:
+      identity: "{{ vault_npm_admin_email }}"
+      secret: "{{ vault_npm_admin_password }}"
+  register: guardian_lab_npm_auth
+  no_log: true
+
+- name: Read existing certificates and proxy hosts
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:81/api/nginx/{{ item }}"
+    headers:
+      Authorization: "Bearer {{ guardian_lab_npm_auth.json.token }}"
+  loop: [certificates, proxy-hosts]
+  register: guardian_lab_npm_objects
+  no_log: true
+
+- name: Initialize the Guardian certificate selection
+  ansible.builtin.set_fact:
+    guardian_lab_certificate_id: 0
+
+- name: Reuse an unexpired certificate covering both Guardian hosts
+  ansible.builtin.set_fact:
+    guardian_lab_certificate_id: "{{ item.id }}"
+  loop: "{{ guardian_lab_npm_objects.results[0].json }}"
+  when:
+    - (item.expires_on | default('', true) | string) > ansible_date_time.iso8601
+    - >-
+      ('*.' ~ guardian_lab_web_app.dns.domain) in item.domain_names or
+      (guardian_lab_web_domain in item.domain_names and guardian_lab_stream_domain in item.domain_names)
+  no_log: true
+
+- name: Request a certificate for the Guardian hosts when needed
+  ansible.builtin.uri:
+    url: http://127.0.0.1:81/api/nginx/certificates
+    method: POST
+    headers:
+      Authorization: "Bearer {{ guardian_lab_npm_auth.json.token }}"
+    body_format: json
+    body:
+      provider: letsencrypt
+      domain_names: "{{ guardian_lab_web_app.proxy_hosts | map(attribute='domain') | list }}"
+      meta:
+        dns_challenge: true
+        key_type: rsa
+        dns_provider: cloudflare
+        propagation_seconds: 120
+        dns_provider_credentials: >-
+          {{ 'dns_cloudflare_api_token=' ~ vault_cloudflare_api_token
+          if guardian_lab_cf_is_token | bool else guardian_lab_cf_global_credentials }}
+    status_code: [200, 201]
+    timeout: 900
+  when: guardian_lab_certificate_id | int == 0
+  register: guardian_lab_new_certificate
+  no_log: true
+  vars:
+    guardian_lab_cf_global_credentials: |-
+      dns_cloudflare_email={{ vault_cloudflare_email }}
+      dns_cloudflare_api_key={{ vault_cloudflare_global_api_key | default(vault_cloudflare_api_token) }}
+
+- name: Select the newly issued Guardian certificate
+  ansible.builtin.set_fact:
+    guardian_lab_certificate_id: "{{ guardian_lab_new_certificate.json.id }}"
+  when: guardian_lab_certificate_id | int == 0
+
+- name: Inspect the running Nginx Proxy Manager version
+  ansible.builtin.command:
+    argv: [docker, exec, nginx-proxy-manager, node, -p, "require('/app/package.json').version"]
+  register: guardian_lab_npm_version
+  changed_when: false
+
+- name: Upsert only Guardian proxy hosts with HTTPS
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:81/api/nginx/proxy-hosts{{ '/' ~ (guardian_lab_existing_proxy.id | string) if guardian_lab_existing_proxy.id is defined else '' }}"
+    method: "{{ 'PUT' if guardian_lab_existing_proxy.id is defined else 'POST' }}"
+    headers:
+      Authorization: "Bearer {{ guardian_lab_npm_auth.json.token }}"
+    body_format: json
+    body: >-
+      {{ {'domain_names': [item.domain], 'forward_scheme': item.scheme,
+          'forward_host': item.forward_host, 'forward_port': item.forward_port | int,
+          'certificate_id': guardian_lab_certificate_id | int, 'ssl_forced': true,
+          'caching_enabled': false, 'block_exploits': true, 'allow_websocket_upgrade': true,
+          'http2_support': true, 'hsts_enabled': true, 'hsts_subdomains': false,
+          'enabled': true, 'access_list_id': 0, 'locations': [], 'meta': {},
+          'advanced_config': guardian_lab_forwarded_proto_config ~ (item.advanced_config | default(''))}
+      | combine({'trust_forwarded_proto': true} if (guardian_lab_npm_version.stdout | trim) is version('2.14.0', '>=') else {}) }}
+    status_code: [200, 201]
+  vars:
+    guardian_lab_existing_proxy: >-
+      {{ guardian_lab_npm_objects.results[1].json | selectattr('domain_names', 'contains', item.domain)
+      | first | default({}) }}
+  loop: "{{ guardian_lab_web_app.proxy_hosts }}"
+  register: guardian_lab_public_proxies
+  no_log: true
+
+- name: Disable generated stream error logging
+  ansible.builtin.command:
+    argv:
+      - docker
+      - exec
+      - nginx-proxy-manager
+      - node
+      - -e
+      - |
+        const fs = require('fs');
+        const id = process.argv[1];
+        if (!/^[0-9]+$/.test(id)) throw new Error('Invalid proxy host ID');
+        const path = '/data/nginx/proxy_host/' + id + '.conf';
+        const original = fs.readFileSync(path, 'utf8');
+        const pattern = /(^|\n)(\s*)error_log\s+[^;]+;/g;
+        if (!pattern.test(original)) throw new Error('Unsupported NPM proxy log layout');
+        pattern.lastIndex = 0;
+        fs.writeFileSync(path, original.replace(pattern, '$1$2error_log /dev/null crit;'));
+      - "{{ guardian_lab_public_proxies.results[1].json.id }}"
+
+- name: Validate and reload the Guardian proxy configuration
+  ansible.builtin.command:
+    argv: [docker, exec, nginx-proxy-manager, sh, -c, "nginx -t && nginx -s reload"]
+
+- name: Verify both Guardian HTTPS origins
+  ansible.builtin.uri:
+    url: "{{ item.url }}"
+    status_code: "{{ item.status }}"
+    timeout: 30
+  loop:
+    - {url: "https://{{ guardian_lab_web_domain }}", status: 200}
+    - {url: "https://{{ guardian_lab_stream_domain }}/healthz", status: 204}
+  delegate_to: localhost
+  become: false
+  register: guardian_lab_public_health
+  retries: 12
+  delay: 10
+  until: guardian_lab_public_health.status | default(0) == item.status
