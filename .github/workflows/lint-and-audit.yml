@@ -1,158 +1,38 @@
 ---
-name: Lint and Audit
-
+name: Scoped Infrastructure Operations
 'on':
-  push:
-    branches:
-      - main
-      - staging
-  pull_request:
-    branches:
-      - main
-      - staging
   workflow_dispatch:
     inputs:
-      guardian_operation:
-        description: Guardian Lab operation
+      operation:
+        description: Operation
         type: choice
-        options: [validate, preflight, deploy]
-        default: validate
-      guardian_web_tag:
-        description: Published web image tag
+        options: [preflight, helpers, deploy, check, platform, decommission, consolidate]
+        default: preflight
+      group:
+        description: Application group
         type: string
-        default: latest
-      guardian_ml_tag:
-        description: Published ML image tag
+        default: ''
+      app:
+        description: Optional application
         type: string
-        default: latest
-
+        default: ''
+      service:
+        description: Platform service
+        type: string
+        default: ''
+      destroy_data:
+        description: Allow the explicitly requested retirement cleanup
+        type: boolean
+        default: false
 permissions:
   contents: read
-
+concurrency:
+  group: vps-infrastructure-operations
+  cancel-in-progress: false
 jobs:
-  lint-and-audit:
-    name: Lint, Syntax & Catalog Audit
+  operation:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible ansible-lint yamllint pyyaml
-
-      - name: Install Ansible Galaxy collections
-        run: |
-          if [ -f requirements.yml ]; then
-            ansible-galaxy collection install -r requirements.yml
-          fi
-
-      - name: Run yamllint
-        run: |
-          yamllint -c .yamllint .
-
-      - name: Setup vault password and mock vault for CI syntax check
-        env:
-          VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-        run: |
-          if [ -n "$VAULT_PASSWORD" ]; then
-            echo "$VAULT_PASSWORD" > .vault_pass
-          else
-            echo "ci-dummy-vault-pass" > .vault_pass
-            ansible-vault encrypt group_vars/all/vault.yml.example \
-              --vault-password-file=.vault_pass \
-              --output=group_vars/all/vault.yml \
-              --encrypt-vault-id=default
-          fi
-          chmod 600 .vault_pass
-
-      - name: Ensure inventory exists from example
-        run: |
-          if [ ! -f inventory/hosts.ini ] && [ -f inventory/hosts.ini.example ]; then
-            cp inventory/hosts.ini.example inventory/hosts.ini
-          fi
-
-      - name: Check Ansible Playbook syntax
-        run: |
-          ansible-playbook playbooks/server-setup.yml -i inventory/hosts.ini --vault-password-file=.vault_pass --syntax-check
-
-      - name: Run ansible-lint
-        run: |
-          ANSIBLE_VAULT_PASSWORD_FILE=.vault_pass ansible-lint playbooks/server-setup.yml
-
-      - name: Check Shell scripts syntax
-        run: |
-          find scripts roles group_vars -name "*.sh" -print0 | xargs -0 -n1 bash -n
-
-      - name: Validate Application Catalog Integrity
-        run: |
-          ./scripts/app-catalog.py doctor
-
-      - name: Check Application Environment Templates
-        run: |
-          ./scripts/app-catalog.py env-check
-
-  guardian-preflight:
-    if: github.event_name == 'workflow_dispatch' && inputs.guardian_operation != 'validate'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    env:
-      VPS_HOST: ${{ secrets.VPS_HOST }}
-      VPS_USER: ${{ secrets.VPS_USER }}
-      VPS_SSH_PORT: ${{ secrets.VPS_SSH_PORT }}
-      VPS_KEY: ${{ secrets.VPS_KEY }}
-      VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
-    steps:
-      - name: Check the Guardian deployment host
-        run: |
-          set -euo pipefail
-          : "${VPS_HOST:?}" "${VPS_USER:?}" "${VPS_KEY:?}" "${VPS_KNOWN_HOSTS:?}"
-          umask 077
-          ssh_dir=$(mktemp -d)
-          trap 'rm -rf "$ssh_dir"' EXIT
-          printf '%s\n' "$VPS_KEY" > "$ssh_dir/key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
-          ssh -F /dev/null -i "$ssh_dir/key" -p "${VPS_SSH_PORT:-22}" \
-            -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$ssh_dir/known_hosts" "${VPS_USER}@${VPS_HOST}" bash -se <<'REMOTE'
-          uname -m
-          free -m
-          df -h /opt/docker-stack
-          docker compose version
-          docker ps --format 'table {{.Names}}\t{{.Status}}'
-          if test -f /opt/docker-stack/applications/guardian-lab/.env; then
-            echo guardian_env=present
-            stat -c 'guardian_env_permissions=%a owner=%U group=%G' /opt/docker-stack/applications/guardian-lab/.env
-          else
-            echo guardian_env=absent
-          fi
-          if test -f /opt/docker-stack/applications/guardian-lab/stream.conf; then
-            stat -c 'guardian_stream_config=%a uid=%u gid=%g' /opt/docker-stack/applications/guardian-lab/stream.conf
-            docker inspect --format '{{json .State}}' guardian-lab-stream || true
-            docker run --rm --pull never --network none --read-only --user 101:101 \
-              --cap-drop ALL --security-opt no-new-privileges \
-              --tmpfs /var/cache/nginx:rw,nosuid,size=16m,uid=101,gid=101 \
-              --tmpfs /var/run:rw,nosuid,size=1m,uid=101,gid=101 \
-              -v /opt/docker-stack/applications/guardian-lab/stream.conf:/etc/nginx/conf.d/default.conf:ro \
-              --entrypoint nginx nginx:1.28-alpine -t || true
-          fi
-          REMOTE
-
-  guardian-deploy:
-    needs: [lint-and-audit, guardian-preflight]
-    if: github.event_name == 'workflow_dispatch' && inputs.guardian_operation == 'deploy'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    concurrency:
-      group: guardian-lab-bootstrap
-      cancel-in-progress: false
+    timeout-minutes: 90
     env:
       VPS_HOST: ${{ secrets.VPS_HOST }}
       VPS_USER: ${{ secrets.VPS_USER }}
@@ -160,46 +40,57 @@ jobs:
       VPS_KEY: ${{ secrets.VPS_KEY }}
       VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
       VAULT_PASSWORD: ${{ secrets.ANSIBLE_VAULT_PASSWORD }}
-      WEB_TAG: ${{ inputs.guardian_web_tag }}
-      ML_TAG: ${{ inputs.guardian_ml_tag }}
-      ANSIBLE_HOST_KEY_CHECKING: "true"
+      OPERATION: ${{ inputs.operation }}
+      TARGET_GROUP: ${{ inputs.group }}
+      TARGET_APP: ${{ inputs.app }}
+      TARGET_SERVICE: ${{ inputs.service }}
+      DESTROY_DATA: ${{ inputs.destroy_data }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Install the Ansible controller
-        run: |
-          python -m pip install 'ansible==12.1.0' 'PyYAML==6.0.3'
-          ansible-galaxy collection install -r requirements.yml
-      - name: Prepare private deployment configuration
+          python-version: '3.12'
+      - name: Prepare controller
         run: |
           set -euo pipefail
-          [[ "$WEB_TAG" =~ ^(latest|sha-[0-9a-f]{40})$ ]]
-          [[ "$ML_TAG" =~ ^(latest|sha-[0-9a-f]{40})$ ]]
-          : "${VAULT_PASSWORD:?}"
+          pip install 'ansible==12.1.0' 'PyYAML==6.0.3'
+          ansible-galaxy collection install -r requirements.yml
           umask 077
           printf '%s\n' "$VAULT_PASSWORD" > .vault_pass
-          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/guardian-key"
-          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/guardian-known_hosts"
+          printf '%s\n' "$VPS_KEY" > "$RUNNER_TEMP/vps-key"
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > "$RUNNER_TEMP/vps-known-hosts"
+          export VPS_KEY_PATH="$RUNNER_TEMP/vps-key"
           python - <<'PY'
-          import json, os
+          import json,os
           from pathlib import Path
-          host = {"ansible_host": os.environ["VPS_HOST"], "ansible_user": os.environ["VPS_USER"],
-                  "ansible_port": int(os.environ.get("VPS_SSH_PORT") or "22")}
-          Path("inventory/guardian-ci.json").write_text(json.dumps({"all": {"hosts": {"guardian_server": host}}}))
+          host={'ansible_host':os.environ['VPS_HOST'],'ansible_user':os.environ['VPS_USER'],
+                'ansible_port':int(os.environ.get('VPS_SSH_PORT') or '22'),
+                'ansible_ssh_private_key_file':os.environ['VPS_KEY_PATH']}
+          Path('inventory/hosts.json').write_text(json.dumps({'all':{'hosts':{'vps':host}}}))
           PY
-          ansible-vault view group_vars/all/vault.yml > /dev/null
-      - name: Deploy only Guardian Lab and its two public hosts
+          echo "ANSIBLE_INVENTORY=$GITHUB_WORKSPACE/inventory/hosts.json" >> "$GITHUB_ENV"
+          echo "VPS_KNOWN_HOSTS_FILE=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
+          echo "ANSIBLE_SSH_ARGS=-F /dev/null -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$RUNNER_TEMP/vps-known-hosts" >> "$GITHUB_ENV"
+      - name: Read-only preflight
+        if: inputs.operation == 'preflight'
         run: |
-          export ANSIBLE_SSH_ARGS="-F /dev/null -o StrictHostKeyChecking=yes -o ControlMaster=auto -o ControlPersist=60s -o ControlPath=$RUNNER_TEMP/guardian-ssh-%C -o UserKnownHostsFile=$RUNNER_TEMP/guardian-known_hosts"
-          ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
-            --private-key "$RUNNER_TEMP/guardian-key" --syntax-check
-          ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
-            --private-key "$RUNNER_TEMP/guardian-key" \
-            -e "guardian_lab_initial_web_tag=$WEB_TAG" -e "guardian_lab_initial_ml_tag=$ML_TAG"
-      - name: Remove private controller files
+          set -euo pipefail
+          ssh -F /dev/null -i "$RUNNER_TEMP/vps-key" -p "${VPS_SSH_PORT:-22}" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/vps-known-hosts" "$VPS_USER@$VPS_HOST" \
+            'sudo -n python3 -' < roles/common/files/inspect-host.py
+      - name: Execute scoped operation
+        if: inputs.operation != 'preflight'
+        run: |
+          set -euo pipefail
+          args=("$OPERATION")
+          if [ -n "$TARGET_GROUP" ]; then args+=(--group "$TARGET_GROUP"); fi
+          if [ -n "$TARGET_APP" ]; then args+=(--app "$TARGET_APP"); fi
+          if [ -n "$TARGET_SERVICE" ]; then args+=(--service "$TARGET_SERVICE"); fi
+          if [ "$DESTROY_DATA" = true ]; then args+=(--destroy-data); fi
+          python scripts/deploy.py "${args[@]}"
+      - name: Remove controller secrets
         if: always()
-        run: rm -f .vault_pass inventory/guardian-ci.json "$RUNNER_TEMP/guardian-key" "$RUNNER_TEMP/guardian-known_hosts"
+        run: rm -f .vault_pass inventory/hosts.json "$RUNNER_TEMP/vps-key" "$RUNNER_TEMP/vps-known-hosts"
