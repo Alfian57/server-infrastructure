@@ -54,8 +54,21 @@ def owned_containers(name):
 def preserve_images(app):
     path=app_directory(app['name'])
     containers=owned_containers(app['name'])
-    services={c['Config']['Labels'].get('com.docker.compose.service'): {'image':c['Image']} for c in containers
-              if c['Config']['Labels'].get('com.docker.compose.service') and 'postgres' not in c['Name']}
+    services={}
+    for c in containers:
+        service=c['Config']['Labels'].get('com.docker.compose.service')
+        if not service or 'postgres' in c['Name']:continue
+        config={'image':c['Image']}
+        if not app.get('override_resources',False):
+            host=c.get('HostConfig',{});limits={};reservations={}
+            if host.get('Memory',0)>0:limits['memory']=str(host['Memory'])
+            if host.get('NanoCpus',0)>0:limits['cpus']=host['NanoCpus']/1_000_000_000
+            if host.get('MemoryReservation',0)>0:reservations['memory']=str(host['MemoryReservation'])
+            resources={}
+            if limits:resources['limits']=limits
+            if reservations:resources['reservations']=reservations
+            if resources:config['deploy']={'resources':resources}
+        services[service]=config
     if not services:return {'preserved':False}
     # JSON is a valid Compose YAML document. Keep the base file usable by CI.
     (path/'docker-compose.preserve.json').write_text(json.dumps({'services':services}))
@@ -78,7 +91,43 @@ def request(url,method='GET',body=None,headers=None):
             raw=response.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f'Resource API returned HTTP {exc.code}: {urllib.parse.urlsplit(url).path}') from None
+        detail=''
+        try:
+            error=json.loads(exc.read()).get('error',{})
+            detail=str(error.get('message','')) if isinstance(error,dict) else str(error)
+            sensitive=[]
+            def collect(value,key=''):
+                if isinstance(value,dict):
+                    for k,v in value.items():collect(v,k)
+                elif isinstance(value,list):
+                    for v in value:collect(v,key)
+                elif isinstance(value,str) and any(k in key.lower() for k in ('secret','password','token','credential','authorization')):
+                    sensitive.append(value)
+                    sensitive.extend(part.split('=',1)[-1] for part in value.splitlines())
+                    if key.lower()=='authorization':sensitive.extend(value.split())
+            collect(headers);collect(body)
+            for value in sorted(sensitive,key=len,reverse=True):
+                if len(value)>6:detail=detail.replace(value,'[redacted]')
+            detail=re.sub(r'(?i)(Bearer\s+)[A-Za-z0-9._~-]+',r'\1[redacted]',detail)
+        except (ValueError,AttributeError):pass
+        raise RuntimeError(f'Resource API returned HTTP {exc.code}: {urllib.parse.urlsplit(url).path}'+(' '+detail[:1200] if detail else '')) from None
+
+
+def proxy_payload(body):
+    """GET responses can contain nullable IDs, numeric flags and read-only location fields."""
+    value=dict(body)
+    for key in ('ssl_forced','caching_enabled','block_exploits','allow_websocket_upgrade','http2_support',
+                'hsts_enabled','hsts_subdomains','enabled','trust_forwarded_proto'):
+        if key in value:value[key]=value[key] not in (False,None,0,'0','false','')
+    for key in ('forward_port','certificate_id','access_list_id'):
+        if key in value:value[key]=int(value[key] or 0)
+    value['meta']=value.get('meta') or {}
+    allowed={'id','path','forward_scheme','forward_host','forward_port','forward_path','advanced_config'}
+    value['locations']=[{k:v for k,v in location.items() if k in allowed} for location in value.get('locations') or []]
+    for location in value['locations']:
+        location['forward_port']=int(location['forward_port'])
+        if location.get('id') is not None:location['id']=int(location['id'])
+    return value
 
 
 class PublicResources:
@@ -160,7 +209,7 @@ class PublicResources:
                 current=matches[0] if matches else None
                 if current and not set(current['domain_names'])<=own_domains:
                     raise ValueError('Proxy host also serves another application; refusing to change it')
-                certificate=current.get('certificate_id',0) if current else 0
+                certificate=int(current.get('certificate_id') or 0) if current else 0
                 if not certificate:
                     for c in certs:
                         if all(any(fnmatch.fnmatchcase(d,p) for p in c['domain_names']) for d in h['domain_names']):
@@ -182,6 +231,7 @@ class PublicResources:
                 # NPM 2.14 supports forwarding the original Cloudflare scheme.
                 version=db.command(['docker','exec','nginx-proxy-manager','node','-p',"require('/app/package.json').version"]).stdout.strip()
                 if tuple(int(x) for x in version.split('.')[:2]) >= (2,14):body['trust_forwarded_proto']=True
+                body=proxy_payload(body)
                 if not current or any(current.get(k)!=v for k,v in body.items()):
                     current=self.npm('nginx/proxy-hosts'+('/'+str(current['id']) if current else ''),'PUT' if current else 'POST',body)
                 proxies.append({'id':current['id'],'domains':h['domain_names']})
@@ -207,7 +257,7 @@ class PublicResources:
             else:
                 keys=['domain_names','forward_scheme','forward_host','forward_port','access_list_id','certificate_id','ssl_forced','caching_enabled','block_exploits','allow_websocket_upgrade','http2_support','hsts_enabled','hsts_subdomains','advanced_config','locations','meta','enabled']
                 body={k:host[k] for k in keys if k in host};body['domain_names']=remaining
-                self.npm('nginx/proxy-hosts/'+str(host['id']),'PUT',body)
+                self.npm('nginx/proxy-hosts/'+str(host['id']),'PUT',proxy_payload(body))
         remaining_ids={h.get('certificate_id') for h in self.npm('nginx/proxy-hosts')}
         for cert in self.npm('nginx/certificates'):
             if cert.get('domain_names') and set(cert['domain_names'])<=allowed and cert['id'] not in remaining_ids:

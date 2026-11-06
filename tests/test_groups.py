@@ -124,6 +124,30 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(update.args[2]['domain_names'],['keep.example.com'])
         self.assertEqual(len(api.npm.call_args_list),4)
 
+    def test_proxy_update_normalizes_legacy_response_types(self):
+        value=resources.proxy_payload({'domain_names':['api.example.com'],'forward_port':'8080',
+            'access_list_id':None,'certificate_id':'12','enabled':1,'ssl_forced':0,'hsts_enabled':None,
+            'trust_forwarded_proto':True,'meta':None,'locations':[{'id':'3','proxy_host_id':7,'path':'/v1',
+            'forward_scheme':'http','forward_host':'api','forward_port':'9000'}]})
+        self.assertIs(value['enabled'],True)
+        self.assertIs(value['ssl_forced'],False)
+        self.assertIs(value['hsts_enabled'],False)
+        self.assertEqual(value['access_list_id'],0)
+        self.assertEqual(value['certificate_id'],12)
+        self.assertEqual(value['forward_port'],8080)
+        self.assertNotIn('proxy_host_id',value['locations'][0])
+        self.assertEqual(value['locations'][0]['forward_port'],9000)
+
+    def test_api_error_detail_redacts_credentials(self):
+        import io,urllib.error
+        error=urllib.error.HTTPError('http://localhost/api/tokens',400,'Bad Request',{},
+            io.BytesIO(json.dumps({'error':{'message':'Invalid fixture-sensitive-password'}}).encode()))
+        with mock.patch.object(resources.urllib.request,'urlopen',side_effect=error):
+            with self.assertRaises(RuntimeError) as caught:
+                resources.request('http://localhost/api/tokens','POST',{'secret':'fixture-sensitive-password'})
+        self.assertNotIn('fixture-sensitive-password',str(caught.exception))
+        self.assertIn('[redacted]',str(caught.exception))
+
     def test_image_preservation_excludes_other_groups(self):
         (self.base/'sistertika-uty-api').mkdir()
         containers=[{'Name':'/sistertika-uty-api','Image':'sha256:uty','Mounts':[],

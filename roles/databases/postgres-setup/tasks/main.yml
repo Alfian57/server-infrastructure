@@ -8,6 +8,7 @@
     quiet: true
 
 - name: Inspect existing PostgreSQL container
+  no_log: true
   community.docker.docker_container_info:
     name: postgres-db
   register: postgres_existing_container
@@ -77,6 +78,7 @@
   register: postgres_container
 
 - name: Wait for PostgreSQL container to be healthy
+  no_log: true
   community.docker.docker_container_info:
     name: postgres-db
   register: container_info

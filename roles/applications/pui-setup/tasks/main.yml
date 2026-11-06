@@ -129,6 +129,7 @@
   register: pui_deployment
 
 - name: Wait for Hashbox PUI API to become healthy
+  no_log: true
   community.docker.docker_container_info:
     name: pui-api-service
   register: pui_api_container_info
@@ -140,6 +141,7 @@
   delay: "{{ pui_api_health_delay }}"
 
 - name: Wait for Hashbox PUI web client to become healthy
+  no_log: true
   community.docker.docker_container_info:
     name: pui-web-client
   register: pui_web_container_info

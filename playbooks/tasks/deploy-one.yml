@@ -2,7 +2,7 @@
 - name: Preserve the currently deployed images before rendering configuration
   ansible.builtin.command:
     argv: [python3, /opt/docker-stack/bin/manage-resources.py]
-    stdin: '{{ {"operation": "preserve", "application": {"name": selected_app.name}} | to_json }}'
+    stdin: '{{ {"operation": "preserve", "application": {"name": selected_app.name, "override_resources": selected_app.memory_limit is defined or selected_app.cpu_limit is defined}} | to_json }}'
   register: preserved_images
   changed_when: false
   when: not ansible_check_mode
