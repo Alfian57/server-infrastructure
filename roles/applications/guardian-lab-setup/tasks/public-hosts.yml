@@ -103,7 +103,7 @@
     guardian_lab_certificate_id: "{{ item.id }}"
   loop: "{{ guardian_lab_npm_objects.results[0].json }}"
   when:
-    - item.expires_on | default('') > ansible_date_time.iso8601
+    - (item.expires_on | default('', true) | string) > ansible_date_time.iso8601
     - >-
       ('*.' ~ guardian_lab_web_app.dns.domain) in item.domain_names or
       (guardian_lab_web_domain in item.domain_names and guardian_lab_stream_domain in item.domain_names)
