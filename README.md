@@ -247,6 +247,8 @@ Guardian Lab menggunakan role Compose khusus `guardian-lab-setup`, dengan metada
 
 Ansible mengelola Compose, environment, database/user MySQL khusus, gateway stream, helper deployment, serta deklarasi DNS/proxy. Tidak ada source checkout atau build di VPS. Hanya broker memegang socket Docker. Image browser/egress dipertahankan oleh container `sleep` ringan; keeper egress juga mempertahankan jaringan ketika sesi sedang kosong. Jangan menonaktifkan keeper saat cleanup server aktif.
 
+Kapasitas produksi default adalah satu sesi sandbox bersamaan (`guardian_lab_max_sessions=1`) untuk VPS bersama. Broker mendukung konfigurasi 1–3 tanpa menaikkan batas resource per sesi; pilih kapasitas lebih besar hanya setelah ruang RAM host diperiksa.
+
 Host stream menonaktifkan access log serta mengganti directive error log yang dihasilkan NPM agar query tiket tidak tersimpan saat upstream gagal. Perubahan proxy host lewat UI NPM dapat meregenerasi berkasnya; terapkan kembali role Nginx setelah perubahan tersebut dan verifikasi logging sebelum membuka stream.
 
 Credential berada pada `vault_guardian_lab_*` di Vault. Password database dan kedua key internal harus acak dan independen dari development. Token Fonnte memakai konfigurasi Guardian yang sudah tersedia. `vault_guardian_lab_ssh_known_hosts` berisi host key OpenSSH tepercaya untuk host/port inventory; workflow tidak menerima host key baru secara otomatis. Runtime secret tidak disinkronkan ke GitHub.

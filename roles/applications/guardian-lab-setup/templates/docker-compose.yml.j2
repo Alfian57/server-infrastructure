@@ -62,6 +62,7 @@ services:
     environment:
       SANDBOX_WEB_IMAGE: ${GUARDIAN_BROWSER_IMAGE:?Missing browser image}
       SANDBOX_EGRESS_IMAGE: ${GUARDIAN_EGRESS_IMAGE:?Missing egress image}
+      SANDBOX_MAX_SESSIONS: "{{ guardian_lab_max_sessions }}"
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

@@ -5,7 +5,8 @@
       - ansible_architecture in ['x86_64', 'amd64']
       - guardian_lab_web_app.enabled | bool
       - guardian_lab_ml_app.enabled | bool
-    fail_msg: "Guardian Lab requires a Linux amd64 host and both Guardian catalog entries enabled."
+      - guardian_lab_max_sessions | string is match('^[1-3]$')
+    fail_msg: "Guardian Lab requires Linux amd64, both catalog entries enabled, and guardian_lab_max_sessions from 1 to 3."
     quiet: true
 
 - name: Check Guardian Lab image state
