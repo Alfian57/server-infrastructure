@@ -142,9 +142,6 @@ jobs:
       WEB_TAG: ${{ inputs.guardian_web_tag }}
       ML_TAG: ${{ inputs.guardian_ml_tag }}
       ANSIBLE_HOST_KEY_CHECKING: "true"
-      ANSIBLE_SSH_ARGS: >-
-        -F /dev/null -o StrictHostKeyChecking=yes -o ControlMaster=no
-        -o UserKnownHostsFile=${{ runner.temp }}/guardian-known_hosts
     steps:
       - uses: actions/checkout@v4
         with:
@@ -176,6 +173,7 @@ jobs:
           ansible-vault view group_vars/all/vault.yml > /dev/null
       - name: Deploy only Guardian Lab and its two public hosts
         run: |
+          export ANSIBLE_SSH_ARGS="-F /dev/null -o StrictHostKeyChecking=yes -o ControlMaster=no -o UserKnownHostsFile=$RUNNER_TEMP/guardian-known_hosts"
           ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
             --private-key "$RUNNER_TEMP/guardian-key" --syntax-check
           ansible-playbook playbooks/deploy-guardian-lab.yml -i inventory/guardian-ci.json \
