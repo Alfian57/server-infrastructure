@@ -8,6 +8,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+import threading
 import time
 
 from catalog import ROOT, index, select
@@ -50,7 +51,16 @@ def run(args) -> int:
             raise ValueError('decommission requires --destroy-data')
     host=inventory_host()
     script=(ROOT/'roles/common/files/with-deployment-lock.sh').read_text()
-    holder=subprocess.Popen(ssh_args(host)+['bash -c '+shlex.quote(script)+' -- --hold'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    # OpenSSH can set O_NONBLOCK on inherited stderr. Give it a separate pipe:
+    # Ansible requires its own inherited stdin/stdout/stderr to stay blocking.
+    holder=subprocess.Popen(ssh_args(host)+['bash -c '+shlex.quote(script)+' -- --hold'], stdin=subprocess.PIPE,
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    def forward_ssh_errors():
+        for line in holder.stderr:
+            sys.stderr.write(line)
+            sys.stderr.flush()
+    errors=threading.Thread(target=forward_ssh_errors,daemon=True)
+    errors.start()
     child=None
     try:
         line=holder.stdout.readline().strip()
@@ -78,6 +88,9 @@ def run(args) -> int:
         if holder.stdin:holder.stdin.close()
         try:holder.wait(timeout=15)
         except subprocess.TimeoutExpired:holder.terminate();holder.wait()
+        errors.join(timeout=5)
+        holder.stdout.close()
+        holder.stderr.close()
 
 
 def main() -> int:

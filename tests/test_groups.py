@@ -50,6 +50,21 @@ class CatalogTests(unittest.TestCase):
 
 
 class LockTests(unittest.TestCase):
+    def test_ssh_nonblocking_stderr_does_not_leak_into_ansible(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            fake_ssh=root/'ssh.py'
+            fake_ssh.write_text("import os,sys\nos.set_blocking(2,False)\nprint('LOCKED '+'a'*48,flush=True)\nsys.stdin.read()\n")
+            ansible=root/'ansible-playbook'
+            ansible.write_text('#!'+sys.executable+"\nimport os,sys\nsys.exit(0 if os.get_blocking(2) else 77)\n")
+            ansible.chmod(0o750)
+            source=("import sys,argparse\nfrom unittest import mock\nsys.path.insert(0,"+repr(str(ROOT/'scripts'))+")\nimport deploy\n"
+                    "a=argparse.Namespace(operation='deploy',group='uty',app='',service='',destroy_data=False)\n"
+                    "with mock.patch.object(deploy,'inventory_host',return_value={}),mock.patch.object(deploy,'ssh_args',return_value=[sys.executable,"+repr(str(fake_ssh))+"]):\n"
+                    " sys.exit(deploy.run(a))\n")
+            result=subprocess.run([sys.executable,'-c',source],env={**os.environ,'PATH':str(root)+os.pathsep+os.environ['PATH']},capture_output=True,text=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr)
+
     def test_two_entrypoints_share_a_lock_and_valid_inheritance_works(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory);locks=root/'locks';locks.mkdir()
