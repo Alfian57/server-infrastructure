@@ -298,7 +298,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     default_owner = str(load_yaml(VARS_FILE).get("github_username", "")).strip()
     if not default_owner:
         raise SystemExit("github_username is not set")
-    apps = [app for app in data.get("portfolio_apps", []) + data.get("guardian_lab_apps", []) if app.get("enabled", True)]
+    apps = [app for app in data["applications"] if app.get("enabled", True)]
     if args.app:
         apps = [
             app

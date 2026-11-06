@@ -29,6 +29,7 @@ dns:
     - api-staging
     - router-staging
 build:
+  ref: staging
   workflow: docker-publish.yml
 env_contract:
   required: false

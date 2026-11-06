@@ -6,6 +6,14 @@ repo: PUI
 stack: compose
 build:
   workflow: ci-cd.yml
+  dockerfile: environment-a/api-service/Dockerfile
+  images:
+    - image: api-service
+      dockerfile: environment-a/api-service/Dockerfile
+    - image: vault-core
+      dockerfile: environment-b/vault-core/Dockerfile
+    - image: web-client
+      dockerfile: environment-a/web-client/Dockerfile.prod
 env_template: projects/personal/apps/pui/.env.j2
 env_contract:
   path: .env.example

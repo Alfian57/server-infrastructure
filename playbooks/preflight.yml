@@ -13,3 +13,10 @@
     - name: Display resource metadata
       ansible.builtin.debug:
         msg: '{{ host_metadata.stdout | from_json }}'
+    - name: Save a credential-free controller report
+      ansible.builtin.copy:
+        content: '{{ host_metadata.stdout }}'
+        dest: "{{ lookup('env', 'RUNNER_TEMP') | default(playbook_dir ~ '/../.ansible', true) }}/vps-preflight-{{ lookup('pipe', 'date +%s%N') }}.json"
+        mode: '0600'
+      delegate_to: localhost
+      become: false

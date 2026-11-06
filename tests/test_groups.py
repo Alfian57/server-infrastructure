@@ -121,5 +121,28 @@ class OwnershipTests(unittest.TestCase):
         overlay=json.loads((self.base/'sistertika-uty-api/docker-compose.preserve.json').read_text())
         self.assertEqual(overlay,{'services':{'api':{'image':'sha256:uty'}}})
 
+    def test_failed_initialization_remains_pending_on_retry(self):
+        state={'databases':{'postgres:router':{'group':'alderatech','app':'router','initialized':False}},'applications':{}}
+        resources.db.save_state(state)
+        app={'name':'router','group':'alderatech','databases':{'postgres':['router']},
+             'database_users':[{'database':'router','username':'router_user','password':'fixture-password'}]}
+        def query(sql,*args,**kwargs):
+            output='f' if 'rolsuper' in sql else '1'
+            return subprocess.CompletedProcess([],0,stdout=output,stderr='')
+        with mock.patch.object(resources.db,'environment',return_value={'POSTGRES_USER':'postgres'}),mock.patch.object(resources.db,'pg',side_effect=query):
+            result=resources.db.provision([app])
+        self.assertEqual(result['needs_initialization'],['router'])
+        self.assertNotIn('router:database',result['changed'])
+
+    def test_initialization_marker_does_not_change_other_apps(self):
+        resources.db.save_state({'databases':{'postgres:router':{'app':'router','initialized':False},
+                                             'postgres:pui':{'app':'pui','initialized':False}},'applications':{}})
+        payload=json.dumps({'operation':'initialized','application':{'name':'router'}})
+        import io
+        with mock.patch.object(sys,'stdin',io.StringIO(payload)):resources.main()
+        state=resources.db.read_state()
+        self.assertTrue(state['databases']['postgres:router']['initialized'])
+        self.assertFalse(state['databases']['postgres:pui']['initialized'])
+
 
 if __name__=='__main__':unittest.main()

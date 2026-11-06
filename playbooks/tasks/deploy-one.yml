@@ -30,6 +30,8 @@
 - name: Deploy the Guardian stack or its selected ML component
   ansible.builtin.include_role:
     name: guardian-lab-setup
+  vars:
+    guardian_lab_stream_image: "{{ (preserved_images.stdout | default('{}') | from_json).stream_image | default('nginx:1.28-alpine') }}"
   when: selected_app.deployment == 'guardian'
 
 - name: Deploy Aldera Router against shared PostgreSQL
@@ -43,6 +45,13 @@
     aldera_router_db_user: '{{ selected_app.database_users[0].username }}'
     aldera_router_db_password: '{{ selected_app.database_users[0].password }}'
   when: selected_app.deployment == 'aldera-router'
+
+- name: Record successful one-time database initialization
+  ansible.builtin.command:
+    argv: [python3, /opt/docker-stack/bin/manage-resources.py]
+    stdin: '{{ {"operation": "initialized", "application": {"name": selected_app.name}} | to_json }}'
+  changed_when: false
+  when: not ansible_check_mode
 
 - name: Reconcile only this application's public resources
   ansible.builtin.command:

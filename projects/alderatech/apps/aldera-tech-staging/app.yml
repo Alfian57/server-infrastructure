@@ -6,6 +6,7 @@ repo: aldera-tech
 image: ghcr.io/alderatech/aldera-tech:staging
 stack: nextjs
 build:
+  ref: staging
   dockerfile: docker/Dockerfile
   workflow: build-and-deploy.yml
 app_port: 3000

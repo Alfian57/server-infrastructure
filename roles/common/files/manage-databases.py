@@ -59,7 +59,7 @@ def save_state(state):
 
 def provision(apps):
     state=read_state()
-    changes=[]
+    changes=[];pending=[]
     for app in apps:
         for engine, databases in app.get('databases',{}).items():
             for database in databases:
@@ -100,9 +100,11 @@ def provision(apps):
                             changes.append(app['name']+':credential')
                         mysql('GRANT ALL PRIVILEGES ON '+quoted+'.* TO '+literal(username)+"@'%'")
                     else:raise ValueError('Unsupported database engine')
-                state['databases'][engine+':'+database]={'group':app['group'],'app':app['name']}
+                initialized=bool(exists) and (claim or {}).get('initialized',True)
+                if not initialized:pending.append(app['name'])
+                state['databases'][engine+':'+database]={'group':app['group'],'app':app['name'],'initialized':initialized}
     save_state(state)
-    return {'changed':changes}
+    return {'changed':changes,'needs_initialization':sorted(set(pending))}
 
 
 if __name__=='__main__':

@@ -40,6 +40,7 @@ def run(args) -> int:
         raise ValueError('This operation has a fixed platform target; do not supply --group or --app')
     if args.operation in ('deploy','check','dns'):
         selected = select(args.group,args.app,require_target=True,enabled_only=True,default_only=True)
+        if not selected:raise ValueError('No enabled applications match the target')
         group = selected[0]['group']
     else:
         group = 'alderatech' if args.operation == 'consolidate' else args.group
@@ -81,13 +82,25 @@ def run(args) -> int:
 
 def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('operation',choices=['deploy','check','platform','preflight','decommission','consolidate','helpers','dns','all'])
+    p.add_argument('operation',choices=['deploy','check','platform','preflight','decommission','consolidate','helpers','dns','all','rollout'])
     p.add_argument('--group',default='')
     p.add_argument('--app',default='')
     p.add_argument('--service',default='')
     p.add_argument('--destroy-data',action='store_true')
     a=p.parse_args()
     try:
+        if a.operation=='rollout':
+            if not a.destroy_data or a.group or a.app or a.service:
+                raise ValueError('rollout has fixed targets and requires --destroy-data')
+            steps=[('helpers',''),('deploy','uty'),('decommission',''),('consolidate',''),
+                   ('deploy','personal'),('deploy','lomba'),('deploy','gamblock-ai'),('preflight','')]
+            for operation,group in steps:
+                step=argparse.Namespace(**vars(a));step.operation=operation;step.group=group
+                step.destroy_data=operation in ('decommission','consolidate')
+                print('Applying operation '+operation+(' group='+group if group else ''),flush=True)
+                status=run(step)
+                if status:return status
+            return 0
         if a.operation=='all':
             if a.group or a.app or a.service or a.destroy_data:
                 raise ValueError('all cannot be combined with another target selector')

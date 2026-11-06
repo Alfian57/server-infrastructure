@@ -22,4 +22,4 @@
 
 - name: Record newly created databases for one-time initialization
   ansible.builtin.set_fact:
-    new_database_apps: "{{ ((database_provision_result.stdout | default('{\"changed\":[]}') | from_json).changed | select('search', ':database$') | map('regex_replace', ':database$', '') | list) }}"
+    new_database_apps: "{{ (database_provision_result.stdout | default('{\"needs_initialization\":[]}') | from_json).needs_initialization }}"

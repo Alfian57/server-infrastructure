@@ -60,7 +60,13 @@ def preserve_images(app):
     # JSON is a valid Compose YAML document. Keep the base file usable by CI.
     (path/'docker-compose.preserve.json').write_text(json.dumps({'services':services}))
     (path/'docker-compose.preserve.json').chmod(0o644)
-    return {'preserved':True,'services':list(services)}
+    result={'preserved':True,'services':list(services)}
+    if app['name']=='guardian-lab':
+        stream=next((c for c in containers if c['Name'].lstrip('/')=='guardian-lab-stream'),None)
+        if stream:
+            digests=json.loads(db.command(['docker','image','inspect',stream['Image']]).stdout)[0].get('RepoDigests',[])
+            result['stream_image']=next((d for d in digests if d.startswith('nginx@')),stream['Config']['Image'])
+    return result
 
 
 def request(url,method='GET',body=None,headers=None):
@@ -364,6 +370,12 @@ def main():
     if operation in ('public','dns'):return PublicResources(payload['credentials']).upsert(payload['application'],payload['address'],dns_only=operation=='dns')
     if operation=='decommission':return decommission(payload)
     if operation=='cleanup-postgres':return cleanup_postgres()
+    if operation=='initialized':
+        state=db.read_state()
+        for claim in state['databases'].values():
+            if claim['app']==payload['application']['name']:claim['initialized']=True
+        db.save_state(state)
+        return {'initialized':payload['application']['name']}
     raise ValueError('Unknown resource operation')
 
 

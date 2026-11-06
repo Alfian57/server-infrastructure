@@ -69,3 +69,6 @@ postgres mysql redis nginx docker:
 full-setup:
 	@python3 scripts/deploy.py platform --service all
 	@python3 scripts/deploy.py all
+
+trigger-github-actions:
+	@python3 scripts/trigger-workflows.py $(TARGET_ARGS) $(if $(ALL),--all,)
