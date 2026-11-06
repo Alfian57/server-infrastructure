@@ -33,12 +33,18 @@ server {
 
   access_log /data/logs/proxy-host-{{ host_id }}_access.log proxy;
   error_log /data/logs/proxy-host-{{ host_id }}_error.log warn;
+  {{ item.advanced_config | default('') }}
 
   location / {
     # Proxy!
     include conf.d/include/proxy.conf;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header X-Forwarded-Ssl on;
+{% if item.websocket_support | default(false) %}
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_http_version 1.1;
+{% endif %}
   }
 
   # Custom

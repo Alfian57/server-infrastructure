@@ -1,0 +1,22 @@
+---
+guardian_lab_install_dir: "{{ docker_stack_applications }}/guardian-lab"
+guardian_lab_admin_user: "{{ ci_deploy_user | default(deploy_user | default(ansible_user)) }}"
+guardian_lab_runtime_group: "docker"
+guardian_lab_web_app: "{{ guardian_lab_apps | selectattr('name', 'equalto', 'guardian-lab') | first }}"
+guardian_lab_ml_app: "{{ guardian_lab_apps | selectattr('name', 'equalto', 'guardian-lab-ai') | first }}"
+guardian_lab_web_domain: "{{ guardian_lab_web_app.proxy_hosts[0].domain }}"
+guardian_lab_stream_domain: "{{ guardian_lab_web_app.proxy_hosts[1].domain }}"
+guardian_lab_db_name: "guardian_lab"
+guardian_lab_db_user: "guardian_lab"
+guardian_lab_initial_web_tag: "latest"
+guardian_lab_initial_ml_tag: "latest"
+guardian_lab_web_repository: "{{ guardian_lab_web_app.images.web | regex_replace(':latest$', '') }}"
+guardian_lab_broker_repository: "{{ guardian_lab_web_app.images.broker | regex_replace(':latest$', '') }}"
+guardian_lab_browser_repository: "{{ guardian_lab_web_app.images.sandbox_web | regex_replace(':latest$', '') }}"
+guardian_lab_egress_repository: "{{ guardian_lab_web_app.images.sandbox_egress | regex_replace(':latest$', '') }}"
+guardian_lab_ml_repository: "{{ guardian_lab_ml_app.image | regex_replace(':latest$', '') }}"
+guardian_lab_readiness_timeout: 180
+guardian_lab_max_sessions: 1
+guardian_lab_web_memory: "1536m"
+guardian_lab_web_cpus: "2.0"
+guardian_lab_stream_image: "nginx:1.28-alpine"

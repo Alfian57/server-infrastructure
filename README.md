@@ -234,6 +234,67 @@ make panca-trivia    # Deploy Panca Trivia app
 # ... dan lainnya
 ```
 
+## Guardian Lab
+
+Guardian Lab menggunakan role Compose khusus `guardian-lab-setup`, dengan metadata kedua repository pada `guardian_lab_apps` di katalog. Stack berjalan pada VPS yang sama dengan aplikasi lain; container sandbox tetap berbagi kernel host. Dukungan image saat ini **Linux amd64**; role menolak arsitektur lain sebelum deployment.
+
+| Target | Akses | Pengelolaan |
+| --- | --- | --- |
+| `guardian-lab.alfian-gading.my.id` | Web Next.js, port internal 3000 | Repository `DeryWahyu/guardian-lab` |
+| `guardian-sandbox.alfian-gading.my.id` | Gateway stream WebSocket, port internal 8080 | Repository web yang sama |
+| ML v6 | Privat, hanya backend web | Repository `DeryWahyu/guardian-lab-ai` |
+| Broker API / MySQL | Jaringan privat, tanpa port host baru | Ansible |
+
+Ansible mengelola Compose, environment, database/user MySQL khusus, gateway stream, helper deployment, serta deklarasi DNS/proxy. Tidak ada source checkout atau build di VPS. Hanya broker memegang socket Docker. Image browser/egress dipertahankan oleh container `sleep` ringan; keeper egress juga mempertahankan jaringan ketika sesi sedang kosong. Jangan menonaktifkan keeper saat cleanup server aktif.
+
+Kapasitas produksi default adalah satu sesi sandbox bersamaan (`guardian_lab_max_sessions=1`) untuk VPS bersama. Broker mendukung konfigurasi 1–3 tanpa menaikkan batas resource per sesi; pilih kapasitas lebih besar hanya setelah ruang RAM host diperiksa.
+
+Host stream menonaktifkan access log serta mengganti directive error log yang dihasilkan NPM agar query tiket tidak tersimpan saat upstream gagal. Perubahan proxy host lewat UI NPM dapat meregenerasi berkasnya; terapkan kembali role Nginx setelah perubahan tersebut dan verifikasi logging sebelum membuka stream.
+
+Credential berada pada `vault_guardian_lab_*` di Vault. Password database dan kedua key internal harus acak dan independen dari development. Token Fonnte memakai konfigurasi Guardian yang sudah tersedia. `vault_guardian_lab_ssh_known_hosts` berisi host key OpenSSH tepercaya untuk host/port inventory; workflow tidak menerima host key baru secara otomatis. Runtime secret tidak disinkronkan ke GitHub.
+
+### Aktivasi pertama
+
+1. Tinjau dan publikasikan perubahan repository melalui feature branch/PR ke `main`. Kedua workflow mempublikasikan image menggunakan `GITHUB_TOKEN`; pastikan credential registry VPS memiliki akses baca ke package tersebut.
+2. Tunggu workflow web dan AI berhasil, atau jalankan manual dengan input `deploy=false`. Web baru dirilis setelah keempat image berhasil dibangun. Selama `ENABLE_VPS_DEPLOY` belum disetel, job SSH dilewati. Public app URL memiliki default sesuai domain di atas.
+3. Siapkan Docker, Nginx Proxy Manager, dan MySQL bersama melalui workflow infrastruktur yang tersedia. Jalankan `make app-dry-run APP=guardian-lab`, tinjau hasilnya, lalu `make app APP=guardian-lab`. Bootstrap memakai `latest` dari kedua workflow dan menyimpan digest hasil pull. Untuk memilih rilis tertentu, set `guardian_lab_initial_web_tag=sha-<commit-web>` dan `guardian_lab_initial_ml_tag=sha-<commit-ai>` melalui extra vars saat bootstrap; berkas image yang sudah ada tidak ditimpa.
+4. Terapkan deklarasi DNS dan proxy melalui workflow Cloudflare/Nginx yang tersedia. Pastikan kedua origin HTTPS, WebSocket, header Origin, batas upload 64 MiB, serta log stream sesuai konfigurasi. `AUTH_TRUST_PROXY=false` tetap default sampai penerusan IP tepercaya diverifikasi.
+5. **Setelah bootstrap siap**, jalankan sinkronisasi khusus kedua repo:
+
+   ```bash
+   ./scripts/env-contracts.py github-sync --repo guardian-lab --repo guardian-lab-ai --dry-run
+   ./scripts/env-contracts.py github-sync --repo guardian-lab --repo guardian-lab-ai
+   ```
+
+   Mapping katalog menetapkan `ENABLE_VPS_DEPLOY=true`. Push `main` berikutnya otomatis deploy; pemanggilan manual hanya deploy bila input `deploy=true`. Sinkronisasi tidak memicu workflow dengan sendirinya.
+
+### Pembaruan dan pemulihan
+
+`make app APP=guardian-lab` menerapkan seluruh stack; `make app APP=guardian-lab-ai` hanya memperbarui ML dan memerlukan bootstrap sebelumnya. Keduanya memakai konfigurasi serta referensi image yang sudah disimpan.
+
+Workflow web memanggil `./update.sh web sha-<commit>` untuk aplikasi, broker, browser, dan egress; workflow AI memanggil `./update.sh ml sha-<commit>`. Helper berjalan dari `/opt/docker-stack/applications/guardian-lab` dengan satu lock untuk kedua repo dan Ansible, lalu menyimpan digest immutable pada `images.env`. Pembaruan ML mempertahankan seluruh referensi web. Restart broker mengakhiri sesi sandbox aktif melalui rekonsiliasi resource berlabel.
+
+Sebelum mengganti web, helper menjalankan `prisma migrate deploy` dan seed materi Academy idempoten menggunakan image yang sama. Akun demo tidak dibuat. Migrasi gagal menghentikan pembaruan aplikasi; readiness gagal menghasilkan exit nonzero. ML siap hanya jika model tersedia dalam mode shadow; `production_ready=false` adalah kondisi yang diharapkan. Website tetap dapat melayani saat ML unavailable.
+
+Setelah perubahan versi berhasil, `images.previous.env` menyimpan snapshot sebelumnya. Jalankan `./update.sh rollback` sebagai user deploy CI untuk mengembalikan snapshot image tanpa migrasi; periksa kompatibilitas schema terlebih dahulu. Database tidak di-rollback. Bila deployment gagal sebagian, `images.env` tetap menunjuk rilis terakhir yang berhasil dan `images.failed.env` menyimpan kandidat. Setelah diagnosis, `./update.sh all` menerapkan kembali referensi terakhir tersebut. Tidak ada rollback otomatis atau penghapusan data.
+
+Validasi dari checkout lokal sebelum publikasi:
+
+```bash
+make env-contract-check APP=guardian-lab SOURCE_DIR=../guardian-lab
+make env-contract-check APP=guardian-lab-ai SOURCE_DIR=../guardian-lab-ai
+make repo-audit APP=guardian-lab SOURCE_DIR=../guardian-lab
+make repo-audit APP=guardian-lab-ai SOURCE_DIR=../guardian-lab-ai
+```
+
+`SOURCE_DIR` membatasi pemeriksaan ke satu repository lokal. Tanpa opsi ini, pemeriksaan tetap membaca GitHub. `make doctor` mencakup pemeriksaan remote seluruh katalog dan memerlukan jaringan. Checklist build/runtime Guardian diserahkan pada `TEST_PLAN.md` repository web; penyiapan konfigurasi bukan bukti pemeriksaan tersebut sudah lulus.
+
+### Bootstrap melalui runner GitHub
+
+Workflow **Lint and Audit** menyediakan input manual `guardian_operation`: `validate`, `preflight`, atau `deploy`. `preflight` memeriksa SSH, arsitektur, memori, disk, Docker, dan keberadaan environment Guardian tanpa mengubah layanan. `deploy` menunggu lint/preflight berhasil, lalu menjalankan `playbooks/deploy-guardian-lab.yml` dengan tag image dari input `guardian_web_tag` dan `guardian_ml_tag` (`latest` atau `sha-<commit>`).
+
+Runner memerlukan secret `VPS_HOST`, `VPS_USER`, `VPS_SSH_PORT`, `VPS_KEY`, `VPS_KNOWN_HOSTS`, serta `ANSIBLE_VAULT_PASSWORD` yang sudah digunakan validasi infrastruktur. Berkas controller sementara dibatasi izinnya dan dibersihkan setelah job. Playbook khusus ini memakai infrastruktur yang sudah berjalan: hanya stack Guardian, dua A record Cloudflare, dan dua proxy host NPM yang diterapkan. Proxy host lain tidak dipangkas atau dibuat ulang. Sertifikat valid yang mencakup kedua domain dipakai kembali; bila belum ada, NPM meminta sertifikat khusus melalui DNS-01. Pemeriksaan HTTPS akhir mengharuskan web HTTP 200 dan health stream HTTP 204.
+
 ## Environment Contract Workflow
 
 Setiap aplikasi dikelola dari `group_vars/all/apps.yml`. Untuk menjaga infra tetap mengikuti perubahan aplikasi, jalankan contract check setelah `.env.example` di repository aplikasi berubah:

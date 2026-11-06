@@ -147,8 +147,8 @@ def repo_ref(app: dict[str, Any], default_owner: str) -> str:
 
 
 def ci_config(data: dict[str, Any], app: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    defaults = data.get("github_actions_defaults", {}) or {}
     app_ci = app.get("ci", {}) or {}
+    defaults = (data.get("github_actions_defaults", {}) or {}) if app_ci.get("inherit_defaults", True) else {}
     return {
         "secrets": {**(defaults.get("secrets", {}) or {}), **(app_ci.get("secrets", {}) or {})},
         "variables": {**(defaults.get("variables", {}) or {}), **(app_ci.get("variables", {}) or {})},
@@ -161,7 +161,10 @@ def app_port(app: dict[str, Any]) -> int:
     return 80 if app["stack"] == "laravel" else 3000
 
 
-def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env: dict[str, str], verbose: bool) -> bool:
+def audit_app(
+    default_owner: str, data: dict[str, Any], app: dict[str, Any], env: dict[str, str],
+    verbose: bool, source_dir: Path | None = None,
+) -> bool:
     owner = repo_owner(app, default_owner)
     repo = repo_name(app)
     build = app.get("build", {}) or {}
@@ -173,9 +176,24 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
     errors: list[str] = []
     notes: list[str] = []
 
+    def read_content(path: str) -> str:
+        if source_dir is not None:
+            try:
+                return (source_dir / path).read_text(encoding="utf-8")
+            except OSError as exc:
+                raise AuditError(f"cannot read local file {path}: {exc.strerror}") from exc
+        return content(owner, repo, path, env)
+
     try:
-        tree = repo_tree(owner, repo, env)
-    except AuditError as exc:
+        if source_dir is not None:
+            result = subprocess.run(
+                ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+                cwd=source_dir, text=True, capture_output=True, check=True,
+            )
+            tree = set(result.stdout.splitlines())
+        else:
+            tree = repo_tree(owner, repo, env)
+    except (AuditError, OSError, subprocess.CalledProcessError) as exc:
         print(f"FAIL {app['name']}: cannot read {owner}/{repo} ({exc})")
         return False
 
@@ -194,15 +212,28 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
         workflow_text = ""
     else:
         try:
-            workflow_text = content(owner, repo, workflow_path, env)
+            workflow_text = read_content(workflow_path)
         except AuditError as exc:
             errors.append(f"cannot read workflow {workflow_path}: {exc}")
             workflow_text = ""
 
     if workflow_text:
-        actual_dockerfile = workflow_dockerfile(workflow_text)
-        if actual_dockerfile != dockerfile:
-            errors.append(f"workflow dockerfile is {actual_dockerfile}, catalog says {dockerfile}")
+        if build.get("images"):
+            workflow_data = yaml.safe_load(workflow_text)
+            declared = set()
+            for job in workflow_data.get("jobs", {}).values():
+                for image in job.get("strategy", {}).get("matrix", {}).get("include", []):
+                    declared.add((image.get("image"), image.get("dockerfile"), image.get("target", "")))
+            expected = {(item["image"], item["dockerfile"], item.get("target", "")) for item in build["images"]}
+            if declared != expected:
+                errors.append("workflow image matrix does not match catalog build.images")
+            for image in build["images"]:
+                if image["dockerfile"] not in tree:
+                    errors.append(f"catalog image Dockerfile not found: {image['dockerfile']}")
+        else:
+            actual_dockerfile = workflow_dockerfile(workflow_text)
+            if actual_dockerfile != dockerfile:
+                errors.append(f"workflow dockerfile is {actual_dockerfile}, catalog says {dockerfile}")
         actual_image = workflow_image(workflow_text, owner, repo)
         if actual_image and actual_image != expected_image:
             errors.append(f"workflow IMAGE_NAME is {actual_image}, catalog image is {expected_image}")
@@ -221,7 +252,7 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
     dockerfile_text = ""
     if dockerfile in tree:
         try:
-            dockerfile_text = content(owner, repo, dockerfile, env)
+            dockerfile_text = read_content(dockerfile)
         except AuditError as exc:
             errors.append(f"cannot read Dockerfile {dockerfile}: {exc}")
 
@@ -232,7 +263,7 @@ def audit_app(default_owner: str, data: dict[str, Any], app: dict[str, Any], env
     env_contract_path = str(app.get("env_contract", {}).get("path") or app_path(app, ".env.example"))
     if app.get("env_contract", {}).get("required", True) and env_contract_path in tree:
         try:
-            env_port = parse_env_example_port(content(owner, repo, env_contract_path, env))
+            env_port = parse_env_example_port(read_content(env_contract_path))
         except AuditError:
             env_port = None
         if env_port is not None and env_port != app_port(app):
@@ -267,7 +298,7 @@ def cmd_check(args: argparse.Namespace) -> int:
     default_owner = str(load_yaml(VARS_FILE).get("github_username", "")).strip()
     if not default_owner:
         raise SystemExit("github_username is not set")
-    apps = [app for app in data.get("portfolio_apps", []) if app.get("enabled", True)]
+    apps = [app for app in data.get("portfolio_apps", []) + data.get("guardian_lab_apps", []) if app.get("enabled", True)]
     if args.app:
         apps = [
             app
@@ -277,11 +308,13 @@ def cmd_check(args: argparse.Namespace) -> int:
     if not apps:
         print(f"Unknown app: {args.app}", file=sys.stderr)
         return 1
+    if args.source_dir and len(apps) != 1:
+        raise SystemExit("--source-dir requires --app selecting one repository")
 
     env = gh_env()
     failed = 0
     for app in apps:
-        failed += 0 if audit_app(default_owner, data, app, env, args.verbose) else 1
+        failed += 0 if audit_app(default_owner, data, app, env, args.verbose, args.source_dir) else 1
     return 1 if failed else 0
 
 
@@ -292,6 +325,7 @@ def main() -> int:
     check = sub.add_parser("check", help="audit remote repo Dockerfile/workflow/image settings")
     check.add_argument("--app", default="")
     check.add_argument("--verbose", action="store_true")
+    check.add_argument("--source-dir", type=Path, help="audit one local checkout instead of GitHub")
     check.set_defaults(func=cmd_check)
 
     args = parser.parse_args()

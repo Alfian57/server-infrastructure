@@ -72,6 +72,82 @@ pui_app:
   databases:
     postgres: ["pui"]
 
+guardian_lab_apps:
+  - name: "guardian-lab"
+    enabled: true
+    repo_owner: "DeryWahyu"
+    repo: "guardian-lab"
+    stack: "compose"
+    deploy_tag: "guardian-lab-setup"
+    app_port: 3000
+    image: "ghcr.io/derywahyu/guardian-lab:latest"
+    images:
+      web: "ghcr.io/derywahyu/guardian-lab:latest"
+      broker: "ghcr.io/derywahyu/guardian-lab-broker:latest"
+      sandbox_web: "ghcr.io/derywahyu/guardian-sandbox-web:latest"
+      sandbox_egress: "ghcr.io/derywahyu/guardian-sandbox-egress:latest"
+    build:
+      dockerfile: "docker/app/Dockerfile"
+      workflow: "build-and-deploy.yml"
+      images:
+        - {image: "guardian-lab", dockerfile: "docker/app/Dockerfile", target: "runner"}
+        - {image: "guardian-lab-broker", dockerfile: "docker/sandbox/broker/Dockerfile", target: ""}
+        - {image: "guardian-sandbox-web", dockerfile: "docker/sandbox/web/Dockerfile", target: ""}
+        - {image: "guardian-sandbox-egress", dockerfile: "docker/sandbox/egress/Dockerfile", target: ""}
+    env_template: "roles/applications/guardian-lab-setup/templates/.env.j2"
+    proxy_hosts:
+      - domain: "guardian-lab.alfian-gading.my.id"
+        scheme: "http"
+        forward_host: "guardian-lab"
+        forward_port: 3000
+        caching_enabled: false
+        websocket_support: true
+        cloudflare_flexible: true
+        advanced_config: "client_max_body_size 64m;"
+      - domain: "guardian-sandbox.alfian-gading.my.id"
+        scheme: "http"
+        forward_host: "guardian-lab-stream"
+        forward_port: 8080
+        caching_enabled: false
+        websocket_support: true
+        cloudflare_flexible: true
+        advanced_config: "access_log off; proxy_read_timeout 240s; proxy_send_timeout 240s;"
+        disable_error_log: true
+    dns:
+      domain: "alfian-gading.my.id"
+      records: ["guardian-lab", "guardian-sandbox"]
+    databases:
+      mysql: ["guardian_lab"]
+    ci:
+      inherit_defaults: false
+      secrets: &guardian_lab_ci_secrets
+        VPS_HOST: {source: "runtime:vps_host"}
+        VPS_USER: {source: "runtime:ci_deploy_user"}
+        VPS_SSH_PORT: {source: "runtime:vps_ssh_port"}
+        VPS_KEY: {source: "runtime:vps_key"}
+        VPS_KNOWN_HOSTS: {source: "vault:vault_guardian_lab_ssh_known_hosts"}
+      variables:
+        ENABLE_VPS_DEPLOY: {value: "true"}
+        NEXT_PUBLIC_APP_URL: {value: "https://guardian-lab.alfian-gading.my.id"}
+
+  - name: "guardian-lab-ai"
+    enabled: true
+    repo_owner: "DeryWahyu"
+    repo: "guardian-lab-ai"
+    stack: "compose"
+    deploy_tag: "guardian-lab-setup"
+    app_port: 8001
+    image: "ghcr.io/derywahyu/guardian-lab-ai:latest"
+    build:
+      dockerfile: "Dockerfile"
+      workflow: "ml.yml"
+    env_template: "roles/applications/guardian-lab-setup/templates/ml.env.j2"
+    ci:
+      inherit_defaults: false
+      secrets: *guardian_lab_ci_secrets
+      variables:
+        ENABLE_VPS_DEPLOY: {value: "true"}
+
 manual_proxy_hosts:
   - domain: "api.aldera.tech"
     scheme: "http"
@@ -892,9 +968,13 @@ mobile_repositories:
           value: "https://gamblock-ai.com"
 
 mysql_databases: >-
-  {{ portfolio_apps | map(attribute='databases') | select('defined')
+  {{ (portfolio_apps + (guardian_lab_apps | selectattr('enabled', 'equalto', true) | list))
+  | map(attribute='databases') | select('defined')
   | map(attribute='mysql') | select('defined') | flatten | unique | list }}
 mysql_database_users:
+  - database: "guardian_lab"
+    username: "guardian_lab"
+    password: "{{ vault_guardian_lab_db_password }}"
   - database: "location_based_presence"
     username: "{{ vault_location_based_presence_web_db_username }}"
     password: "{{ vault_location_based_presence_web_db_password }}"
@@ -944,5 +1024,7 @@ portfolio_proxy_hosts: >-
     + (portfolio_apps | selectattr('enabled', 'defined') | rejectattr('enabled', 'equalto', false) | list))
     | map(attribute='proxy') | select('defined') | list
     + (pui_app.proxy_hosts | default([]) if pui_app.enabled | default(true) else [])
+    + (guardian_lab_apps | selectattr('enabled', 'equalto', true)
+       | map(attribute='proxy_hosts') | select('defined') | flatten | list)
     + (manual_proxy_hosts | default([]))
   }}
