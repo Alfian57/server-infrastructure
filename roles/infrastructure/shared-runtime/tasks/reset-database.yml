@@ -28,11 +28,30 @@
     path: "{{ docker_stack_applications }}/{{ run_apps[0].name }}/docker-compose.yml"
   register: database_reset_compose
 
+- name: Check whether the target application has an environment file
+  ansible.builtin.stat:
+    path: "{{ docker_stack_applications }}/{{ run_apps[0].name }}/.env"
+  register: database_reset_env
+
+- name: Check whether the target application has an images.env file
+  ansible.builtin.stat:
+    path: "{{ docker_stack_applications }}/{{ run_apps[0].name }}/images.env"
+  register: database_reset_images_env
+
+- name: Set database reset Compose environment files
+  ansible.builtin.set_fact:
+    database_reset_compose_env_files: >-
+      {{
+        ((['.env'] if database_reset_env.stat.exists else []) +
+         (['images.env'] if database_reset_images_env.stat.exists else []))
+      }}
+
 - name: Stop and reset only the target application's databases
   block:
     - name: Stop only the target application's containers before database reset
       community.docker.docker_compose_v2:
         project_src: "{{ docker_stack_applications }}/{{ run_apps[0].name }}"
+        env_files: "{{ database_reset_compose_env_files if database_reset_compose_env_files | length > 0 else omit }}"
         state: stopped
       no_log: true
       when: database_reset_compose.stat.exists
@@ -53,6 +72,7 @@
     - name: Restart the target application with its existing Compose configuration
       community.docker.docker_compose_v2:
         project_src: "{{ docker_stack_applications }}/{{ run_apps[0].name }}"
+        env_files: "{{ database_reset_compose_env_files if database_reset_compose_env_files | length > 0 else omit }}"
         pull: never
         recreate: never
         state: present
