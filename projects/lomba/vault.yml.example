@@ -1,6 +1,7 @@
 ---
 vault_guardian_lab_broker_key: REPLACE_WITH_SECRET
 vault_guardian_lab_db_password: REPLACE_WITH_SECRET
+vault_guardian_lab_deepseek_api_key: REPLACE_WITH_SECRET
 vault_guardian_lab_fonnte_token: REPLACE_WITH_SECRET
 vault_guardian_lab_session_secret: REPLACE_WITH_SECRET
 vault_guardian_lab_ssh_known_hosts: REPLACE_WITH_SECRET
