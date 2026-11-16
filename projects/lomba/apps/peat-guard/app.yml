@@ -18,6 +18,8 @@ env_contract:
     - WEB_PORT
 use_prisma: true
 prisma_command: migrate deploy
+run_seeder: true
+seed_on: always
 networks:
   - nginx_proxy_manager_network
   - postgres_network
