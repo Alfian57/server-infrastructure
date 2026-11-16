@@ -1,0 +1,51 @@
+---
+name: peat-guard
+production: false
+repo: peat-guard
+stack: nextjs
+build:
+  dockerfile: docker/Dockerfile
+  workflow: build-and-deploy.yml
+app_port: 3000
+env_template: projects/lomba/apps/peat-guard/.env.j2
+env_contract:
+  path: .env.example
+  ignore_keys:
+    - POSTGRES_DB
+    - POSTGRES_USER
+    - POSTGRES_PASSWORD
+    - DB_PORT
+    - WEB_PORT
+use_prisma: true
+prisma_command: migrate deploy
+networks:
+  - nginx_proxy_manager_network
+  - postgres_network
+volumes:
+  - peat_guard_uploads:/app/.data/uploads
+proxy:
+  domain: peat-guard.alfian-gading.my.id
+  scheme: http
+  forward_host: peat-guard
+  forward_port: 3000
+  caching_enabled: false
+  websocket_support: true
+  cloudflare_flexible: true
+dns:
+  domain: alfian-gading.my.id
+  records:
+    - peat-guard
+databases:
+  postgres:
+    - peat_guard
+database_users:
+  - database: peat_guard
+    username: peat_guard
+    password: '{{ vault_lomba_peat_guard_db_password }}'
+enabled: true
+deployment: portfolio
+group: lomba
+requires_postgis: true
+requires:
+  - nginx
+  - postgres

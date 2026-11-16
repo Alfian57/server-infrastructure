@@ -197,6 +197,8 @@ def provision(apps):
                             changes.append(app['name']+':credential')
                         pg('ALTER DATABASE '+ident(database)+' OWNER TO '+ident(username)+'; REVOKE CONNECT,TEMPORARY ON DATABASE '+ident(database)+' FROM PUBLIC; GRANT CONNECT,TEMPORARY ON DATABASE '+ident(database)+' TO '+ident(username))
                         pg('ALTER SCHEMA public OWNER TO '+ident(username)+'; GRANT ALL ON SCHEMA public TO '+ident(username)+'; GRANT ALL ON ALL TABLES IN SCHEMA public TO '+ident(username)+'; GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO '+ident(username),database)
+                        if app.get('requires_postgis', False) or 'postgis' in app.get('database_extensions', {}).get('postgres', []):
+                            pg('CREATE EXTENSION IF NOT EXISTS postgis;', database)
                     elif engine=='mysql':
                         quoted='`'+database.replace('`','``')+'`'
                         exists=mysql('SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME='+literal(database)).stdout.strip()

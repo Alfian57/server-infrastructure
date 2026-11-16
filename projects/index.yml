@@ -12,6 +12,7 @@ applications:
   satu-platform: lomba
   guardian-lab: lomba
   guardian-lab-ai: lomba
+  peat-guard: lomba
   aldera-tech: alderatech
   aldera-tech-staging: alderatech
   location-based-presence-web: alderatech

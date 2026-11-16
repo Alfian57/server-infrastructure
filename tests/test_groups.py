@@ -17,7 +17,7 @@ import deploy
 class CatalogTests(unittest.TestCase):
     def test_every_app_has_an_explicit_boolean_production_status(self):
         apps=catalog.select()
-        self.assertEqual(len(apps),21)
+        self.assertEqual(len(apps),22)
         self.assertTrue(all(type(app.get('production')) is bool for app in apps))
         self.assertTrue(any(not app.get('enabled',True) for app in apps))
 
@@ -66,7 +66,7 @@ class CatalogTests(unittest.TestCase):
 
     def test_groups_are_independent_of_github_owner(self):
         apps=catalog.select('lomba')
-        self.assertEqual({a['name'] for a in apps},{'ruang-tenang-api','ruang-tenang-web','satu-platform','guardian-lab','guardian-lab-ai'})
+        self.assertEqual({a['name'] for a in apps},{'ruang-tenang-api','ruang-tenang-web','satu-platform','guardian-lab','guardian-lab-ai','peat-guard'})
         self.assertEqual(next(a for a in apps if a['name']=='guardian-lab')['repo_owner'],'DeryWahyu')
 
     def test_disabled_apps_are_visible_but_not_deployed(self):
