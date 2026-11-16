@@ -90,6 +90,6 @@
 
 - name: Ensure PostGIS extension packages are installed in PostgreSQL container
   ansible.builtin.command:
-    cmd: docker exec postgres-db sh -c "command -v dpkg >/dev/null && dpkg -s postgresql-18-postgis-3 >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends postgresql-18-postgis-3 postgresql-postgis && rm -rf /var/lib/apt/lists/*)"
+    cmd: docker exec postgres-db sh -c "command -v dpkg >/dev/null && dpkg -s postgresql-18-postgis-3 >/dev/null 2>&1 || (apt-get update && apt-get install -y --no-install-recommends postgresql-18 postgresql-18-postgis-3 postgresql-postgis && rm -rf /var/lib/apt/lists/*)"
   changed_when: false
   when: not ansible_check_mode

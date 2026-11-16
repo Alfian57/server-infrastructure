@@ -18,6 +18,7 @@ env_contract:
     - WEB_PORT
 use_prisma: true
 prisma_command: migrate deploy
+run_migrate: true
 run_seeder: true
 seed_on: always
 networks:

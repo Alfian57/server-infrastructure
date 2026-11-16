@@ -12,7 +12,7 @@ STATE = Path('/opt/docker-stack/.state/resources.json')
 def command(args, stdin=None, *, check=True):
     p=subprocess.run(args,input=stdin,text=True,capture_output=True)
     if check and p.returncode:
-        raise RuntimeError('Database operation failed; inspect the selected application and engine')
+        raise RuntimeError('Database operation failed: ' + (p.stderr or p.stdout or 'unknown error').strip())
     return p
 
 
