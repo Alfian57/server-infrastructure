@@ -6,6 +6,8 @@ Production deploys use forward-only migrations by default. A normal deploy never
 
 `ACTION=reset-db` refuses production applications, disabled applications, applications without declared databases, shared/system databases, and existing databases without a verified owner. It does not remove application volumes or shared database services. Production database resets require an owner-approved operational path outside this action.
 
+For an app that explicitly catalogs `allow_remote_demo_seed_on_reset: true`, the reset action passes `PEATGUARD_ALLOW_REMOTE_DEMO_SEED=1` only to that app's one Prisma seed process. The app must still be `production: false`; the seed must restrict its connection to the app's Compose PostgreSQL host. Keep this flag out of persistent container environments.
+
 ## Defaults
 
 | Stack | Deploy migration | Runtime migration env | Seeder default |
