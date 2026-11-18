@@ -20,7 +20,8 @@ use_prisma: true
 prisma_command: migrate deploy
 run_migrate: true
 run_seeder: true
-seed_on: always
+seed_on: manual
+allow_remote_demo_seed_on_reset: true
 networks:
   - nginx_proxy_manager_network
   - postgres_network

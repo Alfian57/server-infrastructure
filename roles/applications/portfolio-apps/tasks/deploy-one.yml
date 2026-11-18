@@ -362,7 +362,17 @@
 
 - name: "{{ app_name }} | Run Next.js Prisma seed when requested"
   ansible.builtin.command:
-    cmd: docker exec {{ app_name }} npm run db:seed
+    argv: >-
+      {{
+        ['docker', 'exec']
+        + (
+          ['-e', 'PEATGUARD_ALLOW_REMOTE_DEMO_SEED=1']
+          if (portfolio_database_reset | default(false) | bool)
+          and (portfolio_app.allow_remote_demo_seed_on_reset | default(false) | bool)
+          else []
+        )
+        + [app_name, 'npm', 'run', 'db:seed']
+      }}
   register: nextjs_prisma_seed_result
   when:
     - app_stack == 'nextjs'
