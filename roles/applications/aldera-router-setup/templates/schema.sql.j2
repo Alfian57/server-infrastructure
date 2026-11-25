@@ -399,6 +399,16 @@ CREATE TRIGGER trg_payment_method_settings_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
+-- 3.10 SERVICE_AVAILABILITY TABLE
+CREATE TABLE IF NOT EXISTS service_availability (
+    service TEXT PRIMARY KEY CHECK (service IN ('ai_router', 'telegram_bot')),
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO service_availability (service)
+VALUES ('ai_router'), ('telegram_bot')
+ON CONFLICT (service) DO NOTHING;
 -- =============================================================================
 -- 4. AUDIT DIAGNOSTIC STORED FUNCTION
 -- =============================================================================
